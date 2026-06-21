@@ -1,4 +1,31 @@
+/* global L */
 const SVG_NS = "http://www.w3.org/2000/svg";
+
+const DEFAULT_ICONS = {
+  advance: ">>",
+  retreat: "<<",
+  attack: "!",
+  defend: "[]",
+  capture: "#",
+  surrender: "x",
+  reinforcement: "+",
+  bombardment: "*",
+  landing: "v",
+  other: ".",
+};
+
+const EVENT_TYPES = [
+  "advance",
+  "retreat",
+  "attack",
+  "defend",
+  "capture",
+  "surrender",
+  "reinforcement",
+  "bombardment",
+  "landing",
+  "other",
+];
 
 export async function loadBattle(url) {
   const response = await fetch(url);
@@ -8,227 +35,438 @@ export async function loadBattle(url) {
   return response.json();
 }
 
+// Browser-side validation mirroring battle_animation/validator.py: required
+// top-level keys, schema version, the event-type enum, and every cross-reference.
+export function validateBattle(battle) {
+  const errors = [];
+  if (!battle || typeof battle !== "object" || Array.isArray(battle)) {
+    return ["document is not a JSON object"];
+  }
+
+  const required = [
+    "schema_version",
+    "metadata",
+    "battle",
+    "sides",
+    "commanders",
+    "actors",
+    "places",
+    "historical_events",
+    "movements",
+    "outcome",
+    "sources",
+    "animation_hints",
+  ];
+  for (const key of required) {
+    if (!(key in battle)) errors.push(`missing required property "${key}"`);
+  }
+
+  if ("schema_version" in battle && battle.schema_version !== "0.1.0") {
+    errors.push(`schema_version must be "0.1.0", got ${JSON.stringify(battle.schema_version)}`);
+  }
+
+  const idSet = (key) => new Set((battle[key] || []).map((item) => item && item.id));
+  const sideIds = idSet("sides");
+  const commanderIds = idSet("commanders");
+  const actorIds = idSet("actors");
+  const placeIds = idSet("places");
+  const eventIds = idSet("historical_events");
+  const sourceIds = idSet("sources");
+
+  const check = (id, set, label) => {
+    if (!set.has(id)) errors.push(`${label}: unknown id ${JSON.stringify(id)}`);
+  };
+
+  (battle.commanders || []).forEach((commander, i) => {
+    if ("side_id" in commander) check(commander.side_id, sideIds, `commanders[${i}].side_id`);
+  });
+
+  (battle.actors || []).forEach((actor, i) => {
+    if ("side_id" in actor) check(actor.side_id, sideIds, `actors[${i}].side_id`);
+    (actor.commander_ids || []).forEach((id) => check(id, commanderIds, `actors[${i}].commander_ids`));
+  });
+
+  (battle.historical_events || []).forEach((event, i) => {
+    if (event.type && !EVENT_TYPES.includes(event.type)) {
+      errors.push(`historical_events[${i}].type: invalid value ${JSON.stringify(event.type)}`);
+    }
+    (event.actor_ids || []).forEach((id) => check(id, actorIds, `historical_events[${i}].actor_ids`));
+    (event.target_actor_ids || []).forEach((id) => check(id, actorIds, `historical_events[${i}].target_actor_ids`));
+    (event.place_ids || []).forEach((id) => check(id, placeIds, `historical_events[${i}].place_ids`));
+    (event.source_ids || []).forEach((id) => check(id, sourceIds, `historical_events[${i}].source_ids`));
+  });
+
+  (battle.movements || []).forEach((movement, i) => {
+    if ("event_id" in movement) check(movement.event_id, eventIds, `movements[${i}].event_id`);
+    if ("actor_id" in movement) check(movement.actor_id, actorIds, `movements[${i}].actor_id`);
+    if ("from_place_id" in movement) check(movement.from_place_id, placeIds, `movements[${i}].from_place_id`);
+    if ("to_place_id" in movement) check(movement.to_place_id, placeIds, `movements[${i}].to_place_id`);
+  });
+
+  const outcome = battle.outcome;
+  if (outcome && typeof outcome === "object") {
+    (outcome.winner_side_ids || []).forEach((id) => check(id, sideIds, "outcome.winner_side_ids"));
+    (outcome.source_ids || []).forEach((id) => check(id, sourceIds, "outcome.source_ids"));
+  }
+
+  return errors;
+}
+
 export function renderBattle(battle, documentRef = document) {
-  const svg = documentRef.getElementById("battle-map");
-  const places = new Map(battle.places.map((place) => [place.id, place]));
-  const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
+  const $ = (id) => documentRef.getElementById(id);
+  const mapEl = $("battle-map");
+
+  // Tear down a previous render so the same container can be reused.
+  if (mapEl._battleController) mapEl._battleController.destroy();
+
   const sides = new Map(battle.sides.map((side) => [side.id, side]));
+  const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
+  const places = new Map(battle.places.map((place) => [place.id, place]));
+
+  const style = battle.animation_hints?.style || {};
+  const sideColors = style.side_colors || {};
+  const eventIcons = style.event_icons || {};
+  const colorOf = (sideId) => sideColors[sideId] || sides.get(sideId)?.color || "#19202a";
+  const iconOf = (type) => eventIcons[type] || DEFAULT_ICONS[type] || ".";
+
   const orderedEvents = orderEvents(battle);
-  const projection = createProjection(battle);
-  const movementElements = new Map();
-  const markerElements = new Map();
-  const unitElements = new Map();
+  const orderIndex = new Map(orderedEvents.map((event, index) => [event.id, index]));
+  const cameraByEvent = new Map((battle.animation_hints?.camera || []).map((cam) => [cam.event_id, cam]));
 
-  svg.replaceChildren();
-  drawGrid(svg);
-  drawPlaces(svg, battle.places, projection);
+  // --- Leaflet map + OSM tiles ---
+  const map = L.map(mapEl, { zoomControl: true });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(map);
 
+  const allCoords = collectCoordinates(battle);
+  const mapHints = battle.animation_hints?.map || {};
+  if (Array.isArray(mapHints.initial_center) && typeof mapHints.initial_zoom === "number") {
+    map.setView([mapHints.initial_center[1], mapHints.initial_center[0]], mapHints.initial_zoom);
+  } else if (allCoords.length) {
+    map.fitBounds(L.latLngBounds(allCoords.map(([lon, lat]) => [lat, lon])).pad(0.25));
+  } else {
+    map.setView([0, 0], 2);
+  }
+  setTimeout(() => map.invalidateSize(), 0);
+
+  // --- SVG overlay drawn on top of the map, re-projected on every map move ---
+  const svg = documentRef.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "battle-overlay");
+  map.getContainer().appendChild(svg);
+
+  const project = ([lon, lat]) => map.latLngToContainerPoint([lat, lon]);
+  const toPath = (coords) =>
+    coords
+      .map((coord, index) => {
+        const point = project(coord);
+        return `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+      })
+      .join(" ");
+
+  const placeEls = [];
+  for (const place of battle.places) {
+    const geometry = place.geometry;
+    if (geometry.type === "Point") {
+      const circle = svgEl(documentRef, "circle", { class: "place-dot", r: 5 });
+      const label = svgEl(documentRef, "text", { class: "place-label" }, place.name);
+      svg.append(circle, label);
+      placeEls.push({ kind: "point", coord: geometry.coordinates, circle, label });
+    } else if (geometry.type === "LineString") {
+      const path = svgEl(documentRef, "path", { class: "place-line" });
+      svg.append(path);
+      placeEls.push({ kind: "open", coords: geometry.coordinates, path });
+    } else if (geometry.type === "Polygon") {
+      const path = svgEl(documentRef, "path", { class: "place-area" });
+      svg.append(path);
+      placeEls.push({ kind: "closed", coords: geometry.coordinates[0], path });
+    }
+  }
+
+  const movementEls = new Map();
   for (const movement of battle.movements) {
     const actor = actors.get(movement.actor_id);
-    const side = sides.get(actor?.side_id);
-    const path = svgEl("path", {
+    const path = svgEl(documentRef, "path", {
       class: "movement-path",
-      d: toPath(movement.path.coordinates, projection),
       pathLength: "1",
-      stroke: side?.color || "#19202a",
-      "stroke-width": battle.animation_hints.style.movement_line_width || 4,
+      stroke: colorOf(actor?.side_id),
+      "stroke-width": style.movement_line_width || 4,
     });
+    if (movement.precision === "inferred" || (typeof movement.confidence === "number" && movement.confidence <= 0.6)) {
+      path.classList.add("is-inferred");
+    }
     svg.append(path);
-    movementElements.set(movement.id, path);
+    movementEls.set(movement.id, { coords: movement.path.coordinates, path });
   }
 
+  const unitEls = new Map();
   for (const actor of battle.actors) {
-    const side = sides.get(actor.side_id);
-    const start = firstActorPoint(actor.id, battle, projection);
-    const unit = svgEl("g", {
-      class: "unit",
-      transform: `translate(${start.x} ${start.y})`,
-    });
+    const unit = svgEl(documentRef, "g", { class: "unit" });
     unit.append(
-      svgEl("circle", {
-        r: "11",
-        fill: side?.color || "#19202a",
-        stroke: "#fffaf0",
-        "stroke-width": "3",
-      }),
-      svgEl("text", {
-        x: "16",
-        y: "4",
-        "font-size": "13",
-        fill: "#19202a",
-      }, actor.name)
+      svgEl(documentRef, "circle", { r: 11, fill: colorOf(actor.side_id), stroke: "#fffaf0", "stroke-width": 3 }),
+      svgEl(documentRef, "text", { class: "unit-label", x: 16, y: 4 }, actor.name)
     );
     svg.append(unit);
-    unitElements.set(actor.id, unit);
+    unitEls.set(actor.id, { g: unit });
   }
 
+  const markerEls = new Map();
   for (const event of orderedEvents) {
-    const point = eventPoint(event, places, projection);
-    const marker = svgEl("g", {
-      class: "event-marker",
-      transform: `translate(${point.x} ${point.y})`,
-    });
+    const marker = svgEl(documentRef, "g", { class: "event-marker" });
+    if (typeof event.confidence === "number" && event.confidence < 0.5) {
+      marker.classList.add("is-low-confidence");
+    }
     marker.append(
-      svgEl("circle", {
-        r: "17",
-        fill: "rgba(255,250,240,0.9)",
-        stroke: "#19202a",
-        "stroke-width": "2",
-      }),
-      svgEl("text", {
-        y: "5",
-        "text-anchor": "middle",
-        "font-size": "15",
-        fill: "#19202a",
-      }, iconFor(event.type))
+      svgEl(documentRef, "circle", { class: "event-disc", r: 16 }),
+      svgEl(documentRef, "text", { class: "event-icon", y: 5 }, iconOf(event.type))
     );
     svg.append(marker);
-    markerElements.set(event.id, marker);
+    markerEls.set(event.id, { coord: eventCoord(event, places), g: marker });
   }
 
+  const snapshots = buildSnapshots(battle, orderedEvents);
+  let actorPositions = snapshots[0];
+
+  function redraw() {
+    for (const place of placeEls) {
+      if (place.kind === "point") {
+        const point = project(place.coord);
+        place.circle.setAttribute("cx", point.x);
+        place.circle.setAttribute("cy", point.y);
+        place.label.setAttribute("x", point.x + 9);
+        place.label.setAttribute("y", point.y - 8);
+      } else if (place.kind === "open") {
+        place.path.setAttribute("d", toPath(place.coords));
+      } else {
+        place.path.setAttribute("d", `${toPath(place.coords)} Z`);
+      }
+    }
+    for (const { coords, path } of movementEls.values()) {
+      path.setAttribute("d", toPath(coords));
+    }
+    for (const { coord, g } of markerEls.values()) {
+      const point = project(coord);
+      g.setAttribute("transform", `translate(${point.x} ${point.y})`);
+    }
+    for (const [actorId, { g }] of unitEls) {
+      const coord = actorPositions.get(actorId);
+      if (!coord) continue;
+      const point = project(coord);
+      g.setAttribute("transform", `translate(${point.x} ${point.y})`);
+    }
+  }
+
+  map.on("move zoom viewreset resize", redraw);
+  map.on("movestart zoomstart", () => svg.classList.add("is-moving"));
+  map.on("moveend zoomend", () => svg.classList.remove("is-moving"));
+
+  buildLegend(battle, documentRef, colorOf);
   bindStaticText(battle, documentRef);
-  buildTimeline(orderedEvents, documentRef);
+  buildTimeline(orderedEvents, documentRef, (index) => {
+    controller.pause();
+    controller.showEvent(index);
+  });
+
+  const duration = battle.animation_hints?.timeline?.default_event_duration_ms || 1800;
 
   const controller = {
     battle,
     orderedEvents,
+    map,
     currentIndex: 0,
+    isPlaying: false,
+    _timer: null,
+
     showEvent(index) {
-      const boundedIndex = Math.max(0, Math.min(index, orderedEvents.length - 1));
-      this.currentIndex = boundedIndex;
-      const event = orderedEvents[boundedIndex];
-      updateInspector(event, documentRef);
-      updateTimeline(boundedIndex, documentRef);
-      updateMap(event, battle, projection, movementElements, markerElements, unitElements);
+      const bounded = Math.max(0, Math.min(index, orderedEvents.length - 1));
+      this.currentIndex = bounded;
+      const event = orderedEvents[bounded];
+      actorPositions = snapshots[bounded];
+
+      for (const [eventId, { g }] of markerEls) {
+        const order = orderIndex.get(eventId);
+        g.classList.toggle("is-visible", order <= bounded);
+        g.classList.toggle("is-active", eventId === event.id);
+      }
+      for (const movement of battle.movements) {
+        const el = movementEls.get(movement.id);
+        const order = orderIndex.get(movement.event_id);
+        el.path.classList.toggle("is-visible", order !== undefined && order <= bounded);
+        el.path.classList.toggle("is-active", movement.event_id === event.id);
+      }
+
+      redraw();
+      updateInspector(documentRef, event);
+      updateTimeline(documentRef, bounded);
+
+      const scrubber = $("event-scrubber");
+      if (scrubber) scrubber.value = String(bounded);
+      const progress = $("event-progress");
+      if (progress) progress.textContent = `${bounded + 1} / ${orderedEvents.length}`;
+
+      const cam = cameraByEvent.get(event.id);
+      if (cam && Array.isArray(cam.center)) {
+        map.flyTo([cam.center[1], cam.center[0]], cam.zoom ?? map.getZoom(), { duration: 0.8 });
+      }
+    },
+
+    next() {
+      this.showEvent(this.currentIndex + 1);
+    },
+    prev() {
+      this.showEvent(this.currentIndex - 1);
+    },
+
+    play() {
+      if (this._timer) return;
+      if (this.currentIndex >= orderedEvents.length - 1) this.showEvent(0);
+      this._timer = setInterval(() => {
+        if (this.currentIndex >= orderedEvents.length - 1) {
+          this.pause();
+          return;
+        }
+        this.showEvent(this.currentIndex + 1);
+      }, duration);
+      this._setPlaying(true);
+    },
+    pause() {
+      if (this._timer) {
+        clearInterval(this._timer);
+        this._timer = null;
+      }
+      this._setPlaying(false);
+    },
+    toggle() {
+      if (this._timer) this.pause();
+      else this.play();
+    },
+    _setPlaying(playing) {
+      this.isPlaying = playing;
+      const button = $("play-button");
+      if (button) {
+        button.textContent = playing ? "Pause" : "Play";
+        button.setAttribute("aria-pressed", String(playing));
+      }
+    },
+
+    destroy() {
+      this.pause();
+      documentRef.removeEventListener("keydown", onKey);
+      map.off();
+      map.remove();
+      svg.remove();
+      delete mapEl._battleController;
     },
   };
 
-  const select = documentRef.getElementById("event-select");
-  select.addEventListener("change", () => controller.showEvent(Number(select.value)));
+  function onKey(event) {
+    if (event.target && /^(input|textarea|select|button)$/i.test(event.target.tagName)) return;
+    if (event.key === "ArrowRight") {
+      controller.pause();
+      controller.next();
+    } else if (event.key === "ArrowLeft") {
+      controller.pause();
+      controller.prev();
+    } else if (event.key === " ") {
+      event.preventDefault();
+      controller.toggle();
+    }
+  }
+  documentRef.addEventListener("keydown", onKey);
+
+  const scrubber = $("event-scrubber");
+  if (scrubber) scrubber.max = String(orderedEvents.length - 1);
+
+  mapEl._battleController = controller;
   controller.showEvent(0);
   return controller;
 }
 
 export function playTimeline(controller) {
-  const duration = controller.battle.animation_hints.timeline.default_event_duration_ms || 1400;
-  controller.showEvent(0);
-  let nextIndex = 1;
-  const timer = setInterval(() => {
-    if (nextIndex >= controller.orderedEvents.length) {
-      clearInterval(timer);
-      return;
-    }
-    controller.showEvent(nextIndex);
-    nextIndex += 1;
-  }, duration);
-  return timer;
+  controller.play();
 }
 
 function orderEvents(battle) {
   const eventsById = new Map(battle.historical_events.map((event) => [event.id, event]));
-  const orderedIds = battle.animation_hints.timeline.ordered_event_ids || [];
+  const orderedIds = battle.animation_hints?.timeline?.ordered_event_ids || [];
   const ordered = orderedIds.map((id) => eventsById.get(id)).filter(Boolean);
   const missing = battle.historical_events.filter((event) => !orderedIds.includes(event.id));
   return [...ordered, ...missing];
 }
 
-function createProjection(battle) {
+// Cumulative actor positions after each ordered event, so scrubbing backward
+// puts every unit where it actually was at that point in the timeline.
+function buildSnapshots(battle, orderedEvents) {
+  const current = new Map();
+  for (const actor of battle.actors) {
+    current.set(actor.id, firstActorCoord(actor.id, battle));
+  }
+  const snapshots = [];
+  orderedEvents.forEach((event, index) => {
+    for (const movement of battle.movements) {
+      if (movement.event_id === event.id) {
+        const coords = movement.path.coordinates;
+        current.set(movement.actor_id, coords[coords.length - 1]);
+      }
+    }
+    snapshots[index] = new Map(current);
+  });
+  if (snapshots.length === 0) snapshots[0] = new Map(current);
+  return snapshots;
+}
+
+function firstActorCoord(actorId, battle) {
+  const movement = battle.movements.find((item) => item.actor_id === actorId);
+  if (movement) return movement.path.coordinates[0];
+  const event = battle.historical_events.find((item) => (item.actor_ids || []).includes(actorId));
+  if (event) {
+    const place = battle.places.find((item) => item.id === (event.place_ids || [])[0]);
+    if (place) return geometryPoint(place.geometry);
+  }
+  return geometryPoint(battle.places[0].geometry);
+}
+
+function eventCoord(event, places) {
+  const place = places.get((event.place_ids || [])[0]);
+  if (place) return geometryPoint(place.geometry);
+  return [0, 0];
+}
+
+function geometryPoint(geometry) {
+  if (geometry.type === "Point") return geometry.coordinates;
+  if (geometry.type === "LineString") return geometry.coordinates[0];
+  if (geometry.type === "Polygon") return geometry.coordinates[0][0];
+  return [0, 0];
+}
+
+function collectCoordinates(battle) {
   const points = [];
   for (const place of battle.places) {
-    collectCoordinates(place.geometry, points);
+    const geometry = place.geometry;
+    if (geometry.type === "Point") points.push(geometry.coordinates);
+    else if (geometry.type === "LineString") points.push(...geometry.coordinates);
+    else if (geometry.type === "Polygon") for (const ring of geometry.coordinates) points.push(...ring);
   }
   for (const movement of battle.movements) {
-    for (const coordinate of movement.path.coordinates) points.push(coordinate);
+    points.push(...movement.path.coordinates);
   }
-
-  const longitudes = points.map((point) => point[0]);
-  const latitudes = points.map((point) => point[1]);
-  const padding = battle.animation_hints.map.bounds_padding || 0.01;
-  const minLon = Math.min(...longitudes) - padding;
-  const maxLon = Math.max(...longitudes) + padding;
-  const minLat = Math.min(...latitudes) - padding;
-  const maxLat = Math.max(...latitudes) + padding;
-
-  return ([lon, lat]) => ({
-    x: 70 + ((lon - minLon) / (maxLon - minLon || 1)) * 860,
-    y: 540 - ((lat - minLat) / (maxLat - minLat || 1)) * 460,
-  });
+  return points;
 }
 
-function collectCoordinates(geometry, points) {
-  if (geometry.type === "Point") {
-    points.push(geometry.coordinates);
-  } else if (geometry.type === "LineString") {
-    points.push(...geometry.coordinates);
-  } else if (geometry.type === "Polygon") {
-    for (const ring of geometry.coordinates) points.push(...ring);
-  }
-}
-
-function drawGrid(svg) {
-  for (let x = 100; x <= 900; x += 100) {
-    svg.append(svgEl("line", { x1: x, y1: 70, x2: x, y2: 550, stroke: "#ddd2bd", "stroke-width": "1" }));
-  }
-  for (let y = 100; y <= 500; y += 100) {
-    svg.append(svgEl("line", { x1: 60, y1: y, x2: 940, y2: y, stroke: "#ddd2bd", "stroke-width": "1" }));
-  }
-}
-
-function drawPlaces(svg, places, projection) {
-  for (const place of places) {
-    if (place.geometry.type !== "Point") continue;
-    const point = projection(place.geometry.coordinates);
-    svg.append(
-      svgEl("circle", {
-        cx: point.x,
-        cy: point.y,
-        r: "5",
-        fill: "#19202a",
-      }),
-      svgEl("text", {
-        class: "place-label",
-        x: point.x + 10,
-        y: point.y - 8,
-      }, place.name)
-    );
-  }
-}
-
-function toPath(coordinates, projection) {
-  return coordinates
-    .map((coordinate, index) => {
-      const point = projection(coordinate);
-      return `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
-    })
-    .join(" ");
-}
-
-function firstActorPoint(actorId, battle, projection) {
-  const movement = battle.movements.find((item) => item.actor_id === actorId);
-  if (movement) return projection(movement.path.coordinates[0]);
-  const event = battle.historical_events.find((item) => item.actor_ids.includes(actorId));
-  if (event) {
-    const place = battle.places.find((item) => item.id === event.place_ids[0]);
-    if (place?.geometry.type === "Point") return projection(place.geometry.coordinates);
-  }
-  return { x: 500, y: 310 };
-}
-
-function eventPoint(event, places, projection) {
-  const place = places.get(event.place_ids[0]);
-  if (place?.geometry.type === "Point") return projection(place.geometry.coordinates);
-  return { x: 500, y: 310 };
-}
-
-function updateMap(event, battle, projection, movementElements, markerElements, unitElements) {
-  for (const marker of markerElements.values()) marker.classList.remove("is-active");
-  markerElements.get(event.id)?.classList.add("is-active");
-
-  for (const path of movementElements.values()) path.classList.remove("is-active");
-  for (const movement of battle.movements.filter((item) => item.event_id === event.id)) {
-    movementElements.get(movement.id)?.classList.add("is-active");
-    const end = projection(movement.path.coordinates[movement.path.coordinates.length - 1]);
-    unitElements.get(movement.actor_id)?.setAttribute("transform", `translate(${end.x} ${end.y})`);
+function buildLegend(battle, documentRef, colorOf) {
+  const legend = documentRef.getElementById("legend");
+  if (!legend) return;
+  legend.replaceChildren();
+  for (const side of battle.sides) {
+    const row = documentRef.createElement("li");
+    const swatch = documentRef.createElement("span");
+    swatch.className = "legend-swatch";
+    swatch.style.background = colorOf(side.id);
+    const label = documentRef.createElement("span");
+    label.textContent = side.name;
+    row.append(swatch, label);
+    legend.append(row);
   }
 }
 
@@ -238,66 +476,51 @@ function bindStaticText(battle, documentRef) {
   setText(documentRef, "battle-summary", battle.battle.summary);
 }
 
-function buildTimeline(events, documentRef) {
-  const select = documentRef.getElementById("event-select");
+function buildTimeline(events, documentRef, onSelect) {
   const timeline = documentRef.getElementById("timeline");
-  select.replaceChildren();
   timeline.replaceChildren();
-
   events.forEach((event, index) => {
-    select.append(new Option(`${index + 1}. ${event.title}`, String(index)));
     const item = documentRef.createElement("li");
     const button = documentRef.createElement("button");
     button.type = "button";
     button.dataset.index = String(index);
-    button.innerHTML = `<strong>${event.title}</strong><span>${event.type} / ${event.time.label}</span>`;
-    button.addEventListener("click", () => {
-      select.value = String(index);
-      select.dispatchEvent(new Event("change"));
-    });
+    button.innerHTML = `<strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.type)} / ${escapeHtml(event.time.label)}</span>`;
+    button.addEventListener("click", () => onSelect(index));
     item.append(button);
     timeline.append(item);
   });
 }
 
-function updateInspector(event, documentRef) {
+function updateInspector(documentRef, event) {
   setText(documentRef, "event-type", event.type);
   setText(documentRef, "event-title", event.title);
-  setText(documentRef, "event-description", event.description);
-  setText(documentRef, "event-precision", event.precision);
-  setText(documentRef, "event-confidence", `${Math.round(event.confidence * 100)}%`);
-  documentRef.getElementById("event-select").value = String(
-    [...documentRef.getElementById("event-select").options].findIndex((option) => option.textContent.includes(event.title))
-  );
+  setText(documentRef, "event-description", event.description || "");
+  setText(documentRef, "event-precision", event.precision || "unknown");
+  const confidence = typeof event.confidence === "number" ? event.confidence : 0;
+  setText(documentRef, "event-confidence", `${Math.round(confidence * 100)}%`);
+  const bar = documentRef.getElementById("confidence-bar");
+  if (bar) bar.style.width = `${Math.round(confidence * 100)}%`;
 }
 
-function updateTimeline(index, documentRef) {
-  for (const [buttonIndex, button] of [...documentRef.querySelectorAll("#timeline button")].entries()) {
+function updateTimeline(documentRef, index) {
+  const buttons = [...documentRef.querySelectorAll("#timeline button")];
+  buttons.forEach((button, buttonIndex) => {
     button.setAttribute("aria-current", buttonIndex === index ? "true" : "false");
-  }
+  });
+  buttons[index]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 function setText(documentRef, id, text) {
-  documentRef.getElementById(id).textContent = text;
+  const el = documentRef.getElementById(id);
+  if (el) el.textContent = text;
 }
 
-function iconFor(type) {
-  return {
-    advance: ">>",
-    retreat: "<<",
-    attack: "!",
-    defend: "[]",
-    capture: "#",
-    surrender: "x",
-    reinforcement: "+",
-    bombardment: "*",
-    landing: "v",
-    other: ".",
-  }[type] || ".";
+function escapeHtml(value) {
+  return String(value).replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[char]));
 }
 
-function svgEl(name, attrs = {}, text = "") {
-  const element = document.createElementNS(SVG_NS, name);
+function svgEl(documentRef, name, attrs = {}, text = "") {
+  const element = documentRef.createElementNS(SVG_NS, name);
   for (const [key, value] of Object.entries(attrs)) {
     element.setAttribute(key, String(value));
   }

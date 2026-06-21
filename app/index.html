@@ -4,17 +4,28 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Battle Animator</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="shell">
       <section class="workspace" aria-label="Battle animation workspace">
-        <div class="map-stage">
-          <svg id="battle-map" viewBox="0 0 1000 620" role="img" aria-label="Generated battle map animation"></svg>
+        <div class="map-stage" id="map-stage">
+          <div id="battle-map" role="application" aria-label="Generated battle map animation"></div>
+
+          <ul id="legend" class="legend" aria-label="Sides"></ul>
+
           <div class="map-caption">
             <span id="battle-name">Battle Animator</span>
             <span id="battle-date">Loading examples/battle-of-waterloo.json</span>
           </div>
+
+          <div class="drop-hint">Drop battle JSON here</div>
         </div>
 
         <aside class="inspector" aria-label="Battle details">
@@ -24,12 +35,27 @@
             <p id="battle-summary">Generating a map animation from structured battle JSON.</p>
           </header>
 
+          <div class="loader" aria-label="Load battle JSON">
+            <label class="file-button">
+              Load JSON file
+              <input id="file-input" type="file" accept="application/json,.json" hidden />
+            </label>
+            <button id="paste-button" type="button" class="ghost">Paste JSON…</button>
+          </div>
+
+          <div id="error-banner" class="error-banner" role="alert" hidden></div>
+
           <div class="controls" aria-label="Playback controls">
-            <button id="play-button" type="button">Play</button>
-            <button id="reset-button" type="button">Reset</button>
-            <label>
-              Event
-              <select id="event-select"></select>
+            <button id="play-button" type="button" aria-pressed="false">Play</button>
+            <button id="reset-button" type="button" class="ghost">Reset</button>
+            <button id="prev-button" type="button" class="ghost" aria-label="Previous event">◀</button>
+            <button id="next-button" type="button" class="ghost" aria-label="Next event">▶</button>
+            <label class="scrubber">
+              <span class="scrubber-row">
+                <span>Timeline</span>
+                <span id="event-progress">0 / 0</span>
+              </span>
+              <input id="event-scrubber" type="range" min="0" max="0" value="0" step="1" />
             </label>
           </div>
 
@@ -47,6 +73,9 @@
                 <dd id="event-confidence">0%</dd>
               </div>
             </dl>
+            <div class="confidence-track" aria-hidden="true">
+              <div id="confidence-bar" class="confidence-bar"></div>
+            </div>
           </section>
 
           <ol id="timeline" class="timeline" aria-label="Timeline events"></ol>
@@ -54,18 +83,119 @@
       </section>
     </main>
 
+    <dialog id="paste-dialog" class="paste-dialog">
+      <form method="dialog">
+        <h2>Paste battle JSON</h2>
+        <textarea id="paste-text" rows="14" placeholder="Paste a battle-animation-schema v0.1.0 document…"></textarea>
+        <menu>
+          <button id="paste-cancel" type="button" class="ghost">Cancel</button>
+          <button id="paste-load" type="button">Load</button>
+        </menu>
+      </form>
+    </dialog>
+
     <script type="module">
-      import { loadBattle, renderBattle, playTimeline } from "./animate.js";
+      import { loadBattle, validateBattle, renderBattle } from "./animate.js";
 
-      const battle = await loadBattle("../examples/battle-of-waterloo.json");
-      const controller = renderBattle(battle, document);
+      const $ = (id) => document.getElementById(id);
+      let controller;
 
-      document.getElementById("play-button").addEventListener("click", () => {
-        playTimeline(controller);
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[char]));
+      }
+
+      function showErrors(errors) {
+        const box = $("error-banner");
+        if (!errors.length) {
+          box.hidden = true;
+          box.innerHTML = "";
+          return;
+        }
+        const shown = errors.slice(0, 12).map((e) => `<li>${escapeHtml(e)}</li>`).join("");
+        const more = errors.length > 12 ? `<li>… and ${errors.length - 12} more</li>` : "";
+        box.innerHTML = `<strong>JSON validation failed (${errors.length})</strong><ul>${shown}${more}</ul>`;
+        box.hidden = false;
+      }
+
+      function wireControls() {
+        $("play-button").onclick = () => controller.toggle();
+        $("reset-button").onclick = () => {
+          controller.pause();
+          controller.showEvent(0);
+        };
+        $("prev-button").onclick = () => {
+          controller.pause();
+          controller.prev();
+        };
+        $("next-button").onclick = () => {
+          controller.pause();
+          controller.next();
+        };
+        $("event-scrubber").oninput = (event) => {
+          controller.pause();
+          controller.showEvent(Number(event.target.value));
+        };
+      }
+
+      function setBattle(battle) {
+        const errors = validateBattle(battle);
+        showErrors(errors);
+        if (errors.length) return;
+        controller = renderBattle(battle, document);
+        wireControls();
+      }
+
+      function loadFromText(text) {
+        let battle;
+        try {
+          battle = JSON.parse(text);
+        } catch (error) {
+          showErrors([`Invalid JSON: ${error.message}`]);
+          return;
+        }
+        setBattle(battle);
+      }
+
+      async function loadFromFile(file) {
+        loadFromText(await file.text());
+      }
+
+      $("file-input").addEventListener("change", (event) => {
+        const file = event.target.files[0];
+        if (file) loadFromFile(file);
       });
-      document.getElementById("reset-button").addEventListener("click", () => {
-        controller.showEvent(0);
+
+      $("paste-button").addEventListener("click", () => $("paste-dialog").showModal());
+      $("paste-cancel").addEventListener("click", () => $("paste-dialog").close());
+      $("paste-load").addEventListener("click", () => {
+        $("paste-dialog").close();
+        loadFromText($("paste-text").value);
       });
+
+      const stage = $("map-stage");
+      ["dragenter", "dragover"].forEach((type) =>
+        stage.addEventListener(type, (event) => {
+          event.preventDefault();
+          stage.classList.add("is-dragover");
+        })
+      );
+      ["dragleave", "drop"].forEach((type) =>
+        stage.addEventListener(type, (event) => {
+          event.preventDefault();
+          if (type === "drop" || event.target === stage) stage.classList.remove("is-dragover");
+        })
+      );
+      stage.addEventListener("drop", (event) => {
+        const file = event.dataTransfer?.files[0];
+        if (file) loadFromFile(file);
+      });
+
+      try {
+        const battle = await loadBattle("../examples/battle-of-waterloo.json");
+        setBattle(battle);
+      } catch (error) {
+        showErrors([`Failed to load default example: ${error.message}`]);
+      }
     </script>
   </body>
 </html>
