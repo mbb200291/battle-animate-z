@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "battle-animation"
+version = "0.1.0"
+description = "A simple, wiki-friendly JSON schema for battle history data and animation hints, with a pure-Python validator."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+battle-animation-validate = "battle_animation.validator:main"
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools]
+packages = ["battle_animation"]

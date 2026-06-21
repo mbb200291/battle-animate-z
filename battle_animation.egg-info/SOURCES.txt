@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+battle_animation/__init__.py
+battle_animation/types.py
+battle_animation/validator.py
+battle_animation.egg-info/PKG-INFO
+battle_animation.egg-info/SOURCES.txt
+battle_animation.egg-info/dependency_links.txt
+battle_animation.egg-info/entry_points.txt
+battle_animation.egg-info/requires.txt
+battle_animation.egg-info/top_level.txt
+tests/test_mvp_contract.py

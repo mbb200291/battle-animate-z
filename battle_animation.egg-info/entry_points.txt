@@ -1,0 +1,2 @@
+[console_scripts]
+battle-animation-validate = battle_animation.validator:main
