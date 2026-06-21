@@ -48,11 +48,13 @@ Three representations of the same contract must stay in sync when the schema cha
 
 ### Animation app
 
-[app/animate.js](app/animate.js) is a standalone ES module (imported by [app/index.html](app/index.html)) that fetches `examples/battle-of-waterloo.json` and renders it to an SVG plane:
+[app/animate.js](app/animate.js) is a standalone ES module (imported by [app/index.html](app/index.html)). It loads battle JSON (the default example, or a user-supplied file via picker / drag-drop / paste) and renders it over a **Leaflet + OpenStreetMap** basemap. Leaflet is loaded from a CDN in [app/index.html](app/index.html), so the app needs network access for map tiles.
 
-- `createProjection` computes a linear lon/lat → SVG-coordinate mapping from the bounding box of all place + movement coordinates (no real map tiles). Coordinates are GeoJSON `[longitude, latitude]`.
-- `orderEvents` sequences the timeline using `animation_hints.timeline.ordered_event_ids`, appending any unlisted events at the end.
-- `renderBattle` returns a controller with `showEvent(index)`; `playTimeline` auto-advances using `default_event_duration_ms`.
+- Battle graphics are drawn in an **SVG overlay** appended to the Leaflet container. Coordinates are GeoJSON `[longitude, latitude]`; `project([lon,lat])` uses `map.latLngToContainerPoint([lat,lon])`, and a `redraw()` re-projects every element on each map `move`/`zoom`/`resize`. The `is-moving` class disables CSS transitions during map interaction so units track the map crisply.
+- `validateBattle(battle)` is a browser-side port of [battle_animation/validator.py](battle_animation/validator.py)'s reference checks (required keys, schema version, event-type enum, all `*_id(s)` cross-references). [app/index.html](app/index.html) runs it before rendering and shows failures in an error banner — keep it in sync with the Python validator.
+- `orderEvents` sequences the timeline via `animation_hints.timeline.ordered_event_ids`, appending unlisted events. `buildSnapshots` precomputes cumulative actor positions per event so scrubbing backward is correct.
+- `animation_hints` is fully honored: `camera` drives per-event `flyTo`, `style.side_colors` overrides side colors, `style.event_icons` is mapped to glyphs by `resolveIcon`/`NAMED_ICONS`.
+- `renderBattle` returns a controller (`showEvent`/`next`/`prev`/`play`/`pause`/`toggle`/`destroy`); `play` clears its own interval (no stacked timers). `destroy()` tears down the Leaflet map so the container can be re-rendered with new JSON.
 
 ## Conventions
 

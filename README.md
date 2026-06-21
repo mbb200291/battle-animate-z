@@ -188,7 +188,9 @@ Open:
 http://localhost:8000/app/
 ```
 
-The app loads `examples/battle-of-waterloo.json`, projects GeoJSON coordinates onto an SVG map plane, renders places, units, movement paths, event markers, and plays the ordered timeline.
+The app renders battle data over a Leaflet + OpenStreetMap basemap (map tiles require network access). It draws places, units, movement paths, and event markers as an SVG overlay, then plays the ordered timeline with playback, scrubber, and keyboard (arrow keys / space) controls.
+
+To animate your own data, load a different document with the **Load JSON file** button, the **Paste JSON…** dialog, or by dragging a `.json` file onto the map. The document is validated in the browser first; reference or schema errors are listed inline instead of rendering.
 
 ## MVP Boundaries
 
