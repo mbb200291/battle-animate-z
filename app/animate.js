@@ -2,17 +2,49 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const DEFAULT_ICONS = {
-  advance: ">>",
-  retreat: "<<",
-  attack: "!",
-  defend: "[]",
-  capture: "#",
-  surrender: "x",
-  reinforcement: "+",
-  bombardment: "*",
-  landing: "v",
-  other: ".",
+  advance: "↗",
+  retreat: "↘",
+  attack: "✺",
+  defend: "⛨",
+  capture: "◆",
+  surrender: "⚑",
+  reinforcement: "＋",
+  bombardment: "✷",
+  landing: "▾",
+  other: "•",
 };
+
+// Maps the descriptive icon names commonly used in animation_hints.style.event_icons
+// (e.g. "burst", "shield") to glyphs the overlay can render directly.
+const NAMED_ICONS = {
+  "arrow-up": "↑",
+  "arrow-down": "↓",
+  "arrow-left": "←",
+  "arrow-right": "→",
+  "arrow-up-right": "↗",
+  "arrow-down-right": "↘",
+  burst: "✺",
+  explosion: "✺",
+  shield: "⛨",
+  sword: "✦",
+  swords: "✦",
+  "crossed-swords": "✦",
+  plus: "＋",
+  flag: "⚑",
+  anchor: "⚓",
+  star: "★",
+  dot: "•",
+  circle: "●",
+};
+
+function resolveIcon(type, eventIcons) {
+  const value = eventIcons[type];
+  if (value) {
+    if (NAMED_ICONS[value]) return NAMED_ICONS[value];
+    if ([...value].length <= 2) return value; // already a glyph
+  }
+  return DEFAULT_ICONS[type] || "•";
+}
 
 const EVENT_TYPES = [
   "advance",
@@ -127,7 +159,7 @@ export function renderBattle(battle, documentRef = document) {
   const sideColors = style.side_colors || {};
   const eventIcons = style.event_icons || {};
   const colorOf = (sideId) => sideColors[sideId] || sides.get(sideId)?.color || "#19202a";
-  const iconOf = (type) => eventIcons[type] || DEFAULT_ICONS[type] || ".";
+  const iconOf = (type) => resolveIcon(type, eventIcons);
 
   const orderedEvents = orderEvents(battle);
   const orderIndex = new Map(orderedEvents.map((event, index) => [event.id, index]));
