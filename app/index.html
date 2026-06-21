@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Battle Animator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="workspace" aria-label="Battle animation workspace">
+        <div class="map-stage">
+          <svg id="battle-map" viewBox="0 0 1000 620" role="img" aria-label="Generated battle map animation"></svg>
+          <div class="map-caption">
+            <span id="battle-name">Battle Animator</span>
+            <span id="battle-date">Loading examples/battle-of-waterloo.json</span>
+          </div>
+        </div>
+
+        <aside class="inspector" aria-label="Battle details">
+          <header>
+            <p class="eyebrow">battle-animation-schema MVP</p>
+            <h1>Battle Animator</h1>
+            <p id="battle-summary">Generating a map animation from structured battle JSON.</p>
+          </header>
+
+          <div class="controls" aria-label="Playback controls">
+            <button id="play-button" type="button">Play</button>
+            <button id="reset-button" type="button">Reset</button>
+            <label>
+              Event
+              <select id="event-select"></select>
+            </label>
+          </div>
+
+          <section class="current-event" aria-live="polite">
+            <p id="event-type">event</p>
+            <h2 id="event-title">Loading</h2>
+            <p id="event-description"></p>
+            <dl>
+              <div>
+                <dt>Precision</dt>
+                <dd id="event-precision">unknown</dd>
+              </div>
+              <div>
+                <dt>Confidence</dt>
+                <dd id="event-confidence">0%</dd>
+              </div>
+            </dl>
+          </section>
+
+          <ol id="timeline" class="timeline" aria-label="Timeline events"></ol>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module">
+      import { loadBattle, renderBattle, playTimeline } from "./animate.js";
+
+      const battle = await loadBattle("../examples/battle-of-waterloo.json");
+      const controller = renderBattle(battle, document);
+
+      document.getElementById("play-button").addEventListener("click", () => {
+        playTimeline(controller);
+      });
+      document.getElementById("reset-button").addEventListener("click", () => {
+        controller.showEvent(0);
+      });
+    </script>
+  </body>
+</html>

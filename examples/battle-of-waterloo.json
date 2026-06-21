@@ -1,0 +1,407 @@
+{
+  "schema_version": "0.1.0",
+  "metadata": {
+    "id": "battle_waterloo",
+    "title": "Battle of Waterloo",
+    "created_at": "2026-06-21",
+    "updated_at": "2026-06-21",
+    "license": "CC BY-SA compatible source summary; verify downstream licensing per source",
+    "source_system": "manual-mvp-from-wikipedia-wikidata",
+    "wikidata_qid": "Q48314"
+  },
+  "battle": {
+    "id": "waterloo",
+    "name": "Battle of Waterloo",
+    "also_known_as": ["Waterloo"],
+    "part_of": "War of the Seventh Coalition",
+    "date": {
+      "label": "18 June 1815",
+      "start": "1815-06-18",
+      "end": "1815-06-18",
+      "precision": "day",
+      "confidence": 0.95
+    },
+    "summary": "Napoleon's French Army of the North attacked the Anglo-allied army near Waterloo and was defeated after Prussian forces arrived on the battlefield.",
+    "confidence": 0.9
+  },
+  "sides": [
+    {
+      "id": "french",
+      "name": "French Empire",
+      "color": "#d64b3c",
+      "belligerents": [
+        {
+          "id": "france",
+          "name": "French Empire",
+          "wikidata_qid": "Q71084"
+        }
+      ]
+    },
+    {
+      "id": "coalition",
+      "name": "Seventh Coalition",
+      "color": "#2f6fb5",
+      "belligerents": [
+        {
+          "id": "united_kingdom",
+          "name": "United Kingdom",
+          "wikidata_qid": "Q145"
+        },
+        {
+          "id": "prussia",
+          "name": "Kingdom of Prussia",
+          "wikidata_qid": "Q27306"
+        }
+      ]
+    }
+  ],
+  "commanders": [
+    {
+      "id": "napoleon",
+      "name": "Napoleon Bonaparte",
+      "side_id": "french",
+      "rank_or_role": "Emperor of the French",
+      "wikidata_qid": "Q517",
+      "confidence": 0.98
+    },
+    {
+      "id": "wellington",
+      "name": "Duke of Wellington",
+      "side_id": "coalition",
+      "rank_or_role": "Commander of the Anglo-allied army",
+      "wikidata_qid": "Q131691",
+      "confidence": 0.98
+    },
+    {
+      "id": "bluecher",
+      "name": "Gebhard Leberecht von Bluecher",
+      "side_id": "coalition",
+      "rank_or_role": "Commander of the Prussian army",
+      "wikidata_qid": "Q57273",
+      "confidence": 0.95
+    }
+  ],
+  "actors": [
+    {
+      "id": "french_army",
+      "name": "French Army of the North",
+      "side_id": "french",
+      "kind": "army",
+      "commander_ids": ["napoleon"],
+      "strength": {
+        "label": "about 72,000 soldiers",
+        "min": 70000,
+        "max": 74000,
+        "confidence": 0.75
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "anglo_allied_army",
+      "name": "Anglo-allied army",
+      "side_id": "coalition",
+      "kind": "army",
+      "commander_ids": ["wellington"],
+      "strength": {
+        "label": "about 68,000 soldiers",
+        "min": 66000,
+        "max": 70000,
+        "confidence": 0.7
+      },
+      "confidence": 0.86
+    },
+    {
+      "id": "prussian_army",
+      "name": "Prussian army",
+      "side_id": "coalition",
+      "kind": "army",
+      "commander_ids": ["bluecher"],
+      "strength": {
+        "label": "about 50,000 soldiers engaged near the battlefield",
+        "min": 45000,
+        "max": 52000,
+        "confidence": 0.65
+      },
+      "confidence": 0.78
+    }
+  ],
+  "places": [
+    {
+      "id": "waterloo_battlefield",
+      "name": "Waterloo battlefield",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [4.412, 50.68]
+      },
+      "precision": "approximate",
+      "confidence": 0.9,
+      "wikidata_qid": "Q48314"
+    },
+    {
+      "id": "mont_saint_jean",
+      "name": "Mont-Saint-Jean ridge",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [4.405, 50.685]
+      },
+      "precision": "approximate",
+      "confidence": 0.75
+    },
+    {
+      "id": "la_belle_alliance",
+      "name": "La Belle Alliance",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [4.412, 50.666]
+      },
+      "precision": "approximate",
+      "confidence": 0.75
+    },
+    {
+      "id": "hougoumont",
+      "name": "Hougoumont",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [4.392, 50.671]
+      },
+      "precision": "approximate",
+      "confidence": 0.8
+    },
+    {
+      "id": "placenoit",
+      "name": "Plancenoit",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [4.429, 50.662]
+      },
+      "precision": "approximate",
+      "confidence": 0.82
+    }
+  ],
+  "historical_events": [
+    {
+      "id": "event_french_advance",
+      "type": "advance",
+      "title": "French army advances north",
+      "time": {
+        "label": "late morning, 18 June 1815",
+        "start": "1815-06-18",
+        "precision": "day",
+        "confidence": 0.7
+      },
+      "description": "French forces moved from positions near La Belle Alliance toward Wellington's line on the ridge.",
+      "actor_ids": ["french_army"],
+      "target_actor_ids": ["anglo_allied_army"],
+      "place_ids": ["la_belle_alliance", "mont_saint_jean"],
+      "precision": "approximate",
+      "confidence": 0.72,
+      "source_ids": ["wikipedia_waterloo"]
+    },
+    {
+      "id": "event_hougoumont_attack",
+      "type": "attack",
+      "title": "Attack on Hougoumont",
+      "time": {
+        "label": "18 June 1815",
+        "start": "1815-06-18",
+        "precision": "day",
+        "confidence": 0.75
+      },
+      "description": "French forces attacked Hougoumont on the coalition right flank.",
+      "actor_ids": ["french_army"],
+      "target_actor_ids": ["anglo_allied_army"],
+      "place_ids": ["hougoumont"],
+      "precision": "approximate",
+      "confidence": 0.75,
+      "source_ids": ["wikipedia_waterloo"]
+    },
+    {
+      "id": "event_coalition_defense",
+      "type": "defend",
+      "title": "Wellington holds the ridge",
+      "time": {
+        "label": "afternoon, 18 June 1815",
+        "start": "1815-06-18",
+        "precision": "day",
+        "confidence": 0.7
+      },
+      "description": "The Anglo-allied army defended positions around Mont-Saint-Jean against repeated French attacks.",
+      "actor_ids": ["anglo_allied_army"],
+      "target_actor_ids": ["french_army"],
+      "place_ids": ["mont_saint_jean"],
+      "precision": "approximate",
+      "confidence": 0.74,
+      "source_ids": ["wikipedia_waterloo"]
+    },
+    {
+      "id": "event_prussian_reinforcement",
+      "type": "reinforcement",
+      "title": "Prussian forces arrive near Plancenoit",
+      "time": {
+        "label": "late afternoon, 18 June 1815",
+        "start": "1815-06-18",
+        "precision": "day",
+        "confidence": 0.7
+      },
+      "description": "Prussian units reached the eastern side of the battlefield and threatened the French flank.",
+      "actor_ids": ["prussian_army"],
+      "target_actor_ids": ["french_army"],
+      "place_ids": ["placenoit"],
+      "precision": "approximate",
+      "confidence": 0.72,
+      "source_ids": ["wikipedia_waterloo"]
+    },
+    {
+      "id": "event_french_retreat",
+      "type": "retreat",
+      "title": "French army retreats",
+      "time": {
+        "label": "evening, 18 June 1815",
+        "start": "1815-06-18",
+        "precision": "day",
+        "confidence": 0.75
+      },
+      "description": "After the failure of the final French attacks and the arrival of Prussian forces, the French army retreated south.",
+      "actor_ids": ["french_army"],
+      "target_actor_ids": ["anglo_allied_army", "prussian_army"],
+      "place_ids": ["waterloo_battlefield", "la_belle_alliance"],
+      "precision": "approximate",
+      "confidence": 0.76,
+      "source_ids": ["wikipedia_waterloo"]
+    }
+  ],
+  "movements": [
+    {
+      "id": "move_french_north",
+      "event_id": "event_french_advance",
+      "actor_id": "french_army",
+      "from_place_id": "la_belle_alliance",
+      "to_place_id": "mont_saint_jean",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [4.412, 50.666],
+          [4.408, 50.675],
+          [4.405, 50.685]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.55
+    },
+    {
+      "id": "move_prussian_west",
+      "event_id": "event_prussian_reinforcement",
+      "actor_id": "prussian_army",
+      "to_place_id": "placenoit",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [4.46, 50.666],
+          [4.445, 50.664],
+          [4.429, 50.662]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "move_french_south",
+      "event_id": "event_french_retreat",
+      "actor_id": "french_army",
+      "from_place_id": "mont_saint_jean",
+      "to_place_id": "la_belle_alliance",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [4.405, 50.685],
+          [4.41, 50.674],
+          [4.412, 50.666]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.55
+    }
+  ],
+  "outcome": {
+    "summary": "Decisive coalition victory; Napoleon abdicated several days later.",
+    "winner_side_ids": ["coalition"],
+    "casualties": [
+      {
+        "side_id": "french",
+        "label": "roughly 24,000 to 26,000 killed or wounded, with additional captured or missing",
+        "min": 24000,
+        "max": 26000,
+        "confidence": 0.55
+      },
+      {
+        "side_id": "coalition",
+        "label": "roughly 22,000 to 24,000 coalition casualties across Anglo-allied and Prussian forces",
+        "min": 22000,
+        "max": 24000,
+        "confidence": 0.5
+      }
+    ],
+    "confidence": 0.9,
+    "source_ids": ["wikipedia_waterloo"]
+  },
+  "sources": [
+    {
+      "id": "wikipedia_waterloo",
+      "title": "Wikipedia: Battle of Waterloo",
+      "url": "https://en.wikipedia.org/wiki/Battle_of_Waterloo",
+      "retrieved_at": "2026-06-21",
+      "license": "CC BY-SA 4.0",
+      "note": "MVP example paraphrases broad facts; verify exact claims before production use."
+    },
+    {
+      "id": "wikidata_waterloo",
+      "title": "Wikidata: Battle of Waterloo",
+      "url": "https://www.wikidata.org/wiki/Q48314",
+      "retrieved_at": "2026-06-21",
+      "license": "CC0"
+    }
+  ],
+  "animation_hints": {
+    "map": {
+      "initial_center": [4.412, 50.675],
+      "initial_zoom": 12,
+      "bounds_padding": 0.015
+    },
+    "style": {
+      "side_colors": {
+        "french": "#d64b3c",
+        "coalition": "#2f6fb5"
+      },
+      "event_icons": {
+        "advance": "arrow-up-right",
+        "retreat": "arrow-down",
+        "attack": "burst",
+        "defend": "shield",
+        "reinforcement": "plus"
+      },
+      "movement_line_width": 4
+    },
+    "timeline": {
+      "default_event_duration_ms": 1600,
+      "ordered_event_ids": [
+        "event_french_advance",
+        "event_hougoumont_attack",
+        "event_coalition_defense",
+        "event_prussian_reinforcement",
+        "event_french_retreat"
+      ]
+    },
+    "camera": [
+      {
+        "event_id": "event_hougoumont_attack",
+        "center": [4.392, 50.671],
+        "zoom": 13
+      },
+      {
+        "event_id": "event_prussian_reinforcement",
+        "center": [4.429, 50.662],
+        "zoom": 13
+      }
+    ]
+  }
+}
