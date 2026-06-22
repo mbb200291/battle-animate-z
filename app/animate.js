@@ -307,10 +307,14 @@ export function renderBattle(battle, documentRef = document) {
     if (typeof event.confidence === "number" && event.confidence < 0.5) {
       marker.classList.add("is-low-confidence");
     }
-    marker.append(
+    // Inner group carries the active-state scale so it never overrides the
+    // outer group's positioning transform attribute.
+    const inner = svgEl(documentRef, "g", { class: "event-marker-inner" });
+    inner.append(
       svgEl(documentRef, "circle", { class: "event-disc", r: 16 }),
       svgEl(documentRef, "text", { class: "event-icon", y: 5 }, iconOf(event.type))
     );
+    marker.append(inner);
     svg.append(marker);
     markerEls.set(event.id, { coord: eventCoord(event, places), g: marker });
   }
@@ -469,7 +473,11 @@ export function renderBattle(battle, documentRef = document) {
   if (scrubber) scrubber.max = String(orderedEvents.length - 1);
 
   mapEl._battleController = controller;
+  // Suppress transitions for the very first placement so units/markers appear
+  // at their positions instead of flying in from the SVG origin.
+  svg.classList.add("is-moving");
   controller.showEvent(0);
+  requestAnimationFrame(() => svg.classList.remove("is-moving"));
   return controller;
 }
 

@@ -69,7 +69,8 @@ textarea {
 
 .battle-overlay.is-moving .unit,
 .battle-overlay.is-moving .movement-path,
-.battle-overlay.is-moving .event-marker {
+.battle-overlay.is-moving .event-marker,
+.battle-overlay.is-moving .event-marker-inner {
   transition: none !important;
 }
 
@@ -467,11 +468,7 @@ dd {
 
 .event-marker {
   opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-  transition:
-    opacity 220ms ease,
-    transform 320ms ease;
+  transition: opacity 220ms ease;
 }
 
 .event-marker.is-visible {
@@ -480,6 +477,15 @@ dd {
 
 .event-marker.is-active {
   opacity: 1;
+}
+
+.event-marker-inner {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 320ms ease;
+}
+
+.event-marker.is-active .event-marker-inner {
   transform: scale(1.15);
 }
 
