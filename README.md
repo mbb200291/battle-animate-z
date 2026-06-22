@@ -48,111 +48,127 @@ Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, di
 
 ## Generate JSON With AI
 
-Copy this prompt when asking an AI model to generate a battle JSON from a Wiki page:
+Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
 
-```text
-你是一個歷史資料標準化助理。請根據我提供的 Wikipedia / Wikidata / Wiki 頁面內容，產生符合 battle-animation-schema v0.1.0 的 JSON。
+````text
+你是一個歷史資料標準化助理。請根據我提供的 Wikipedia / Wikidata / Wiki 頁面內容，產生「完全符合」 battle-animation-schema v0.1.0 的 JSON，供地圖動畫 app 使用。
 
-任務目標：
-把這場戰役整理成可供地圖動畫 app 使用的標準 JSON。
+===== 最重要的輸出規則（違反任何一條都算失敗）=====
+1. 只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
+2. 最外層物件必須「剛好」包含這 12 個 key，名稱與順序如下，不可多也不可少：
+   schema_version, metadata, battle, sides, commanders, actors, places,
+   historical_events, movements, outcome, sources, animation_hints
+3. 絕對不要輸出 problems / suggested_fixes / corrected_json 這種檢查用包裝物件。
+   要直接輸出最終 JSON 本體。
+4. schema_version 必須剛好是字串 "0.1.0"（不是 "v0.1.0"，不是 0.1.0 數字）。
+5. 整份 schema 的每個物件都是 additionalProperties:false：
+   「只能使用下方列出的欄位名稱，多出任何一個欄位都會驗證失敗。」
+   不要自行新增 type / role / source_ids / precision / notes / language 等未列出的欄位。
 
-輸出要求：
-1. 只輸出 JSON，不要 Markdown，不要解釋。
-2. JSON 必須符合 battle-animation-schema v0.1.0。
-3. 不要編造不存在於資料來源的細節。
-4. 如果資料不精確，請使用：
-   - precision: "approximate" / "inferred" / "disputed" / "unknown"
-   - confidence: 0 到 1 的數字
-5. historical_events 只放歷史事件資料。
-6. animation_hints 只放動畫渲染提示，不要把它當作史實來源。
-7. 地理資料使用 GeoJSON subset：
-   - Point
-   - LineString
-   - Polygon
-   coordinates 必須使用 [longitude, latitude]。
-8. timeline event type 只能使用：
-   - advance
-   - retreat
-   - attack
-   - defend
-   - capture
-   - surrender
-   - reinforcement
-   - bombardment
-   - landing
-   - other
-9. movement path 如果來源沒有明確路線，可以根據地點推估，但必須標記：
-   - precision: "inferred"
-   - confidence <= 0.6
-10. 所有 source_ids 必須對應 sources 裡的 id。
+===== 各物件的「合法欄位」（required 標 *，其餘為選填）=====
+metadata: *id *title *created_at *updated_at *license *source_system, wikidata_qid
+battle: *id *name *part_of *date *summary *confidence, also_known_as
+  - date 是物件：*label *precision *confidence, start, end
+  - 不要用 start_date / end_date；改用 date.start / date.end（字串），或只放 date.label。
+sides[]: *id *name *color *belligerents
+  - color 必填，且雙方要用「對比明顯」的十六進位顏色（例如 "#2f6fb5" 藍 與 "#c0392b" 紅）。
+  - belligerents[] 每項：*id *name, wikidata_qid
+commanders[]: *id *name *side_id *confidence, rank_or_role, wikidata_qid
+  - 職稱請放 rank_or_role（不要用 role）。
+actors[]: *id *name *side_id *kind *confidence, commander_ids, strength
+  - kind 只能是：army, corps, division, brigade, regiment, fleet, unit, person, other（不要用 type）。
+  - strength 是物件：label, min, max, confidence（數字放 min/max，文字放 label；不要用 value/unit）。
+places[]: *id *name *geometry *precision *confidence, wikidata_qid
+  - geometry 用 GeoJSON 子集：Point / LineString / Polygon，coordinates 一律 [longitude, latitude]。
+historical_events[]: *id *type *title *time *description *actor_ids *place_ids *precision *confidence *source_ids, target_actor_ids
+  - type 只能是：advance, retreat, attack, defend, capture, surrender, reinforcement, bombardment, landing, other
+  - title 是短標題；description 放完整敘述；time 是物件：*label *precision *confidence, start, end
+movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id, to_place_id
+  - 每個 movement 都「必須」有 event_id，對應到某個 historical_events.id（否則動畫不會顯示這段移動）。
+  - path 是 LineString：{"type":"LineString","coordinates":[[lon,lat],...]}（至少 2 個點）。
+  - 推估路線：precision 設 "inferred"，confidence <= 0.6。
+outcome: *summary *winner_side_ids *confidence *source_ids, casualties
+  - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
+  - casualties[] 每項：*side_id *label *confidence, min, max
+sources[]: *id *title *url *retrieved_at *license, note
+  - 用 retrieved_at（不要用 accessed_at）；不要放 type。
+animation_hints: *map *style *timeline, camera
+  - map: *initial_center *initial_zoom, bounds_padding（initial_center 為 [lon,lat]）
+  - style: side_colors, actor_icons, event_icons, movement_line_width
+  - timeline: default_event_duration_ms, ordered_event_ids（請依時間順序列出所有事件 id）
+  - camera[] 每項：*event_id *center, zoom（center 為 [lon,lat]）
+  - animation_hints 只放渲染提示，不要在裡面放任何史實斷言或 source。
 
-請產生以下欄位：
-- schema_version
-- metadata
-- battle
-- sides
-- commanders
-- actors
-- places
-- historical_events
-- movements
-- outcome
-- sources
-- animation_hints
+===== 顏色與圖示（讓動畫更清楚）=====
+- 為每個 side 指定對比明顯的 color，並在 animation_hints.style.side_colors 重複一份（key 用 side id）。
+- 為每個 actor 在 animation_hints.style.actor_icons 指定一個適當圖示（key 用 actor id）。
+  請依兵種推薦最貼切的 emoji，例如：
+    艦隊 / 軍艦 / 水師 → 🚢，運輸船 → ⛵，陸軍 / 步兵 → 🪖，騎兵 → 🐎，
+    砲兵 → 💥，裝甲 / 戰車旅 → 🛡️，航空 → ✈️，要塞 → 🏰，司令部 → 🚩
+  也可以填入 ship / cavalry / artillery / tank 等英文名稱，app 會轉成圖示。
+- 由你判斷每個單位最合適的圖示並主動指定，不要全部留空。
 
-資料來源：
+===== 資料正確性 =====
+- 不要編造來源中沒有的細節。資料不精確時用 precision（approximate/inferred/disputed/unknown）與 confidence（0~1）標記。
+- 所有 *_id / *_ids 必須對應到實際存在的 id。
+- 地點若只能大概定位，就用 approximate 的 Point。
+
+===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
+{
+  "schema_version": "0.1.0",
+  "metadata": { "id": "battle_example", "title": "範例戰役", "created_at": "2026-06-22", "updated_at": "2026-06-22", "license": "CC BY-SA 4.0", "source_system": "ai_extraction_zhwiki" },
+  "battle": { "id": "battle_example", "name": "範例戰役", "also_known_as": ["別名"], "part_of": "某場戰爭", "date": { "label": "1894-09-15", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "summary": "一句話說明這場戰役。", "confidence": 0.85 },
+  "sides": [
+    { "id": "side_a", "name": "甲方", "color": "#2f6fb5", "belligerents": [{ "id": "bel_a", "name": "甲國" }] },
+    { "id": "side_b", "name": "乙方", "color": "#c0392b", "belligerents": [{ "id": "bel_b", "name": "乙國" }] }
+  ],
+  "commanders": [ { "id": "cmd_a", "name": "甲方指揮官", "side_id": "side_a", "rank_or_role": "司令", "confidence": 0.8 } ],
+  "actors": [
+    { "id": "actor_a_fleet", "name": "甲方艦隊", "side_id": "side_a", "kind": "fleet", "commander_ids": ["cmd_a"], "strength": { "label": "12 艘軍艦", "min": 12, "max": 12, "confidence": 0.7 }, "confidence": 0.8 },
+    { "id": "actor_b_army", "name": "乙方陸軍", "side_id": "side_b", "kind": "army", "confidence": 0.8 }
+  ],
+  "places": [
+    { "id": "place_harbor", "name": "某港", "geometry": { "type": "Point", "coordinates": [122.1, 39.0] }, "precision": "approximate", "confidence": 0.7 },
+    { "id": "place_ridge", "name": "某高地", "geometry": { "type": "Point", "coordinates": [123.4, 38.6] }, "precision": "approximate", "confidence": 0.7 }
+  ],
+  "historical_events": [
+    { "id": "evt_attack", "type": "attack", "title": "海上交戰", "time": { "label": "1894-09-15 上午", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "description": "甲方艦隊在某港外與乙方交戰。", "actor_ids": ["actor_a_fleet"], "place_ids": ["place_harbor"], "precision": "approximate", "confidence": 0.85, "source_ids": ["src_wiki"] },
+    { "id": "evt_advance", "type": "advance", "title": "乙方陸軍推進", "time": { "label": "1894-09-16", "start": "1894-09-16", "precision": "day", "confidence": 0.8 }, "description": "乙方陸軍向某高地推進。", "actor_ids": ["actor_b_army"], "place_ids": ["place_ridge"], "precision": "inferred", "confidence": 0.6, "source_ids": ["src_wiki"] }
+  ],
+  "movements": [
+    { "id": "mov_b_advance", "event_id": "evt_advance", "actor_id": "actor_b_army", "from_place_id": "place_harbor", "to_place_id": "place_ridge", "path": { "type": "LineString", "coordinates": [[122.1, 39.0], [123.4, 38.6]] }, "precision": "inferred", "confidence": 0.55 }
+  ],
+  "outcome": { "summary": "乙方獲勝。", "winner_side_ids": ["side_b"], "casualties": [{ "side_id": "side_a", "label": "約 500 人", "min": 400, "max": 600, "confidence": 0.6 }], "confidence": 0.85, "source_ids": ["src_wiki"] },
+  "sources": [ { "id": "src_wiki", "title": "維基百科條目", "url": "https://zh.wikipedia.org/wiki/...", "retrieved_at": "2026-06-22", "license": "CC BY-SA 4.0" } ],
+  "animation_hints": {
+    "map": { "initial_center": [122.8, 38.8], "initial_zoom": 7, "bounds_padding": 0.05 },
+    "style": {
+      "side_colors": { "side_a": "#2f6fb5", "side_b": "#c0392b" },
+      "actor_icons": { "actor_a_fleet": "🚢", "actor_b_army": "🪖" },
+      "event_icons": { "attack": "burst", "advance": "arrow-up-right" },
+      "movement_line_width": 4
+    },
+    "timeline": { "default_event_duration_ms": 1600, "ordered_event_ids": ["evt_attack", "evt_advance"] },
+    "camera": [{ "event_id": "evt_advance", "center": [123.4, 38.6], "zoom": 9 }]
+  }
+}
+
+===== 資料來源 =====
 [貼上 Wikipedia / Wikidata / Wiki 頁面文字、表格、URL 或摘要]
 
-指定戰役：
+===== 指定戰役 =====
 [例如：Battle of Waterloo]
 
-補充限制：
-- actors 優先使用 army / corps / division / unit 等粗粒度單位。
-- 不要做完整軍事模擬。
-- 不要推導火力、補給、士氣、傷害計算。
-- 如果只能知道大概位置，就建立 approximate Point。
-- 如果事件順序明確但時間不精確，time.precision 使用 "day" 或 "unknown"，並在 label 裡保留原文描述。
+請依照上面的「輸出格式範本」結構，只替換成這場戰役的真實內容，直接輸出最終 JSON 物件。
+````
 
-建議流程：
-第一階段先請 AI 抽取草稿：
+After generating, validate the document before loading it into the app:
 
-先不要輸出最終 JSON。請先列出你能從來源中確認的：
-1. battle basic info
-2. sides / belligerents
-3. commanders
-4. actors / units
-5. places with coordinates
-6. timeline events
-7. possible movements
-8. outcome
-9. sources
-並標記每一項的 precision 與 confidence。
-
-第二階段再生成 JSON：
-
-根據上一步抽取結果，產生完整 battle-animation-schema v0.1.0 JSON。
-只輸出 JSON。
-
-品質檢查：
-
-請檢查這份 JSON 是否符合 battle-animation-schema v0.1.0：
-
-檢查項目：
-1. 是否是合法 JSON。
-2. 是否缺少必要欄位。
-3. event type 是否只使用允許 enum。
-4. 所有 *_ids 是否能對應到實際 id。
-5. coordinates 是否為 [longitude, latitude]。
-6. historical_events 是否混入 animation hints。
-7. animation_hints 是否混入史實斷言。
-8. Wiki 不精確資料是否有 precision/confidence。
-9. movements 是否把推估路線標為 inferred 且 confidence <= 0.6。
-
-請輸出：
-- problems: array
-- suggested_fixes: array
-- corrected_json: 如果沒有問題則原樣輸出
+```bash
+python3 -m battle_animation.validator path/to/your-battle.json
 ```
+
+Fix any reported field-name or reference errors until it prints `valid:`.
 
 ## Validate Data
 
