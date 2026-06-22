@@ -46,6 +46,59 @@ function resolveIcon(type, eventIcons) {
   return DEFAULT_ICONS[type] || "•";
 }
 
+// Default unit glyphs by actor kind. animation_hints.style.actor_icons can
+// override per actor with a named icon or any emoji (e.g. "🚢", "🐎").
+const DEFAULT_ACTOR_ICONS = {
+  army: "🪖",
+  corps: "🪖",
+  division: "🎖️",
+  brigade: "🎖️",
+  regiment: "🎖️",
+  fleet: "🚢",
+  unit: "🔹",
+  person: "🎖️",
+  other: "🔹",
+};
+
+const NAMED_ACTOR_ICONS = {
+  ship: "🚢",
+  warship: "🚢",
+  navy: "🚢",
+  naval: "🚢",
+  fleet: "🚢",
+  boat: "⛵",
+  infantry: "🪖",
+  soldier: "🪖",
+  army: "🪖",
+  cavalry: "🐎",
+  horse: "🐎",
+  artillery: "💥",
+  cannon: "💥",
+  tank: "🛡️",
+  armor: "🛡️",
+  armored: "🛡️",
+  plane: "✈️",
+  aircraft: "✈️",
+  air: "✈️",
+  commander: "🎖️",
+  hq: "🚩",
+  fort: "🏰",
+  fortress: "🏰",
+};
+
+function resolveActorIcon(actor, actorIcons) {
+  const value = actorIcons[actor.id];
+  if (value) {
+    if (NAMED_ACTOR_ICONS[value]) return NAMED_ACTOR_ICONS[value];
+    if ([...value].length <= 4) return value; // emoji or short glyph
+  }
+  return DEFAULT_ACTOR_ICONS[actor.kind] || "🔹";
+}
+
+// Distinct fallback palette so opposing sides are always visually separable
+// even when a document omits side colors.
+const SIDE_PALETTE = ["#2f6fb5", "#c0392b", "#2e8b57", "#8e44ad", "#d68910", "#16a085"];
+
 const EVENT_TYPES = [
   "advance",
   "retreat",
@@ -158,8 +211,12 @@ export function renderBattle(battle, documentRef = document) {
   const style = battle.animation_hints?.style || {};
   const sideColors = style.side_colors || {};
   const eventIcons = style.event_icons || {};
-  const colorOf = (sideId) => sideColors[sideId] || sides.get(sideId)?.color || "#19202a";
+  const actorIcons = style.actor_icons || {};
+  const sideIndex = new Map(battle.sides.map((side, index) => [side.id, index]));
+  const colorOf = (sideId) =>
+    sideColors[sideId] || sides.get(sideId)?.color || SIDE_PALETTE[(sideIndex.get(sideId) ?? 0) % SIDE_PALETTE.length];
   const iconOf = (type) => resolveIcon(type, eventIcons);
+  const actorIconOf = (actor) => resolveActorIcon(actor, actorIcons);
 
   const orderedEvents = orderEvents(battle);
   const orderIndex = new Map(orderedEvents.map((event, index) => [event.id, index]));
@@ -236,8 +293,9 @@ export function renderBattle(battle, documentRef = document) {
   for (const actor of battle.actors) {
     const unit = svgEl(documentRef, "g", { class: "unit" });
     unit.append(
-      svgEl(documentRef, "circle", { r: 11, fill: colorOf(actor.side_id), stroke: "#fffaf0", "stroke-width": 3 }),
-      svgEl(documentRef, "text", { class: "unit-label", x: 16, y: 4 }, actor.name)
+      svgEl(documentRef, "circle", { class: "unit-disc", r: 14, fill: colorOf(actor.side_id) }),
+      svgEl(documentRef, "text", { class: "unit-icon", "text-anchor": "middle", y: 6 }, actorIconOf(actor)),
+      svgEl(documentRef, "text", { class: "unit-label", x: 20, y: 5 }, actor.name)
     );
     svg.append(unit);
     unitEls.set(actor.id, { g: unit });

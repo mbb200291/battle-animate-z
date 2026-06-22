@@ -393,8 +393,18 @@ dd {
   opacity: 0.7;
 }
 
+.unit-disc {
+  stroke: #fffaf0;
+  stroke-width: 3;
+}
+
+.unit-icon {
+  font-size: 15px;
+}
+
 .unit-label {
   font-size: 13px;
+  font-weight: 600;
   fill: var(--ink);
   paint-order: stroke;
   stroke: var(--panel);

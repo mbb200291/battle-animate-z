@@ -611,6 +611,12 @@
                 "type": "string"
               }
             },
+            "actor_icons": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
             "event_icons": {
               "type": "object",
               "additionalProperties": {

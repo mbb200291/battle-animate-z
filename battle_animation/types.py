@@ -173,6 +173,7 @@ class AnimationMapHints(TypedDict):
 
 class AnimationStyleHints(TypedDict, total=False):
     side_colors: dict[str, str]
+    actor_icons: dict[str, str]
     event_icons: dict[str, str]
     movement_line_width: float
 
