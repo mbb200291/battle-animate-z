@@ -55,12 +55,14 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 
 ===== 最重要的輸出規則（違反任何一條都算失敗）=====
 1. 只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
-2. 最外層物件必須「剛好」包含這 12 個 key，名稱與順序如下，不可多也不可少：
+2. 最外層物件必須包含這 12 個必備 key（名稱與順序如下）：
    schema_version, metadata, battle, sides, commanders, actors, places,
    historical_events, movements, outcome, sources, animation_hints
+   若提供逐單位交戰細節，可再加 1 個選填 key：engagements。除上述以外不要有其他 key。
 3. 絕對不要輸出 problems / suggested_fixes / corrected_json 這種檢查用包裝物件。
    要直接輸出最終 JSON 本體。
-4. schema_version 必須剛好是字串 "0.1.0"（不是 "v0.1.0"，不是 0.1.0 數字）。
+4. schema_version：基本資料用字串 "0.1.0"；若使用 engagements 或 ship 等精細欄位，請用 "0.2.0"。
+   （不要寫成 "v0.1.0" 或數字。）
 5. 整份 schema 的每個物件都是 additionalProperties:false：
    「只能使用下方列出的欄位名稱，多出任何一個欄位都會驗證失敗。」
    不要自行新增 type / role / source_ids / precision / notes / language 等未列出的欄位。
@@ -75,8 +77,9 @@ sides[]: *id *name *color *belligerents
   - belligerents[] 每項：*id *name, wikidata_qid
 commanders[]: *id *name *side_id *confidence, rank_or_role, wikidata_qid
   - 職稱請放 rank_or_role（不要用 role）。
-actors[]: *id *name *side_id *kind *confidence, commander_ids, strength
-  - kind 只能是：army, corps, division, brigade, regiment, fleet, unit, person, other（不要用 type）。
+actors[]: *id *name *side_id *kind *confidence, parent_id, commander_ids, strength
+  - kind 只能是：army, corps, division, brigade, regiment, fleet, ship, unit, person, other（不要用 type）。
+  - 精細到個別軍艦/單位時 kind 用 "ship" 等，並可用 parent_id 指向所屬上級 actor（例如某艦隊）。
   - strength 是物件：label, min, max, confidence（數字放 min/max，文字放 label；不要用 value/unit）。
 places[]: *id *name *geometry *precision *confidence, wikidata_qid
   - geometry 用 GeoJSON 子集：Point / LineString / Polygon，coordinates 一律 [longitude, latitude]。
@@ -87,6 +90,12 @@ movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id
   - 每個 movement 都「必須」有 event_id，對應到某個 historical_events.id（否則動畫不會顯示這段移動）。
   - path 是 LineString：{"type":"LineString","coordinates":[[lon,lat],...]}（至少 2 個點）。
   - 推估路線：precision 設 "inferred"，confidence <= 0.6。
+engagements[]（選填，但強烈建議提供；用來表現「誰打誰、結果如何」）:
+  *id *event_id *attacker_actor_id *target_actor_id *type *confidence, result, result_actor_id, at_place_id, time, source_ids
+  - type 只能是：fire, bombardment, ram, torpedo, charge, melee, other
+  - result 只能是：hit, miss, damaged, disabled, sunk, repelled, captured, none
+  - event_id 對應某個 historical_events.id（交火會在該事件顯示）。
+  - 當 result 為 sunk / disabled / captured，用 result_actor_id 指出「被擊沉／失能的是哪個 actor」（不填則預設為 target）。
 outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
   - casualties[] 每項：*side_id *label *confidence, min, max
@@ -107,6 +116,23 @@ animation_hints: *map *style *timeline, camera
     砲兵 → 💥，裝甲 / 戰車旅 → 🛡️，航空 → ✈️，要塞 → 🏰，司令部 → 🚩
   也可以填入 ship / cavalry / artillery / tank 等英文名稱，app 會轉成圖示。
 - 由你判斷每個單位最合適的圖示並主動指定，不要全部留空。
+
+===== 精細度（資料越細，動畫越精緻）=====
+動畫的細緻程度完全取決於你提供多少資料。請盡量做到：
+1. 把關鍵單位拆細：海戰拆到主要軍艦、陸戰拆到師／旅／團級，各自當一個 actor
+   （kind 用 ship / division / brigade…），需要時用 parent_id 歸到上級單位。
+2. 給每個關鍵單位「分階段的位置與移動」：用多個 historical_events 切出戰役階段
+   （遭遇、開火、包抄、混戰、追擊、撤退…）；每個階段為有移動的單位各補一條 movements
+   （帶對應的 event_id）。單位起始位置可由它的第一條 movement 或事件地點推得。
+3. 用 engagements 記錄對抗：哪個單位打哪個、用什麼方式、結果如何。app 會在對應事件
+   畫出交火線，並讓被擊沉／失能的單位淡出。
+4. 讓事件分散在不同 place：不要把所有事件都掛在同一個粗略地點，否則標記會疊在一起；
+   可為不同階段建立各自的近似 Point（標 inferred + 低 confidence）。
+
+資料來源不限於單一 wiki 條目 —— 可彙整其他百科、條目章節、戰役專文等；也允許你「合理推估」
+相對位置與隊形。但凡屬推估，務必標 precision:"inferred" 且 confidence 偏低（例如 <= 0.5），
+史實明確者才給高 confidence。寧可多給細節（多 actor／event／movement／engagement）再以
+低 confidence 標記，也不要因為怕出錯而整段省略。
 
 ===== 資料正確性 =====
 - 不要編造來源中沒有的細節。資料不精確時用 precision（approximate/inferred/disputed/unknown）與 confidence（0~1）標記。

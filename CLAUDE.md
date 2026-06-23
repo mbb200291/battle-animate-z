@@ -36,6 +36,8 @@ The schema enforces a strict two-layer split that the rest of the system depends
 - **`historical_events`** — source-backed facts only. Every uncertainty is recorded explicitly via `precision` (exact/approximate/inferred/disputed/unknown) and `confidence` (0–1), never by faking exact data. Events reference sources through `source_ids`.
 - **`animation_hints`** — rendering guidance only (map center/zoom, colors, event ordering, camera, line width). These fields must **never** assert historical facts. Tests in [tests/test_mvp_contract.py](tests/test_mvp_contract.py) actively guard against the two layers leaking into each other.
 
+`schema_version` is `0.1.0` or `0.2.0`. v0.2.0 adds optional, additive fields for finer animation (all backward-compatible — 0.1.0 documents stay valid): top-level `engagements[]` (attacker→target with `type`/`result`, tied to an `event_id`), `actor.kind: "ship"`, and `actor.parent_id` (group units, e.g. ships under a fleet). Granularity is data-driven: the app renders ship-level relative positions and combat outcomes only when the document supplies them, and degrades cleanly when it doesn't.
+
 Three representations of the same contract must stay in sync when the schema changes:
 
 1. [schemas/battle-animation-schema.json](schemas/battle-animation-schema.json) — the source of truth (JSON Schema draft 2020-12, `$defs` + local `$ref`s).
@@ -54,6 +56,7 @@ Three representations of the same contract must stay in sync when the schema cha
 - `validateBattle(battle)` is a browser-side port of [battle_animation/validator.py](battle_animation/validator.py)'s reference checks (required keys, schema version, event-type enum, all `*_id(s)` cross-references). [app/index.html](app/index.html) runs it before rendering and shows failures in an error banner — keep it in sync with the Python validator.
 - `orderEvents` sequences the timeline via `animation_hints.timeline.ordered_event_ids`, appending unlisted events. `buildSnapshots` precomputes cumulative actor positions per event so scrubbing backward is correct.
 - `animation_hints` is fully honored: `camera` drives per-event `flyTo`, `style.side_colors` overrides side colors (falling back to `SIDE_PALETTE` so opposing sides are always distinct even without colors), `style.event_icons` → glyphs via `resolveIcon`/`NAMED_ICONS`, and `style.actor_icons` (actor id → named icon or emoji) → unit glyphs via `resolveActorIcon`, defaulting per `actor.kind` (fleet→🚢, army→🪖, …).
+- `engagements` render as tracers between the attacker and target units (re-projected live from their positions), the target unit pulses, and victims of `sunk`/`disabled`/`captured` results dim for the rest of the timeline (`sunkByIndex`); the current event's engagements are listed in the inspector.
 - `renderBattle` returns a controller (`showEvent`/`next`/`prev`/`play`/`pause`/`toggle`/`destroy`); `play` clears its own interval (no stacked timers). `destroy()` tears down the Leaflet map so the container can be re-rendered with new JSON.
 
 ## Conventions
