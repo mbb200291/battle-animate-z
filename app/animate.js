@@ -299,6 +299,20 @@ export function renderBattle(battle, documentRef = document) {
     movementEls.set(movement.id, { coords: movement.path.coordinates, path });
   }
 
+  // Engagement tracers are drawn between the attacker and target units, under
+  // the unit icons. Their endpoints are re-projected from live unit positions.
+  const engagements = battle.engagements || [];
+  const engagementEls = new Map();
+  for (const eng of engagements) {
+    const attacker = actors.get(eng.attacker_actor_id);
+    const line = svgEl(documentRef, "line", {
+      class: `engagement-line type-${eng.type}`,
+      stroke: colorOf(attacker?.side_id),
+    });
+    svg.append(line);
+    engagementEls.set(eng.id, { eng, line });
+  }
+
   const unitEls = new Map();
   for (const actor of battle.actors) {
     const unit = svgEl(documentRef, "g", { class: "unit" });
@@ -332,6 +346,18 @@ export function renderBattle(battle, documentRef = document) {
   const snapshots = buildSnapshots(battle, orderedEvents);
   let actorPositions = snapshots[0];
 
+  // Once an engagement reports a destructive result, the victim stays marked
+  // for every later event in the timeline.
+  const SUNK_RESULTS = new Set(["sunk", "disabled", "captured"]);
+  const sunkByIndex = orderedEvents.map(() => new Set());
+  for (const eng of engagements) {
+    if (!SUNK_RESULTS.has(eng.result)) continue;
+    const order = orderIndex.get(eng.event_id);
+    if (order === undefined) continue;
+    const victim = eng.result_actor_id || eng.target_actor_id;
+    for (let i = order; i < orderedEvents.length; i++) sunkByIndex[i].add(victim);
+  }
+
   function redraw() {
     for (const place of placeEls) {
       if (place.kind === "point") {
@@ -348,6 +374,17 @@ export function renderBattle(battle, documentRef = document) {
     }
     for (const { coords, path } of movementEls.values()) {
       path.setAttribute("d", toPath(coords));
+    }
+    for (const { eng, line } of engagementEls.values()) {
+      const a = actorPositions.get(eng.attacker_actor_id);
+      const b = actorPositions.get(eng.target_actor_id);
+      if (!a || !b) continue;
+      const pa = project(a);
+      const pb = project(b);
+      line.setAttribute("x1", pa.x);
+      line.setAttribute("y1", pa.y);
+      line.setAttribute("x2", pb.x);
+      line.setAttribute("y2", pb.y);
     }
     for (const { coord, g } of markerEls.values()) {
       const point = project(coord);
@@ -400,8 +437,21 @@ export function renderBattle(battle, documentRef = document) {
         el.path.classList.toggle("is-active", movement.event_id === event.id);
       }
 
+      const activeTargets = new Set();
+      for (const { eng, line } of engagementEls.values()) {
+        const active = eng.event_id === event.id;
+        line.classList.toggle("is-active", active);
+        if (active) activeTargets.add(eng.target_actor_id);
+      }
+      const sunk = sunkByIndex[bounded] || new Set();
+      for (const [actorId, { g }] of unitEls) {
+        g.classList.toggle("is-sunk", sunk.has(actorId));
+        g.classList.toggle("is-hit", activeTargets.has(actorId) && !sunk.has(actorId));
+      }
+
       redraw();
       updateInspector(documentRef, event);
+      renderEngagements(documentRef, engagements.filter((e) => e.event_id === event.id), actors);
       updateTimeline(documentRef, bounded);
 
       const scrubber = $("event-scrubber");
@@ -597,6 +647,40 @@ function buildTimeline(events, documentRef, onSelect) {
     item.append(button);
     timeline.append(item);
   });
+}
+
+const ENGAGEMENT_SYMBOLS = {
+  fire: "💥",
+  bombardment: "💥",
+  ram: "⊕",
+  torpedo: "≈",
+  charge: "»",
+  melee: "⚔",
+  other: "•",
+};
+
+function renderEngagements(documentRef, list, actors) {
+  const box = documentRef.getElementById("engagements");
+  if (!box) return;
+  box.replaceChildren();
+  if (!list.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  for (const eng of list) {
+    const attacker = actors.get(eng.attacker_actor_id)?.name || eng.attacker_actor_id;
+    const target = actors.get(eng.target_actor_id)?.name || eng.target_actor_id;
+    const row = documentRef.createElement("div");
+    row.className = "engagement-row";
+    let text = `${ENGAGEMENT_SYMBOLS[eng.type] || "•"} ${attacker} → ${target}`;
+    if (eng.result && eng.result !== "none") {
+      const victim = actors.get(eng.result_actor_id || eng.target_actor_id)?.name || target;
+      text += ` — ${victim}: ${eng.result}`;
+    }
+    row.textContent = text;
+    box.append(row);
+  }
 }
 
 function updateInspector(documentRef, event) {

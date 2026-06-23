@@ -1,0 +1,663 @@
+{
+  "schema_version": "0.2.0",
+  "metadata": {
+    "id": "battle_yalu_1894",
+    "title": "黃海海戰（大東溝海戰）",
+    "created_at": "2026-06-22",
+    "updated_at": "2026-06-22",
+    "license": "CC BY-SA 4.0",
+    "source_system": "ai_extraction_zhwiki"
+  },
+  "battle": {
+    "id": "battle_yalu",
+    "name": "黃海海戰",
+    "also_known_as": [
+      "大東溝海戰"
+    ],
+    "part_of": "甲午戰爭",
+    "date": {
+      "label": "1894-09-17",
+      "start": "1894-09-17",
+      "precision": "day",
+      "confidence": 0.95
+    },
+    "summary": "1894年9月17日，北洋水師與日本聯合艦隊在黃海大東溝外海的主力艦隊決戰，日本取得制海權。",
+    "confidence": 0.9
+  },
+  "sides": [
+    {
+      "id": "side_qing",
+      "name": "北洋水師（清）",
+      "color": "#2f6fb5",
+      "belligerents": [
+        {
+          "id": "bel_qing",
+          "name": "大清北洋水師"
+        }
+      ]
+    },
+    {
+      "id": "side_japan",
+      "name": "聯合艦隊（日）",
+      "color": "#c0392b",
+      "belligerents": [
+        {
+          "id": "bel_japan",
+          "name": "大日本帝國海軍"
+        }
+      ]
+    }
+  ],
+  "commanders": [
+    {
+      "id": "cmd_ding",
+      "name": "丁汝昌",
+      "side_id": "side_qing",
+      "rank_or_role": "北洋水師提督",
+      "confidence": 0.9
+    },
+    {
+      "id": "cmd_ito",
+      "name": "伊東祐亨",
+      "side_id": "side_japan",
+      "rank_or_role": "聯合艦隊司令長官",
+      "confidence": 0.9
+    }
+  ],
+  "actors": [
+    {
+      "id": "ship_dingyuan",
+      "name": "定遠",
+      "side_id": "side_qing",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_zhenyuan",
+      "name": "鎮遠",
+      "side_id": "side_qing",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_jingyuan",
+      "name": "經遠",
+      "side_id": "side_qing",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_zhiyuan",
+      "name": "致遠",
+      "side_id": "side_qing",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_chaoyong",
+      "name": "超勇",
+      "side_id": "side_qing",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_yangwei",
+      "name": "揚威",
+      "side_id": "side_qing",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_matsushima",
+      "name": "松島",
+      "side_id": "side_japan",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_yoshino",
+      "name": "吉野",
+      "side_id": "side_japan",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_naniwa",
+      "name": "浪速",
+      "side_id": "side_japan",
+      "kind": "ship",
+      "confidence": 0.85
+    },
+    {
+      "id": "ship_hiei",
+      "name": "比叡",
+      "side_id": "side_japan",
+      "kind": "ship",
+      "confidence": 0.85
+    }
+  ],
+  "places": [
+    {
+      "id": "place_dadonggou",
+      "name": "大東溝海域",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          123.62,
+          39.35
+        ]
+      },
+      "precision": "approximate",
+      "confidence": 0.7
+    },
+    {
+      "id": "place_right_wing",
+      "name": "北洋右翼",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          123.56,
+          39.333
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "place_melee",
+      "name": "混戰海域",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          123.6,
+          39.33
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "place_weihaiwei",
+      "name": "威海衛",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          122.1,
+          37.5
+        ]
+      },
+      "precision": "approximate",
+      "confidence": 0.8
+    }
+  ],
+  "historical_events": [
+    {
+      "id": "evt_encounter",
+      "type": "other",
+      "title": "艦隊遭遇",
+      "time": {
+        "label": "1894-09-17 11:30",
+        "start": "1894-09-17T11:30",
+        "precision": "hour",
+        "confidence": 0.9
+      },
+      "description": "北洋水師以夾縫雁行陣南下，日本聯合艦隊以單縱陣自西南接近，雙方於大東溝外海相互發現。",
+      "actor_ids": [
+        "ship_dingyuan",
+        "ship_matsushima"
+      ],
+      "place_ids": [
+        "place_dadonggou"
+      ],
+      "precision": "approximate",
+      "confidence": 0.85,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    },
+    {
+      "id": "evt_open_fire",
+      "type": "bombardment",
+      "title": "定遠首先開火",
+      "time": {
+        "label": "1894-09-17 12:50",
+        "start": "1894-09-17T12:50",
+        "precision": "hour",
+        "confidence": 0.9
+      },
+      "description": "旗艦定遠在約5300米首先開砲，戰役爆發；不久定遠飛橋震塌，丁汝昌受傷。",
+      "actor_ids": [
+        "ship_dingyuan"
+      ],
+      "place_ids": [
+        "place_dadonggou"
+      ],
+      "precision": "approximate",
+      "confidence": 0.85,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    },
+    {
+      "id": "evt_flying_flank",
+      "type": "attack",
+      "title": "第一游擊隊包抄右翼",
+      "time": {
+        "label": "1894-09-17 13:00",
+        "start": "1894-09-17T13:00",
+        "precision": "hour",
+        "confidence": 0.85
+      },
+      "description": "日本第一游擊隊憑航速繞向北洋右翼，集火較弱的超勇、揚威，兩艦先後中彈起火。",
+      "actor_ids": [
+        "ship_yoshino",
+        "ship_naniwa",
+        "ship_chaoyong",
+        "ship_yangwei"
+      ],
+      "place_ids": [
+        "place_right_wing"
+      ],
+      "precision": "approximate",
+      "confidence": 0.8,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    },
+    {
+      "id": "evt_melee",
+      "type": "attack",
+      "title": "陣形被打亂的混戰",
+      "time": {
+        "label": "1894-09-17 14:30",
+        "start": "1894-09-17T14:30",
+        "precision": "hour",
+        "confidence": 0.75
+      },
+      "description": "兩隊交錯，北洋陣形被打亂進入混戰；松島等集火致遠，致遠多處中彈受創。",
+      "actor_ids": [
+        "ship_matsushima",
+        "ship_zhiyuan",
+        "ship_jingyuan"
+      ],
+      "place_ids": [
+        "place_melee"
+      ],
+      "precision": "inferred",
+      "confidence": 0.65,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    },
+    {
+      "id": "evt_zhiyuan_charge",
+      "type": "attack",
+      "title": "致遠衝撞與沉沒",
+      "time": {
+        "label": "1894-09-17 15:30",
+        "start": "1894-09-17T15:30",
+        "precision": "hour",
+        "confidence": 0.8
+      },
+      "description": "致遠管帶鄧世昌在負傷彈盡下試圖衝撞吉野，中途中彈沉沒；經遠亦於其後被擊沉。",
+      "actor_ids": [
+        "ship_zhiyuan",
+        "ship_yoshino",
+        "ship_jingyuan"
+      ],
+      "place_ids": [
+        "place_right_wing"
+      ],
+      "precision": "approximate",
+      "confidence": 0.8,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    },
+    {
+      "id": "evt_withdraw",
+      "type": "retreat",
+      "title": "日艦撤離，北洋返航",
+      "time": {
+        "label": "1894-09-17 17:30",
+        "start": "1894-09-17T17:30",
+        "precision": "hour",
+        "confidence": 0.85
+      },
+      "description": "日艦恐夜間遭魚雷艇襲擊且彈藥將盡，主動停止追擊向外海撤退；北洋殘存艦隊集結返航威海衛。",
+      "actor_ids": [
+        "ship_matsushima",
+        "ship_dingyuan"
+      ],
+      "place_ids": [
+        "place_dadonggou"
+      ],
+      "precision": "approximate",
+      "confidence": 0.85,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    }
+  ],
+  "movements": [
+    {
+      "id": "mov_yoshino_flank",
+      "event_id": "evt_flying_flank",
+      "actor_id": "ship_yoshino",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.48,
+            39.3
+          ],
+          [
+            123.53,
+            39.33
+          ],
+          [
+            123.572,
+            39.342
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_naniwa_flank",
+      "event_id": "evt_flying_flank",
+      "actor_id": "ship_naniwa",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.49,
+            39.291
+          ],
+          [
+            123.54,
+            39.32
+          ],
+          [
+            123.56,
+            39.333
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_matsushima_cross",
+      "event_id": "evt_melee",
+      "actor_id": "ship_matsushima",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.5,
+            39.282
+          ],
+          [
+            123.57,
+            39.31
+          ],
+          [
+            123.612,
+            39.33
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_zhiyuan_charge",
+      "event_id": "evt_zhiyuan_charge",
+      "actor_id": "ship_zhiyuan",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.585,
+            39.341
+          ],
+          [
+            123.578,
+            39.343
+          ],
+          [
+            123.572,
+            39.342
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.55
+    },
+    {
+      "id": "mov_qing_retreat",
+      "event_id": "evt_withdraw",
+      "actor_id": "ship_dingyuan",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.62,
+            39.362
+          ],
+          [
+            123.4,
+            39.2
+          ],
+          [
+            123.0,
+            38.6
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.6
+    },
+    {
+      "id": "mov_japan_withdraw",
+      "event_id": "evt_withdraw",
+      "actor_id": "ship_matsushima",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.612,
+            39.33
+          ],
+          [
+            123.8,
+            39.18
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.6
+    }
+  ],
+  "outcome": {
+    "summary": "日本聯合艦隊取得實質勝利，控制黃海制海權；北洋水師損失致遠、經遠、超勇、揚威等艦，退守威海衛。",
+    "winner_side_ids": [
+      "side_japan"
+    ],
+    "casualties": [
+      {
+        "side_id": "side_qing",
+        "label": "沉沒多艘，陣亡約850餘人",
+        "min": 850,
+        "max": 1000,
+        "confidence": 0.85
+      },
+      {
+        "side_id": "side_japan",
+        "label": "多艦受創無沉沒，傷亡約300人",
+        "min": 290,
+        "max": 320,
+        "confidence": 0.85
+      }
+    ],
+    "confidence": 0.9,
+    "source_ids": [
+      "src_zhwiki_yalu"
+    ]
+  },
+  "sources": [
+    {
+      "id": "src_zhwiki_yalu",
+      "title": "黃海海戰 - 維基百科",
+      "url": "https://zh.wikipedia.org/wiki/黃海海戰_(1894年)",
+      "retrieved_at": "2026-06-22",
+      "license": "CC BY-SA 4.0"
+    }
+  ],
+  "animation_hints": {
+    "map": {
+      "initial_center": [
+        123.6,
+        39.33
+      ],
+      "initial_zoom": 10,
+      "bounds_padding": 0.04
+    },
+    "style": {
+      "side_colors": {
+        "side_qing": "#2f6fb5",
+        "side_japan": "#c0392b"
+      },
+      "actor_icons": {
+        "ship_dingyuan": "🚢",
+        "ship_zhenyuan": "🚢",
+        "ship_jingyuan": "🚢",
+        "ship_zhiyuan": "🚢",
+        "ship_chaoyong": "🚢",
+        "ship_yangwei": "🚢",
+        "ship_matsushima": "🚢",
+        "ship_yoshino": "🚢",
+        "ship_naniwa": "🚢",
+        "ship_hiei": "🚢"
+      },
+      "event_icons": {
+        "bombardment": "burst",
+        "attack": "burst",
+        "retreat": "arrow-down",
+        "other": "dot"
+      },
+      "movement_line_width": 3
+    },
+    "timeline": {
+      "default_event_duration_ms": 2000,
+      "ordered_event_ids": [
+        "evt_encounter",
+        "evt_open_fire",
+        "evt_flying_flank",
+        "evt_melee",
+        "evt_zhiyuan_charge",
+        "evt_withdraw"
+      ]
+    },
+    "camera": [
+      {
+        "event_id": "evt_flying_flank",
+        "center": [
+          123.57,
+          39.34
+        ],
+        "zoom": 12
+      },
+      {
+        "event_id": "evt_zhiyuan_charge",
+        "center": [
+          123.575,
+          39.343
+        ],
+        "zoom": 13
+      }
+    ]
+  },
+  "engagements": [
+    {
+      "id": "eng_dingyuan_open",
+      "event_id": "evt_open_fire",
+      "attacker_actor_id": "ship_dingyuan",
+      "target_actor_id": "ship_matsushima",
+      "type": "bombardment",
+      "confidence": 0.7,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ],
+      "result": "hit",
+      "result_actor_id": "ship_matsushima"
+    },
+    {
+      "id": "eng_yoshino_chaoyong",
+      "event_id": "evt_flying_flank",
+      "attacker_actor_id": "ship_yoshino",
+      "target_actor_id": "ship_chaoyong",
+      "type": "fire",
+      "confidence": 0.8,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ],
+      "result": "sunk",
+      "result_actor_id": "ship_chaoyong"
+    },
+    {
+      "id": "eng_naniwa_yangwei",
+      "event_id": "evt_flying_flank",
+      "attacker_actor_id": "ship_naniwa",
+      "target_actor_id": "ship_yangwei",
+      "type": "fire",
+      "confidence": 0.75,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ],
+      "result": "sunk",
+      "result_actor_id": "ship_yangwei"
+    },
+    {
+      "id": "eng_matsushima_zhiyuan",
+      "event_id": "evt_melee",
+      "attacker_actor_id": "ship_matsushima",
+      "target_actor_id": "ship_zhiyuan",
+      "type": "bombardment",
+      "confidence": 0.7,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ],
+      "result": "damaged",
+      "result_actor_id": "ship_zhiyuan"
+    },
+    {
+      "id": "eng_zhiyuan_ram",
+      "event_id": "evt_zhiyuan_charge",
+      "attacker_actor_id": "ship_zhiyuan",
+      "target_actor_id": "ship_yoshino",
+      "type": "ram",
+      "confidence": 0.6,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ],
+      "result": "sunk",
+      "result_actor_id": "ship_zhiyuan"
+    },
+    {
+      "id": "eng_jingyuan_sunk",
+      "event_id": "evt_zhiyuan_charge",
+      "attacker_actor_id": "ship_yoshino",
+      "target_actor_id": "ship_jingyuan",
+      "type": "fire",
+      "confidence": 0.7,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ],
+      "result": "sunk",
+      "result_actor_id": "ship_jingyuan"
+    }
+  ]
+}

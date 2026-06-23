@@ -297,6 +297,19 @@ dd {
   transition: width 320ms ease;
 }
 
+.engagements {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.engagement-row {
+  padding: 8px 10px;
+  background: var(--panel);
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+}
+
 .timeline {
   display: grid;
   gap: 8px;
@@ -452,6 +465,58 @@ dd {
   transition:
     transform 700ms ease,
     opacity 300ms ease;
+}
+
+.unit.is-sunk {
+  opacity: 0.3;
+}
+
+.unit.is-hit .unit-disc {
+  animation: hit-pulse 0.6s ease-out infinite;
+}
+
+@keyframes hit-pulse {
+  0%,
+  100% {
+    stroke: #fffaf0;
+  }
+  50% {
+    stroke: #ffd23f;
+    stroke-width: 5;
+  }
+}
+
+.engagement-line {
+  opacity: 0;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transition: opacity 200ms ease;
+}
+
+.engagement-line.is-active {
+  opacity: 0.9;
+}
+
+.engagement-line.type-fire,
+.engagement-line.type-bombardment {
+  stroke-dasharray: 2 7;
+  animation: tracer 0.7s linear infinite;
+}
+
+.engagement-line.type-ram,
+.engagement-line.type-torpedo,
+.engagement-line.type-charge {
+  stroke-width: 4;
+}
+
+@keyframes tracer {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+.battle-overlay.is-moving .engagement-line {
+  transition: none !important;
 }
 
 .event-disc {
