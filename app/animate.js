@@ -146,8 +146,8 @@ export function validateBattle(battle) {
     if (!(key in battle)) errors.push(`missing required property "${key}"`);
   }
 
-  if ("schema_version" in battle && battle.schema_version !== "0.1.0") {
-    errors.push(`schema_version must be "0.1.0", got ${JSON.stringify(battle.schema_version)}`);
+  if ("schema_version" in battle && !["0.1.0", "0.2.0"].includes(battle.schema_version)) {
+    errors.push(`schema_version must be "0.1.0" or "0.2.0", got ${JSON.stringify(battle.schema_version)}`);
   }
 
   const idSet = (key) => new Set((battle[key] || []).map((item) => item && item.id));
@@ -168,7 +168,17 @@ export function validateBattle(battle) {
 
   (battle.actors || []).forEach((actor, i) => {
     if ("side_id" in actor) check(actor.side_id, sideIds, `actors[${i}].side_id`);
+    if ("parent_id" in actor) check(actor.parent_id, actorIds, `actors[${i}].parent_id`);
     (actor.commander_ids || []).forEach((id) => check(id, commanderIds, `actors[${i}].commander_ids`));
+  });
+
+  (battle.engagements || []).forEach((eng, i) => {
+    if ("event_id" in eng) check(eng.event_id, eventIds, `engagements[${i}].event_id`);
+    if ("attacker_actor_id" in eng) check(eng.attacker_actor_id, actorIds, `engagements[${i}].attacker_actor_id`);
+    if ("target_actor_id" in eng) check(eng.target_actor_id, actorIds, `engagements[${i}].target_actor_id`);
+    if ("result_actor_id" in eng) check(eng.result_actor_id, actorIds, `engagements[${i}].result_actor_id`);
+    if ("at_place_id" in eng) check(eng.at_place_id, placeIds, `engagements[${i}].at_place_id`);
+    (eng.source_ids || []).forEach((id) => check(id, sourceIds, `engagements[${i}].source_ids`));
   });
 
   (battle.historical_events || []).forEach((event, i) => {

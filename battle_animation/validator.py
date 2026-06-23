@@ -153,6 +153,7 @@ def _validate_references(document: Any, errors: list[ValidationError]) -> None:
 
     for index, actor in enumerate(document.get("actors", [])):
         _check_ref(actor, "side_id", side_ids, f"$.actors[{index}]", errors)
+        _check_optional_ref(actor, "parent_id", actor_ids, f"$.actors[{index}]", errors)
         for commander_id in actor.get("commander_ids", []):
             if commander_id not in commander_ids:
                 errors.append(ValidationError(f"$.actors[{index}].commander_ids", f"unknown commander id {commander_id!r}"))
@@ -176,6 +177,17 @@ def _validate_references(document: Any, errors: list[ValidationError]) -> None:
         _check_ref(movement, "actor_id", actor_ids, f"$.movements[{index}]", errors)
         _check_optional_ref(movement, "from_place_id", place_ids, f"$.movements[{index}]", errors)
         _check_optional_ref(movement, "to_place_id", place_ids, f"$.movements[{index}]", errors)
+
+    for index, engagement in enumerate(document.get("engagements", [])):
+        path = f"$.engagements[{index}]"
+        _check_ref(engagement, "event_id", event_ids, path, errors)
+        _check_ref(engagement, "attacker_actor_id", actor_ids, path, errors)
+        _check_ref(engagement, "target_actor_id", actor_ids, path, errors)
+        _check_optional_ref(engagement, "result_actor_id", actor_ids, path, errors)
+        _check_optional_ref(engagement, "at_place_id", place_ids, path, errors)
+        for source_id in engagement.get("source_ids", []):
+            if source_id not in source_ids:
+                errors.append(ValidationError(f"{path}.source_ids", f"unknown source id {source_id!r}"))
 
     outcome = document.get("outcome", {})
     if isinstance(outcome, dict):

@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "0.1.0"
+      "enum": ["0.1.0", "0.2.0"]
     },
     "metadata": {
       "$ref": "#/$defs/Metadata"
@@ -80,6 +80,12 @@
     },
     "animation_hints": {
       "$ref": "#/$defs/AnimationHints"
+    },
+    "engagements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Engagement"
+      }
     }
   },
   "$defs": {
@@ -276,7 +282,10 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["army", "corps", "division", "brigade", "regiment", "fleet", "unit", "person", "other"]
+          "enum": ["army", "corps", "division", "brigade", "regiment", "fleet", "ship", "unit", "person", "other"]
+        },
+        "parent_id": {
+          "$ref": "#/$defs/Identifier"
         },
         "commander_ids": {
           "type": "array",
@@ -499,6 +508,51 @@
         },
         "confidence": {
           "$ref": "#/$defs/Confidence"
+        }
+      }
+    },
+    "Engagement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "event_id", "attacker_actor_id", "target_actor_id", "type", "confidence"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "event_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "attacker_actor_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "target_actor_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["fire", "bombardment", "ram", "torpedo", "charge", "melee", "other"]
+        },
+        "result": {
+          "type": "string",
+          "enum": ["hit", "miss", "damaged", "disabled", "sunk", "repelled", "captured", "none"]
+        },
+        "result_actor_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "at_place_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "time": {
+          "$ref": "#/$defs/DateValue"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
         }
       }
     },

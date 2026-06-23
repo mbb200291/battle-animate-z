@@ -82,8 +82,9 @@ class Actor(TypedDict):
     id: Identifier
     name: str
     side_id: Identifier
-    kind: Literal["army", "corps", "division", "brigade", "regiment", "fleet", "unit", "person", "other"]
+    kind: Literal["army", "corps", "division", "brigade", "regiment", "fleet", "ship", "unit", "person", "other"]
     confidence: Confidence
+    parent_id: NotRequired[Identifier]
     commander_ids: NotRequired[list[Identifier]]
     strength: NotRequired[Strength]
 
@@ -148,6 +149,24 @@ class Casualty(TypedDict):
     max: NotRequired[float]
 
 
+EngagementType = Literal["fire", "bombardment", "ram", "torpedo", "charge", "melee", "other"]
+EngagementResult = Literal["hit", "miss", "damaged", "disabled", "sunk", "repelled", "captured", "none"]
+
+
+class Engagement(TypedDict):
+    id: Identifier
+    event_id: Identifier
+    attacker_actor_id: Identifier
+    target_actor_id: Identifier
+    type: EngagementType
+    confidence: Confidence
+    result: NotRequired[EngagementResult]
+    result_actor_id: NotRequired[Identifier]
+    at_place_id: NotRequired[Identifier]
+    time: NotRequired[DateValue]
+    source_ids: NotRequired[list[Identifier]]
+
+
 class Outcome(TypedDict):
     summary: str
     winner_side_ids: list[Identifier]
@@ -197,7 +216,7 @@ class AnimationHints(TypedDict):
 
 
 class BattleAnimationDocument(TypedDict):
-    schema_version: Literal["0.1.0"]
+    schema_version: Literal["0.1.0", "0.2.0"]
     metadata: Metadata
     battle: Battle
     sides: list[Side]
@@ -209,3 +228,4 @@ class BattleAnimationDocument(TypedDict):
     outcome: Outcome
     sources: list[Source]
     animation_hints: AnimationHints
+    engagements: NotRequired[list[Engagement]]
