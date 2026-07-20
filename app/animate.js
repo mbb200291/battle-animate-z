@@ -74,6 +74,37 @@ export async function loadBattle(url) {
   return response.json();
 }
 
+export function wirePlaybackControls(controller, documentRef = document) {
+  const $ = (id) => documentRef.getElementById(id);
+  const play = $("play-button");
+  if (play) play.onclick = () => controller.toggle();
+  const reset = $("reset-button");
+  if (reset) reset.onclick = () => {
+    controller.pause();
+    controller.seek(0);
+  };
+  const previous = $("prev-button");
+  if (previous) previous.onclick = () => {
+    controller.pause();
+    controller.prev();
+  };
+  const next = $("next-button");
+  if (next) next.onclick = () => {
+    controller.pause();
+    controller.next();
+  };
+  const scrubber = $("event-scrubber");
+  if (scrubber) scrubber.oninput = (event) => {
+    controller.pause();
+    controller.seek(Number(event.target.value));
+  };
+  for (const button of documentRef.querySelectorAll("#speed-controls [data-speed]")) {
+    button.onclick = () => controller.setSpeed(Number(button.dataset.speed));
+  }
+  const follow = $("follow-button");
+  if (follow) follow.onclick = () => controller.setFollowEnabled(!controller.followEnabled);
+}
+
 // Browser-side validation mirroring battle_animation/validator.py: required
 // top-level keys, schema version, the event-type enum, and every cross-reference.
 export function validateBattle(battle) {
@@ -174,6 +205,7 @@ export function renderBattle(battle, documentRef = document) {
   const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
   const places = new Map(battle.places.map((place) => [place.id, place]));
   const compiled = compileTimeline(battle);
+  const displayOffsetMinutes = battleDisplayOffsetMinutes(battle);
 
   const style = battle.animation_hints?.style || {};
   const sideColors = style.side_colors || {};
@@ -469,7 +501,7 @@ export function renderBattle(battle, documentRef = document) {
     if (historicalTime) {
       historicalTime.textContent = sampled.synthetic
         ? `Animation time ${formatElapsedTime(presentationMs)}`
-        : formatHistoricalTime(sampled.historicalMs);
+        : formatHistoricalTime(sampled.historicalMs, displayOffsetMinutes);
     }
     const notice = $("compression-notice");
     if (notice) {
@@ -508,10 +540,11 @@ export function renderBattle(battle, documentRef = document) {
     return [...actorIds].map((actorId) => sampled.actorPositions.get(actorId)).filter(Boolean);
   }
 
-  function maybeFollow(owner, sampled, animationTime) {
+  function maybeFollow(owner, sampled) {
     if (!owner.followEnabled || owner._programmaticMove) return;
-    if (animationTime >= owner._lastFollowCheck && animationTime - owner._lastFollowCheck < 500) return;
-    owner._lastFollowCheck = animationTime;
+    const wallTime = nowMs();
+    if (wallTime - owner._lastFollowCheck < 500) return;
+    owner._lastFollowCheck = wallTime;
     const points = activeGeographicPoints(sampled);
     if (!points.length) return;
     const size = map.getSize ? map.getSize() : { x: mapEl.clientWidth, y: mapEl.clientHeight };
@@ -600,7 +633,7 @@ export function renderBattle(battle, documentRef = document) {
       displaySelectedEvent(this, selectedEventWindow(sampled));
       const selected = selectedEventWindow(sampled);
       pruneEventCards(selected?.id);
-      maybeFollow(this, sampled, bounded);
+      maybeFollow(this, sampled);
       return sampled;
     },
 
@@ -753,8 +786,30 @@ function formatElapsedTime(milliseconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function formatHistoricalTime(milliseconds) {
-  const iso = new Date(milliseconds).toISOString();
+function battleDisplayOffsetMinutes(battle) {
+  const ranges = [
+    battle?.battle?.date,
+    ...(battle?.historical_events || []).map((event) => event.time),
+    ...(battle?.movements || []).flatMap((movement) => [movement.time, movement.waypoint_times]),
+    ...(battle?.engagements || []).map((engagement) => engagement.time),
+  ];
+  const values = ranges.flatMap((range) => {
+    if (Array.isArray(range)) return range;
+    return range && typeof range === "object" ? [range.start, range.end] : [];
+  });
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const match = /(Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+    if (!match) continue;
+    if (match[1] === "Z") return 0;
+    const minutes = Number(match[3]) * 60 + Number(match[4]);
+    return match[2] === "+" ? minutes : -minutes;
+  }
+  return 0;
+}
+
+function formatHistoricalTime(milliseconds, displayOffsetMinutes) {
+  const iso = new Date(milliseconds + displayOffsetMinutes * 60000).toISOString();
   return `${iso.slice(0, 10)} ${iso.slice(11, 19)}`;
 }
 

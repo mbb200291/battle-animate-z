@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { renderBattle } from "../app/animate.js";
+import { renderBattle, wirePlaybackControls } from "../app/animate.js";
 
 class FakeClassList {
   constructor(owner) {
@@ -104,6 +104,7 @@ class FakeElement {
 
   dispatch(type, event = {}) {
     for (const listener of this.listeners?.get(type) || []) listener({ target: this, ...event });
+    this[`on${type}`]?.({ target: this, ...event });
   }
 
   scrollIntoView() {}
@@ -124,6 +125,7 @@ class FakeDocument {
       "event-confidence", "confidence-bar", "engagements", "event-scrubber",
       "event-progress", "historical-time", "compression-notice", "play-button",
       "follow-button", "event-card-stack", "speed-controls",
+      "reset-button", "prev-button", "next-button",
     ]) {
       this.elements.set(id, new FakeElement(id === "battle-map" ? "div" : "span", id));
     }
@@ -387,6 +389,70 @@ test("continuous scrubber and historical clock follow every sampled seek", () =>
   assert.equal(document.getElementById("event-progress").textContent, "2 / 2");
 });
 
+test("historical clock preserves positive and negative document offsets", () => {
+  for (const offset of ["+02:00", "-05:00"]) {
+    const battle = battleFixture();
+    const replaceOffset = (value) => typeof value === "string" && value.endsWith("Z")
+      ? `${value.slice(0, -1)}${offset}` : value;
+    for (const event of battle.historical_events) {
+      event.time.start = replaceOffset(event.time.start);
+      event.time.end = replaceOffset(event.time.end);
+    }
+    for (const movement of battle.movements) {
+      movement.time.start = replaceOffset(movement.time.start);
+      movement.time.end = replaceOffset(movement.time.end);
+    }
+    for (const engagement of battle.engagements) {
+      engagement.time.start = replaceOffset(engagement.time.start);
+      engagement.time.end = replaceOffset(engagement.time.end);
+    }
+    const clock = new FrameClock();
+    const document = new FakeDocument(clock.window);
+    installLeaflet();
+    const controller = renderBattle(battle, document);
+    controller.seek(1250);
+    assert.equal(document.getElementById("historical-time").textContent, "2020-01-01 00:00:01");
+  }
+});
+
+test("wirePlaybackControls routes continuous controls once when rewired", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const calls = [];
+  const controller = {
+    followEnabled: true,
+    toggle: () => calls.push(["toggle"]),
+    pause: () => calls.push(["pause"]),
+    seek: (value) => calls.push(["seek", value]),
+    prev: () => calls.push(["prev"]),
+    next: () => calls.push(["next"]),
+    setSpeed: (value) => calls.push(["speed", value]),
+    setFollowEnabled(value) { calls.push(["follow", value]); this.followEnabled = value; },
+  };
+  wirePlaybackControls(controller, document);
+  wirePlaybackControls(controller, document);
+
+  document.getElementById("play-button").dispatch("click");
+  document.getElementById("reset-button").dispatch("click");
+  document.getElementById("prev-button").dispatch("click");
+  document.getElementById("next-button").dispatch("click");
+  const scrubber = document.getElementById("event-scrubber");
+  scrubber.value = "375.5";
+  scrubber.dispatch("input");
+  document.querySelectorAll("#speed-controls [data-speed]")[2].dispatch("click");
+  document.getElementById("follow-button").dispatch("click");
+
+  assert.deepEqual(calls, [
+    ["toggle"],
+    ["pause"], ["seek", 0],
+    ["pause"], ["prev"],
+    ["pause"], ["next"],
+    ["pause"], ["seek", 375.5],
+    ["speed", 2],
+    ["follow", false],
+  ]);
+});
+
 test("setSpeed updates exactly one selected control without jumping time", () => {
   const { controller, document } = setup();
   controller.seek(400);
@@ -398,22 +464,62 @@ test("setSpeed updates exactly one selected control without jumping time", () =>
   assert.deepEqual(buttons.map((button) => button.getAttribute("aria-pressed")), ["false", "false", "true", "false"]);
 });
 
-test("event cards appear once per forward passage, pause on interaction, and can recur after rewinding", () => {
-  const { controller, document } = setup();
+test("event cards retain for three seconds, expire non-current cards, and recur without frame duplicates", () => {
+  const { clock, controller, document } = setup();
   const stack = document.getElementById("event-card-stack");
   assert.equal(stack.children.length, 1);
 
   controller.seek(200);
   assert.equal(stack.children.length, 1);
+  clock.now = 100;
   controller.seek(1200);
   assert.equal(stack.children.length, 2);
   controller.play();
   stack.children.at(-1).dispatch("pointerenter");
   assert.equal(controller.isPlaying, false);
 
+  clock.now = 2999;
+  controller.seek(1200);
+  assert.equal(stack.children.length, 2);
+  clock.now = 3000;
+  controller.seek(1200);
+  assert.equal(stack.children.length, 1);
+  assert.equal(stack.children[0].dataset.eventId, "finish");
+  clock.now = 4000;
+  controller.seek(1200);
+  assert.equal(stack.children.length, 1);
+  assert.equal(stack.children[0].dataset.eventId, "finish");
+
   controller.seek(200);
-  assert.equal(stack.children.length, 3);
+  assert.equal(stack.children.length, 1);
+  controller.seek(200);
+  assert.equal(stack.children.length, 1);
   assert.equal(stack.children.at(-1).children.some((child) => child.textContent === "Opening"), true);
+});
+
+test("event card stack caps at three and keeps the current card", () => {
+  const battle = battleFixture();
+  const timed = (label, start, end) => ({ label, start, end, precision: "exact", confidence: 1 });
+  battle.historical_events.push(
+    { id: "third", title: "Third", type: "defend", time: timed("third", "2020-01-01T00:00:02Z", "2020-01-01T00:00:03Z"), actor_ids: ["alpha"], target_actor_ids: [], place_ids: ["east"], source_ids: [], precision: "exact", confidence: 1 },
+    { id: "fourth", title: "Fourth", type: "capture", time: timed("fourth", "2020-01-01T00:00:03Z", "2020-01-01T00:00:04Z"), actor_ids: ["alpha"], target_actor_ids: [], place_ids: ["east"], source_ids: [], precision: "exact", confidence: 1 },
+  );
+  battle.animation_hints.timeline.ordered_event_ids.push("third", "fourth");
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const stack = document.getElementById("event-card-stack");
+  clock.now = 100;
+  controller.seek(1200);
+  clock.now = 200;
+  controller.seek(2200);
+  clock.now = 300;
+  controller.seek(3200);
+
+  assert.equal(stack.children.length, 3);
+  assert.deepEqual(stack.children.map((card) => card.dataset.eventId), ["finish", "third", "fourth"]);
+  assert.equal(stack.children.at(-1).dataset.eventId, "fourth");
 });
 
 test("compression notice is deterministic and synthetic clocks never fabricate epoch dates", () => {
@@ -443,7 +549,7 @@ test("compression notice is deterministic and synthetic clocks never fabricate e
   assert.equal(syntheticDocument.getElementById("historical-time").textContent, "Animation time 00:01");
 });
 
-test("follow flies only outside its safe zone and manual map interaction suspends it", () => {
+test("follow uses wall-clock throttling and manual map interaction suspends it", () => {
   const battle = battleFixture();
   battle.movements[0].path.coordinates = [[0, 0], [8, 0]];
   const clock = new FrameClock();
@@ -452,11 +558,22 @@ test("follow flies only outside its safe zone and manual map interaction suspend
   const controller = renderBattle(battle, document);
   const map = maps[0];
 
+  clock.now = 500;
   controller.seek(900);
   assert.equal(map.flyCalls.length, 1);
   assert.equal(map.flyCalls[0].bounds.padRatio, 0.35);
   assert.ok(map.flyCalls[0].options.duration >= 0.8 && map.flyCalls[0].options.duration <= 2.4);
   assert.equal(controller._programmaticMove, true);
+  map.fire("moveend");
+  controller.seek(1000);
+  controller.seek(600);
+  assert.equal(map.flyCalls.length, 1);
+  clock.now = 999;
+  controller.seek(900);
+  assert.equal(map.flyCalls.length, 1);
+  clock.now = 1000;
+  controller.seek(900);
+  assert.equal(map.flyCalls.length, 2);
   map.fire("moveend");
   assert.equal(controller._programmaticMove, false);
   map.fire("dragstart");

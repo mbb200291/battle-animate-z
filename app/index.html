@@ -92,7 +92,7 @@
     </dialog>
 
     <script type="module">
-      import { loadBattle, validateBattle, renderBattle } from "./animate.js";
+      import { loadBattle, validateBattle, renderBattle, wirePlaybackControls } from "./animate.js";
 
       const $ = (id) => document.getElementById(id);
       let controller;
@@ -114,30 +114,6 @@
         box.hidden = false;
       }
 
-      function wireControls() {
-        $("play-button").onclick = () => controller.toggle();
-        $("reset-button").onclick = () => {
-          controller.pause();
-          controller.seek(0);
-        };
-        $("prev-button").onclick = () => {
-          controller.pause();
-          controller.prev();
-        };
-        $("next-button").onclick = () => {
-          controller.pause();
-          controller.next();
-        };
-        $("event-scrubber").oninput = (event) => {
-          controller.pause();
-          controller.seek(Number(event.target.value));
-        };
-        document.querySelectorAll("#speed-controls [data-speed]").forEach((button) => {
-          button.onclick = () => controller.setSpeed(Number(button.dataset.speed));
-        });
-        $("follow-button").onclick = () => controller.setFollowEnabled(!controller.followEnabled);
-      }
-
       function setBattle(battle) {
         const errors = validateBattle(battle);
         const warnings = $("validation-warnings");
@@ -146,7 +122,7 @@
         showErrors(errors);
         if (errors.length) return;
         controller = renderBattle(battle, document);
-        wireControls();
+        wirePlaybackControls(controller, document);
       }
 
       function loadFromText(text) {

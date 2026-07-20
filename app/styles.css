@@ -284,11 +284,16 @@ button.ghost,
   color: #7a261d;
 }
 
-.warning-banner,
+.warning-banner {
+  color: #72531c;
+  background: #fbf1d7;
+  border-left: 3px solid #b9862d;
+}
+
 .compression-notice {
-  color: #62583e;
-  background: #eee8d8;
-  border-left: 3px solid #8c8166;
+  color: #405263;
+  background: rgba(74, 94, 112, 0.1);
+  border-left: 3px solid #788b9c;
 }
 
 .error-banner ul {
