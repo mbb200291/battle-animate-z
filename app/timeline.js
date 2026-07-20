@@ -330,51 +330,69 @@ function startingPositions(battle, tracks) {
   return positions;
 }
 
-function mergeActiveIntervals(windows) {
-  const sorted = windows
-    .filter(({ startMs, endMs }) => Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs)
-    .map(({ startMs, endMs }) => ({ startMs, endMs }))
-    .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
-  const merged = [];
-  for (const interval of sorted) {
-    const previous = merged.at(-1);
-    if (!previous || interval.startMs > previous.endMs) merged.push({ ...interval });
-    else previous.endMs = Math.max(previous.endMs, interval.endMs);
+function classifyTimeIntervals(windows, historicalStartMs, historicalEndMs) {
+  const validWindows = windows.filter(({ startMs, endMs }) =>
+    Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs);
+  const boundaries = new Set([historicalStartMs, historicalEndMs]);
+  for (const window of validWindows) {
+    if (window.startMs > historicalStartMs && window.startMs < historicalEndMs) boundaries.add(window.startMs);
+    if (window.endMs > historicalStartMs && window.endMs < historicalEndMs) boundaries.add(window.endMs);
   }
-  return merged;
+  const ordered = [...boundaries].sort((left, right) => left - right);
+  const intervals = [];
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const startMs = ordered[index];
+    const endMs = ordered[index + 1];
+    if (endMs <= startMs) continue;
+    const covering = validWindows.filter((window) => window.startMs < endMs && window.endMs > startMs);
+    const precise = covering.some((window) => !window.synthetic);
+    intervals.push({
+      startMs,
+      endMs,
+      active: covering.length > 0,
+      synthetic: !precise && covering.some((window) => window.synthetic),
+    });
+  }
+  return intervals;
 }
 
-function buildTimeWarp(historicalStartMs, historicalEndMs, activeIntervals, scale, thresholdMs, compressedDurationMs) {
+function buildTimeWarp(
+  historicalStartMs,
+  historicalEndMs,
+  classifiedIntervals,
+  scale,
+  thresholdMs,
+  compressedDurationMs,
+  fallbackPresentationDurationMs,
+) {
   const segments = [];
   const compressedGaps = [];
-  let historicalCursor = historicalStartMs;
   let presentationCursor = 0;
-
-  const append = (historicalSegmentEnd, active) => {
-    if (historicalSegmentEnd <= historicalCursor) return;
-    const historicalDurationMs = historicalSegmentEnd - historicalCursor;
+  for (const interval of classifiedIntervals) {
+    const historicalDurationMs = interval.endMs - interval.startMs;
+    if (historicalDurationMs <= 0) continue;
+    const { active, synthetic } = interval;
     const compressed = !active && historicalDurationMs > thresholdMs;
-    const presentationDurationMs = compressed ? compressedDurationMs : historicalDurationMs / scale;
+    const presentationDurationMs = synthetic
+      ? fallbackPresentationDurationMs
+      : compressed
+        ? compressedDurationMs
+        : historicalDurationMs / scale;
     const segment = {
-      historicalStartMs: historicalCursor,
-      historicalEndMs: historicalSegmentEnd,
+      historicalStartMs: interval.startMs,
+      historicalEndMs: interval.endMs,
       presentationStartMs: presentationCursor,
       presentationEndMs: presentationCursor + presentationDurationMs,
       historicalDurationMs,
       presentationDurationMs,
+      active,
+      synthetic,
       compressed,
     };
     segments.push(segment);
     if (compressed) compressedGaps.push(segment);
-    historicalCursor = historicalSegmentEnd;
     presentationCursor = segment.presentationEndMs;
-  };
-
-  for (const interval of activeIntervals) {
-    append(Math.max(historicalCursor, interval.startMs), false);
-    append(Math.min(historicalEndMs, interval.endMs), true);
   }
-  append(historicalEndMs, false);
   return { segments, compressedGaps, presentationDurationMs: presentationCursor };
 }
 
@@ -394,14 +412,15 @@ export function compileTimeline(battle = {}) {
   const ends = allWindows.map(({ endMs }) => endMs).filter(Number.isFinite);
   const historicalStartMs = starts.length ? Math.min(...starts) : 0;
   const historicalEndMs = ends.length ? Math.max(...ends) : fallbackDurationMs;
-  const activeIntervals = mergeActiveIntervals(allWindows);
+  const classifiedIntervals = classifyTimeIntervals(allWindows, historicalStartMs, historicalEndMs);
   const timeWarp = buildTimeWarp(
     historicalStartMs,
     historicalEndMs,
-    activeIntervals,
+    classifiedIntervals,
     scale,
     thresholdMs,
     compressedDurationMs,
+    fallbackPresentationDurationMs,
   );
   const compiled = {
     tracks,
@@ -423,12 +442,14 @@ export function compileTimeline(battle = {}) {
 
 function segmentForHistorical(timeline, historicalMs) {
   const segments = array(timeline?.timeWarp);
-  return segments.find((segment) => historicalMs <= segment.historicalEndMs) ?? segments.at(-1);
+  return segments.find((segment) =>
+    historicalMs >= segment.historicalStartMs && historicalMs < segment.historicalEndMs) ?? segments.at(-1);
 }
 
 function segmentForPresentation(timeline, presentationMs) {
   const segments = array(timeline?.timeWarp);
-  return segments.find((segment) => presentationMs <= segment.presentationEndMs) ?? segments.at(-1);
+  return segments.find((segment) =>
+    presentationMs >= segment.presentationStartMs && presentationMs < segment.presentationEndMs) ?? segments.at(-1);
 }
 
 export function toPresentationTime(timeline, historicalMs) {
@@ -551,10 +572,17 @@ export function sampleTimeline(timeline, presentationMs) {
   }
   const compressedGap = array(timeline?.compressedGaps).find((gap) =>
     presentationMs >= gap.presentationStartMs && presentationMs < gap.presentationEndMs) ?? null;
+  const sampleWindows = [
+    ...array(timeline?.eventWindows),
+    ...array(timeline?.engagementWindows),
+    ...[...tracksByActor.values()].flat(),
+  ];
+  const activeAtSample = sampleWindows.filter((window) =>
+    historicalMs >= window.startMs && historicalMs <= window.endMs);
+  const preciseActive = activeAtSample.some((window) => !window.synthetic);
+  const syntheticActive = activeAtSample.some((window) => window.synthetic);
   const synthetic = Boolean(timeline?.synthetic)
-    || array(timeline?.eventWindows).some((window) => window.synthetic && historicalMs >= window.startMs && historicalMs <= window.endMs)
-    || array(timeline?.engagementWindows).some((window) => window.synthetic && historicalMs >= window.startMs && historicalMs <= window.endMs)
-    || [...tracksByActor.values()].flat().some((track) => track.synthetic && historicalMs >= track.startMs && historicalMs <= track.endMs);
+    || (!preciseActive && (syntheticActive || Boolean(segmentForHistorical(timeline, historicalMs)?.synthetic)));
 
   return {
     historicalMs,

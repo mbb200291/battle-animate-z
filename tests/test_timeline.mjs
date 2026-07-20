@@ -234,6 +234,96 @@ test("bounded coarse year month and day ranges retain their historical anchors",
   }
 });
 
+test("standalone bounded coarse ranges use one bounded fallback presentation slot", () => {
+  for (const [precision, start, end] of [
+    ["year", "1815", "1817"],
+    ["month", "1815-06", "1815-08"],
+    ["day", "1815-06-18", "1815-06-20"],
+  ]) {
+    const timeline = compileTimeline(battle({
+      historical_events: [event(precision, undefined, undefined, {
+        time: { label: `${start}–${end}`, start, end, precision, confidence: 0.7 },
+      })],
+      animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+    }));
+    const midpoint = (parseBattleTime(start) + parseBattleTime(end)) / 2;
+
+    assert.equal(timeline.presentationDurationMs, 1_000, precision);
+    assert.equal(timeline.timeWarp.length, 1, precision);
+    assert.equal(timeline.timeWarp[0].synthetic, true, precision);
+    assert.equal(timeline.timeWarp[0].compressed, false, precision);
+    assert.ok(Math.abs(toHistoricalTime(timeline, toPresentationTime(timeline, midpoint)) - midpoint) < 0.001, precision);
+  }
+});
+
+test("precise windows override broad coarse playback while surrounding portions stay bounded", () => {
+  const broadStart = parseBattleTime("2020-01-01");
+  const preciseStart = parseBattleTime("2020-01-02T12:00:00Z");
+  const preciseEnd = parseBattleTime("2020-01-02T12:10:00Z");
+  const broadEnd = parseBattleTime("2020-01-03");
+  const preciseTime = { label: "precise", start: "2020-01-02T12:00:00Z", end: "2020-01-02T12:10:00Z", precision: "range", confidence: 0.9 };
+
+  for (const preciseKind of ["event", "movement", "engagement"]) {
+    const fixture = battle({
+      actors: [{ id: "a" }, { id: "b" }],
+      historical_events: [event("broad", undefined, undefined, {
+        time: { label: "three days", start: "2020-01-01", end: "2020-01-03", precision: "day", confidence: 0.7 },
+      })],
+      animation_hints: {
+        timeline: {
+          default_event_duration_ms: 1_000,
+          historical_seconds_per_playback_second: 60,
+          idle_compression_threshold_seconds: 900,
+          idle_compressed_duration_ms: 1_200,
+        },
+      },
+    });
+    if (preciseKind === "event") {
+      fixture.historical_events.push(event("precise", undefined, undefined, { time: preciseTime }));
+    } else if (preciseKind === "movement") {
+      fixture.movements.push(movement("precise", "a", "broad", [[0, 0], [1, 0]], undefined, undefined, { time: preciseTime }));
+    } else {
+      fixture.engagements.push({
+        id: "precise",
+        event_id: "broad",
+        attacker_actor_id: "a",
+        target_actor_id: "b",
+        time: preciseTime,
+      });
+    }
+
+    const timeline = compileTimeline(fixture);
+    assert.equal(timeline.presentationDurationMs, 12_000, preciseKind);
+    assert.deepEqual(
+      timeline.timeWarp.map(({ historicalStartMs, historicalEndMs, presentationDurationMs, synthetic, compressed }) => [
+        historicalStartMs,
+        historicalEndMs,
+        presentationDurationMs,
+        synthetic,
+        compressed,
+      ]),
+      [
+        [broadStart, preciseStart, 1_000, true, false],
+        [preciseStart, preciseEnd, 10_000, false, false],
+        [preciseEnd, broadEnd, 1_000, true, false],
+      ],
+      preciseKind,
+    );
+    assert.equal(timeline.compressedGaps.length, 0, preciseKind);
+    assert.equal(sampleTimeline(timeline, 500).synthetic, true, preciseKind);
+    assert.equal(sampleTimeline(timeline, toPresentationTime(timeline, preciseStart)).synthetic, false, `${preciseKind}: precise start`);
+    assert.equal(sampleTimeline(timeline, 6_000).synthetic, false, preciseKind);
+    assert.equal(sampleTimeline(timeline, toPresentationTime(timeline, preciseEnd)).synthetic, false, `${preciseKind}: precise end`);
+    assert.equal(sampleTimeline(timeline, 11_500).synthetic, true, preciseKind);
+    for (const historicalMs of [broadStart, preciseStart, (preciseStart + preciseEnd) / 2, preciseEnd, broadEnd]) {
+      assert.ok(
+        Math.abs(toHistoricalTime(timeline, toPresentationTime(timeline, historicalMs)) - historicalMs) < 0.001,
+        `${preciseKind}: ${historicalMs}`,
+      );
+    }
+  }
+});
+
 test("coarse untimed coarse sequences receive three full non-overlapping fallback slots", () => {
   const anchor = parseBattleTime("1815-06-18");
   const coarse = (id) => event(id, undefined, undefined, {
