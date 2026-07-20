@@ -69,15 +69,22 @@ function parsedRange(value) {
   };
 }
 
-function isCoarseDateValue(value) {
-  return Boolean(
+function classifiedRange(value) {
+  const range = parsedRange(value);
+  const coarse = Boolean(
     value
-    && typeof value === "object"
-    && COARSE_DATE_PRECISIONS.includes(value.precision)
-    && typeof value.start === "string"
-    && !value.start.includes("T")
-    && parseBattleTime(value.start) !== null,
+      && typeof value === "object"
+      && COARSE_DATE_PRECISIONS.includes(value.precision)
+      && typeof value.start === "string"
+      && !value.start.includes("T")
+      && (value.end === undefined || (typeof value.end === "string" && !value.end.includes("T")))
+      && range.startMs !== null,
   );
+  return {
+    ...range,
+    coarse,
+    bounded: range.startMs !== null && range.endMs !== null && range.endMs >= range.startMs,
+  };
 }
 
 function orderedEvents(battle) {
@@ -111,50 +118,45 @@ function completeRange(range, fallbackDurationMs) {
 function compileEventWindows(battle, fallbackDurationMs) {
   const events = orderedEvents(battle);
   const partial = events.map((item, sourceIndex) => {
-    const coarseDate = isCoarseDateValue(item?.time);
-    const range = coarseDate
-      ? { startMs: parseBattleTime(item.time.start), endMs: null }
-      : completeRange(parsedRange(item?.time), fallbackDurationMs);
-    return { id: item?.id, event: item, sourceIndex, ...range, synthetic: coarseDate };
+    const classified = classifiedRange(item?.time);
+    const range = classified.coarse
+      ? { startMs: classified.startMs, endMs: classified.bounded ? classified.endMs : null }
+      : completeRange(classified, fallbackDurationMs);
+    return {
+      id: item?.id,
+      event: item,
+      sourceIndex,
+      ...range,
+      synthetic: classified.coarse,
+      needsFallback: classified.coarse && !classified.bounded,
+    };
   });
-  if (partial.every(({ startMs }) => startMs === null)) {
-    let cursor = 0;
-    for (const window of partial) {
-      window.startMs = cursor;
-      window.endMs = cursor + fallbackDurationMs;
-      window.synthetic = true;
-      cursor = window.endMs;
-    }
-    return partial;
-  }
-  let previousWindow = null;
-  for (const window of partial) {
-    if (window.synthetic && window.startMs !== null) {
-      window.startMs = Math.max(window.startMs, previousWindow?.endMs ?? window.startMs);
-      window.endMs = window.startMs + fallbackDurationMs;
-    }
-    if (window.startMs !== null) previousWindow = window;
-  }
-
+  let cursor = null;
   for (let index = 0; index < partial.length;) {
-    if (partial[index].startMs !== null) {
+    const current = partial[index];
+    if (current.needsFallback) {
+      current.startMs = Math.max(current.startMs, cursor ?? current.startMs);
+      current.endMs = current.startMs + fallbackDurationMs;
+      cursor = current.endMs;
+      index += 1;
+      continue;
+    }
+    if (current.startMs !== null) {
+      cursor = cursor === null ? current.endMs : Math.max(cursor, current.endMs);
       index += 1;
       continue;
     }
     const runStart = index;
     while (index < partial.length && partial[index].startMs === null) index += 1;
     const runLength = index - runStart;
-    const previous = runStart > 0 ? partial[runStart - 1] : null;
     const next = index < partial.length ? partial[index] : null;
     let durationMs = fallbackDurationMs;
-    let cursor;
-    if (previous) {
-      cursor = previous.endMs;
+    if (cursor !== null) {
       if (next && next.startMs > cursor) {
         durationMs = Math.min(durationMs, (next.startMs - cursor) / runLength);
       }
     } else {
-      cursor = next.startMs - durationMs * runLength;
+      cursor = next ? next.startMs - durationMs * runLength : 0;
     }
     for (let offset = 0; offset < runLength; offset += 1) {
       const window = partial[runStart + offset];
@@ -164,11 +166,18 @@ function compileEventWindows(battle, fallbackDurationMs) {
       cursor = window.endMs;
     }
   }
-  return partial;
+  return partial.map(({ needsFallback: _needsFallback, ...window }) => window);
 }
 
 function movementRange(movement, eventWindow, fallbackDurationMs) {
-  const own = parsedRange(movement?.time);
+  const own = classifiedRange(movement?.time);
+  if (own.coarse) {
+    return {
+      startMs: own.startMs,
+      endMs: own.bounded ? own.endMs : own.startMs + fallbackDurationMs,
+      synthetic: true,
+    };
+  }
   let startMs = own.startMs ?? eventWindow?.startMs ?? null;
   let endMs = own.endMs ?? eventWindow?.endMs ?? null;
   if (startMs !== null && endMs !== null && endMs < startMs) {
@@ -249,11 +258,17 @@ function compileEngagementWindows(battle, eventById, fallbackDurationMs) {
   const windows = [];
   let cursor = Math.max(0, ...[...eventById.values()].map(({ endMs }) => endMs));
   for (const [sourceIndex, engagement] of array(battle?.engagements).entries()) {
-    const own = completeRange(parsedRange(engagement?.time), fallbackDurationMs);
+    const classified = classifiedRange(engagement?.time);
+    const own = classified.coarse
+      ? {
+        startMs: classified.startMs,
+        endMs: classified.bounded ? classified.endMs : classified.startMs + fallbackDurationMs,
+      }
+      : completeRange(classified, fallbackDurationMs);
     const linked = eventById.get(engagement?.event_id);
     let startMs = own.startMs ?? linked?.startMs ?? null;
     let endMs = own.endMs ?? linked?.endMs ?? null;
-    let synthetic = false;
+    let synthetic = classified.coarse;
     if (startMs !== null && endMs !== null && endMs < startMs) endMs = startMs + fallbackDurationMs;
     if (startMs !== null && endMs === null) endMs = startMs + fallbackDurationMs;
     if (startMs === null && endMs !== null) startMs = endMs - fallbackDurationMs;
@@ -262,7 +277,7 @@ function compileEngagementWindows(battle, eventById, fallbackDurationMs) {
       endMs = cursor + fallbackDurationMs;
       synthetic = true;
       cursor = endMs;
-    } else {
+    } else if (!classified.coarse) {
       synthetic = Boolean(linked?.synthetic) && own.startMs === null && own.endMs === null;
     }
     windows.push({

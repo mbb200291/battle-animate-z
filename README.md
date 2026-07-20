@@ -82,7 +82,7 @@ commanders[]: *id *name *side_id *confidence, rank_or_role, wikidata_qid
   - 職稱請放 rank_or_role（不要用 role）。
 actors[]: *id *name *side_id *kind *confidence, parent_id, commander_ids, strength
   - kind 只能是：army, corps, division, brigade, regiment, fleet, ship, unit, person, other（不要用 type）。
-  - 精細到個別軍艦/單位時 kind 用 "ship" 等，並可用 parent_id 指向所屬上級 actor（例如某艦隊）。
+  - 來源明確記載到個別軍艦/單位時 kind 才用 "ship" 等，並可用 parent_id 指向來源支持的所屬上級 actor（例如某艦隊）。
   - strength 是物件：label, min, max, confidence（數字放 min/max，文字放 label；不要用 value/unit）。
 places[]: *id *name *geometry *precision *confidence, wikidata_qid
   - geometry 用 GeoJSON 子集：Point / LineString / Polygon，coordinates 一律 [longitude, latitude]。
@@ -94,8 +94,8 @@ movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id
   - path 是 LineString：{"type":"LineString","coordinates":[[lon,lat],...]}（至少 2 個點）。
   - time 使用與 historical_events.time 相同結構。
   - waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增；每個時間必須落在 movement.time 範圍內。
-  - 缺少可靠時間時可以合理推估，但 movement 必須標 precision:"inferred"，time.precision 使用 hour／range 等時間粒度，且 time.confidence <= 0.6。
-engagements[]（選填，但強烈建議提供；用來表現「誰打誰、結果如何」）:
+  - 只有在來源已確認事件確實發生及先後順序時，才能推估代表性路徑或時間；movement 必須標 precision:"inferred"，time.precision 使用 hour／range 等時間粒度，且 time.confidence <= 0.6。
+engagements[]（選填；只有來源明確支持「誰打誰、結果如何」時才提供）:
   *id *event_id *attacker_actor_id *target_actor_id *type *confidence, result, result_actor_id, at_place_id, time, source_ids
   - type 只能是：fire, bombardment, ram, torpedo, charge, melee, other
   - result 只能是：hit, miss, damaged, disabled, sunk, repelled, captured, none
@@ -123,29 +123,29 @@ animation_hints: *map *style *timeline, camera
   artillery, armor, engineer, logistics, headquarters, fortress, aircraft,
   aircraft_fighter, aircraft_bomber, unit_generic。
 - 不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱；不確定時使用同類 generic token（船艦用 warship_generic、艦隊用 fleet_generic、其他用 unit_generic）。
-- 由你判斷每個單位最合適的受控名稱並主動指定。例如 protected cruiser 可用 warship_protected_cruiser，但必須依史料中的艦種分類，不要只因外形相近就套用。
+- 依來源記載為每個單位選擇受控名稱。例如來源明載 protected cruiser 時可用 warship_protected_cruiser；來源未支持細分類時使用同類 generic token，不要只因外形相近就套用。
 
-===== 精細度（資料越細，動畫越精緻）=====
-動畫的細緻程度完全取決於你提供多少資料。請盡量做到：
-1. 把關鍵單位拆細：海戰採船艦級，陸戰在來源允許時採師／旅級（必要時到團級），各自當一個 actor
+===== 精細度（以來源支持為上限）=====
+動畫細緻度取決於來源可支持的粒度，而不是欄位數量。請做到：
+1. 只把來源明確記載的關鍵單位拆細：海戰可採船艦級，陸戰在來源允許時採師／旅級（必要時到團級），各自當一個 actor
    （kind 用 ship / division / brigade…），需要時用 parent_id 歸到上級單位。
-2. 給每個關鍵單位「分階段的位置與移動」：用多個 historical_events 切出戰役階段
-   （遭遇、開火、包抄、混戰、追擊、撤退…）；每個階段為有移動的單位各補一條 movements
-   （帶對應的 event_id）。單位起始位置可由它的第一條 movement 或事件地點推得。
-3. 用 engagements 記錄對抗：哪個單位打哪個、用什麼方式、結果如何。app 會在對應事件
+2. 針對來源明確記載的戰役階段，給關鍵單位分階段的位置與移動；每個已記載階段為有移動的單位
+   補一條 movements（帶對應的 event_id）。不要為了讓動畫連續而新增來源未記載的階段或行動。
+3. 來源明確記載對抗雙方與結果時，才用 engagements 記錄哪個單位打哪個、用什麼方式、結果如何。app 會在對應事件
    畫出交火線，並讓被擊沉／失能的單位淡出。
-4. 讓事件分散在不同 place：不要把所有事件都掛在同一個粗略地點，否則標記會疊在一起；
-   可為不同階段建立各自的近似 Point（標 inferred + 低 confidence）。
+4. 對來源已確認發生及先後順序的事件，可為不同階段建立代表性近似 Point 以避免標記重疊，
+   但必須標 inferred + 低 confidence；不得為了畫面效果新增事件。
 5. 陸上師／旅的 Point 或 movement 座標是該時刻的代表位置，不是該單位的精確空間範圍；
    不要把單一座標解讀成整個陣地、正面寬度或精確 footprint。
 
-資料來源不限於單一 wiki 條目 —— 可彙整其他百科、條目章節、戰役專文等；也允許你「合理推估」
-相對位置與隊形。但凡屬推估，務必標 precision:"inferred" 且 confidence 偏低（例如 <= 0.5），
-史實明確者才給高 confidence。寧可多給細節（多 actor／event／movement／engagement）再以
-低 confidence 標記，也不要因為怕出錯而整段省略。
+資料來源不限於單一 wiki 條目，可彙整其他百科、條目章節與戰役專文。推估僅限於代表性幾何與時間，
+而且來源已確認事件確實發生及先後順序；凡屬推估，務必標 precision:"inferred" 且 confidence 偏低
+（例如 <= 0.5）。沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略，
+不得用低 confidence 包裝臆測內容。
 
 ===== 資料正確性 =====
 - 不要編造來源中沒有的細節。資料不精確時用 precision（approximate/inferred/disputed/unknown）與 confidence（0~1）標記。
+- `inferred` 只表達來源支持事件之代表性位置、路徑或時間，不代表可以推造未記載的單位、交戰、結果或分類。
 - 所有 *_id / *_ids 必須對應到實際存在的 id。
 - 地點若只能大概定位，就用 approximate 的 Point。
 

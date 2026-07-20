@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,7 +9,11 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 
-from battle_animation.validator import validate_document, validate_document_with_warnings
+from battle_animation.validator import (
+    ACTOR_ICON_TOKENS,
+    validate_document,
+    validate_document_with_warnings,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -388,29 +393,6 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
     def test_readme_prompt_teaches_v030_timing_and_tokens(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        controlled_tokens = (
-            "warship_generic",
-            "warship_ironclad",
-            "warship_battleship",
-            "warship_armored_cruiser",
-            "warship_protected_cruiser",
-            "warship_destroyer",
-            "warship_torpedo_boat",
-            "naval_transport",
-            "fleet_generic",
-            "infantry",
-            "cavalry",
-            "artillery",
-            "armor",
-            "engineer",
-            "logistics",
-            "headquarters",
-            "fortress",
-            "aircraft",
-            "aircraft_fighter",
-            "aircraft_bomber",
-            "unit_generic",
-        )
 
         for required in (
             'schema_version：使用精細時間軌時請用字串 "0.3.0"',
@@ -427,12 +409,58 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "師／旅級",
             "連續歷史時間播放",
             "閒置時間壓縮",
+            "推估僅限於代表性幾何與時間",
+            "來源已確認事件確實發生及先後順序",
+            "沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略",
         ):
             self.assertIn(required, readme)
-        for token in controlled_tokens:
-            self.assertIn(token, readme)
+        token_paragraph = re.search(
+            r"actor_icons 只能使用以下 21 個受控名稱：\n(?P<tokens>.*?unit_generic。)",
+            readme,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(token_paragraph)
+        documented_token_list = re.findall(
+            r"\b[a-z][a-z0-9_]*\b", token_paragraph.group("tokens")
+        )
+        self.assertEqual(len(documented_token_list), len(ACTOR_ICON_TOKENS))
+        self.assertEqual(set(documented_token_list), ACTOR_ICON_TOKENS)
+        self.assertNotIn("寧可多給細節", readme)
+        self.assertNotIn("強烈建議提供", readme)
         for stale_emoji in ("🚢", "⛵", "🪖", "🐎", "💥", "🛡️", "✈️", "🏰", "🚩"):
             self.assertNotIn(stale_emoji, readme)
+
+    def test_readme_embedded_v030_sample_validates_in_python_and_browser(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        sample_match = re.search(
+            r"===== 輸出格式範本.*?=====\n(?P<json>\{.*?\n\})\n\n===== 資料來源 =====",
+            readme,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(sample_match)
+        sample = json.loads(sample_match.group("json"))
+
+        errors, warnings = validate_document_with_warnings(sample)
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+        script = """
+            import { validateBattle } from "./app/animate.js";
+            let input = "";
+            process.stdin.setEncoding("utf8");
+            for await (const chunk of process.stdin) input += chunk;
+            console.log(JSON.stringify(validateBattle(JSON.parse(input))));
+        """
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            input=json.dumps(sample),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"errors": [], "warnings": []})
 
     def test_schema_declares_v030_movement_timing(self):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))

@@ -215,6 +215,95 @@ test("year and month precision without a time of day also use synthetic fallback
   }
 });
 
+test("bounded coarse year month and day ranges retain their historical anchors", () => {
+  for (const [precision, start, end] of [
+    ["year", "1815", "1817"],
+    ["month", "1815-06", "1815-08"],
+    ["day", "1815-06-18", "1815-06-20"],
+  ]) {
+    const timeline = compileTimeline(battle({
+      historical_events: [event(precision, undefined, undefined, {
+        time: { label: `${start}–${end}`, start, end, precision, confidence: 0.7 },
+      })],
+    }));
+    const window = timeline.eventWindows[0];
+
+    assert.equal(window.startMs, parseBattleTime(start), precision);
+    assert.equal(window.endMs, parseBattleTime(end), precision);
+    assert.equal(window.synthetic, true, precision);
+  }
+});
+
+test("coarse untimed coarse sequences receive three full non-overlapping fallback slots", () => {
+  const anchor = parseBattleTime("1815-06-18");
+  const coarse = (id) => event(id, undefined, undefined, {
+    time: { label: id, start: "1815-06-18", precision: "day", confidence: 0.7 },
+  });
+  const timeline = compileTimeline(battle({
+    historical_events: [coarse("first"), event("untimed"), coarse("last")],
+    animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+  }));
+
+  assert.deepEqual(timeline.eventWindows.map(({ startMs, endMs, synthetic }) => [startMs, endMs, synthetic]), [
+    [anchor, anchor + 60_000, true],
+    [anchor + 60_000, anchor + 120_000, true],
+    [anchor + 120_000, anchor + 180_000, true],
+  ]);
+});
+
+test("movement and engagement own coarse timing uses synthetic ranges outside linked events", () => {
+  const movementStart = parseBattleTime("1815-06-18");
+  const boundedMovementEnd = parseBattleTime("1815-06-20");
+  const engagementStart = parseBattleTime("1815-07");
+  const engagementEnd = parseBattleTime("1815-09");
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }, { id: "b" }],
+    historical_events: [event("linked", "2020-01-01T12:00:00", "2020-01-01T12:10:00")],
+    movements: [
+      movement("coarse-move", "a", "linked", [[0, 0], [1, 0]], undefined, undefined, {
+        time: { label: "day", start: "1815-06-18", precision: "day", confidence: 0.5 },
+      }),
+      movement("bounded-coarse-move", "b", "linked", [[0, 1], [1, 1]], undefined, undefined, {
+        time: { label: "two days", start: "1815-06-18", end: "1815-06-20", precision: "day", confidence: 0.5 },
+      }),
+    ],
+    engagements: [
+      {
+        id: "coarse-engagement",
+        event_id: "linked",
+        attacker_actor_id: "a",
+        target_actor_id: "b",
+        time: { label: "summer", start: "1815-07", end: "1815-09", precision: "month", confidence: 0.5 },
+      },
+      {
+        id: "unbounded-coarse-engagement",
+        event_id: "linked",
+        attacker_actor_id: "a",
+        target_actor_id: "b",
+        time: { label: "month", start: "1815-07", precision: "month", confidence: 0.5 },
+      },
+    ],
+    animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+  }));
+
+  assert.deepEqual(
+    [timeline.tracks[0].startMs, timeline.tracks[0].endMs, timeline.tracks[0].synthetic],
+    [movementStart, movementStart + 60_000, true],
+  );
+  assert.deepEqual(
+    [timeline.engagementWindows[0].startMs, timeline.engagementWindows[0].endMs, timeline.engagementWindows[0].synthetic],
+    [engagementStart, engagementEnd, true],
+  );
+  assert.deepEqual(
+    [timeline.tracks[1].startMs, timeline.tracks[1].endMs, timeline.tracks[1].synthetic],
+    [movementStart, boundedMovementEnd, true],
+  );
+  assert.deepEqual(
+    [timeline.engagementWindows[1].startMs, timeline.engagementWindows[1].endMs, timeline.engagementWindows[1].synthetic],
+    [engagementStart, engagementStart + 60_000, true],
+  );
+});
+
 test("mixed coarse and explicit windows mark only the coarse fallback as synthetic", () => {
   const timeline = compileTimeline(battle({
     historical_events: [
