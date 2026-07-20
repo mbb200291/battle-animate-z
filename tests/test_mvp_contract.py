@@ -513,6 +513,22 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertNotIn("NAMED_ACTOR_ICONS", animate)
         self.assertNotIn("resolveActorIcon", animate)
 
+    def test_browser_validator_exposes_v030_structured_validation_contract(self):
+        animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
+        index = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
+
+        for contract in (
+            '"0.3.0"',
+            "waypoint_times",
+            "warnings",
+            "ACTOR_ICON_TOKENS",
+            "parseBattleTime",
+            "return { errors, warnings }",
+        ):
+            self.assertIn(contract, animate)
+        self.assertIn("const { errors, warnings } = validateBattle(battle)", index)
+        self.assertIn("showWarnings(warnings)", index)
+
     def test_renderer_exposes_continuous_controller_and_split_svg_transforms(self):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "styles.css").read_text(encoding="utf-8")

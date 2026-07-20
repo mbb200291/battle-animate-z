@@ -1,6 +1,6 @@
 /* global L */
-import { compileTimeline, sampleTimeline } from "./timeline.js";
-import { resolveSymbol } from "./symbols.js";
+import { compileTimeline, parseBattleTime, sampleTimeline } from "./timeline.js";
+import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -126,8 +126,9 @@ export function wirePlaybackControls(controller, documentRef = document) {
 // top-level keys, schema version, the event-type enum, and every cross-reference.
 export function validateBattle(battle) {
   const errors = [];
+  const warnings = [];
   if (!battle || typeof battle !== "object" || Array.isArray(battle)) {
-    return ["document is not a JSON object"];
+    return { errors: ["document is not a JSON object"], warnings };
   }
 
   const required = [
@@ -148,11 +149,13 @@ export function validateBattle(battle) {
     if (!(key in battle)) errors.push(`missing required property "${key}"`);
   }
 
-  if ("schema_version" in battle && !["0.1.0", "0.2.0"].includes(battle.schema_version)) {
-    errors.push(`schema_version must be "0.1.0" or "0.2.0", got ${JSON.stringify(battle.schema_version)}`);
+  if ("schema_version" in battle && !["0.1.0", "0.2.0", "0.3.0"].includes(battle.schema_version)) {
+    errors.push(`schema_version must be "0.1.0", "0.2.0", or "0.3.0", got ${JSON.stringify(battle.schema_version)}`);
   }
 
-  const idSet = (key) => new Set((battle[key] || []).map((item) => item && item.id));
+  const array = (value) => Array.isArray(value) ? value : [];
+  const objects = (value) => array(value).filter((item) => item && typeof item === "object" && !Array.isArray(item));
+  const idSet = (key) => new Set(objects(battle[key]).map((item) => item.id));
   const sideIds = idSet("sides");
   const commanderIds = idSet("commanders");
   const actorIds = idSet("actors");
@@ -164,36 +167,41 @@ export function validateBattle(battle) {
     if (!set.has(id)) errors.push(`${label}: unknown id ${JSON.stringify(id)}`);
   };
 
-  (battle.commanders || []).forEach((commander, i) => {
+  array(battle.commanders).forEach((commander, i) => {
+    if (!commander || typeof commander !== "object" || Array.isArray(commander)) return;
     if ("side_id" in commander) check(commander.side_id, sideIds, `commanders[${i}].side_id`);
   });
 
-  (battle.actors || []).forEach((actor, i) => {
+  array(battle.actors).forEach((actor, i) => {
+    if (!actor || typeof actor !== "object" || Array.isArray(actor)) return;
     if ("side_id" in actor) check(actor.side_id, sideIds, `actors[${i}].side_id`);
     if ("parent_id" in actor) check(actor.parent_id, actorIds, `actors[${i}].parent_id`);
-    (actor.commander_ids || []).forEach((id) => check(id, commanderIds, `actors[${i}].commander_ids`));
+    array(actor.commander_ids).forEach((id) => check(id, commanderIds, `actors[${i}].commander_ids`));
   });
 
-  (battle.engagements || []).forEach((eng, i) => {
+  array(battle.engagements).forEach((eng, i) => {
+    if (!eng || typeof eng !== "object" || Array.isArray(eng)) return;
     if ("event_id" in eng) check(eng.event_id, eventIds, `engagements[${i}].event_id`);
     if ("attacker_actor_id" in eng) check(eng.attacker_actor_id, actorIds, `engagements[${i}].attacker_actor_id`);
     if ("target_actor_id" in eng) check(eng.target_actor_id, actorIds, `engagements[${i}].target_actor_id`);
     if ("result_actor_id" in eng) check(eng.result_actor_id, actorIds, `engagements[${i}].result_actor_id`);
     if ("at_place_id" in eng) check(eng.at_place_id, placeIds, `engagements[${i}].at_place_id`);
-    (eng.source_ids || []).forEach((id) => check(id, sourceIds, `engagements[${i}].source_ids`));
+    array(eng.source_ids).forEach((id) => check(id, sourceIds, `engagements[${i}].source_ids`));
   });
 
-  (battle.historical_events || []).forEach((event, i) => {
+  array(battle.historical_events).forEach((event, i) => {
+    if (!event || typeof event !== "object" || Array.isArray(event)) return;
     if (event.type && !EVENT_TYPES.includes(event.type)) {
       errors.push(`historical_events[${i}].type: invalid value ${JSON.stringify(event.type)}`);
     }
-    (event.actor_ids || []).forEach((id) => check(id, actorIds, `historical_events[${i}].actor_ids`));
-    (event.target_actor_ids || []).forEach((id) => check(id, actorIds, `historical_events[${i}].target_actor_ids`));
-    (event.place_ids || []).forEach((id) => check(id, placeIds, `historical_events[${i}].place_ids`));
-    (event.source_ids || []).forEach((id) => check(id, sourceIds, `historical_events[${i}].source_ids`));
+    array(event.actor_ids).forEach((id) => check(id, actorIds, `historical_events[${i}].actor_ids`));
+    array(event.target_actor_ids).forEach((id) => check(id, actorIds, `historical_events[${i}].target_actor_ids`));
+    array(event.place_ids).forEach((id) => check(id, placeIds, `historical_events[${i}].place_ids`));
+    array(event.source_ids).forEach((id) => check(id, sourceIds, `historical_events[${i}].source_ids`));
   });
 
-  (battle.movements || []).forEach((movement, i) => {
+  array(battle.movements).forEach((movement, i) => {
+    if (!movement || typeof movement !== "object" || Array.isArray(movement)) return;
     if ("event_id" in movement) check(movement.event_id, eventIds, `movements[${i}].event_id`);
     if ("actor_id" in movement) check(movement.actor_id, actorIds, `movements[${i}].actor_id`);
     if ("from_place_id" in movement) check(movement.from_place_id, placeIds, `movements[${i}].from_place_id`);
@@ -202,11 +210,213 @@ export function validateBattle(battle) {
 
   const outcome = battle.outcome;
   if (outcome && typeof outcome === "object") {
-    (outcome.winner_side_ids || []).forEach((id) => check(id, sideIds, "outcome.winner_side_ids"));
-    (outcome.source_ids || []).forEach((id) => check(id, sourceIds, "outcome.source_ids"));
+    array(outcome.winner_side_ids).forEach((id) => check(id, sideIds, "outcome.winner_side_ids"));
+    array(outcome.source_ids).forEach((id) => check(id, sourceIds, "outcome.source_ids"));
   }
 
-  return errors;
+  validateTiming(battle, errors, warnings);
+  validateMovementOverlaps(battle, errors, warnings);
+  validateActorIconTokens(battle, warnings);
+  return { errors, warnings };
+}
+
+function validateTimeRange(value, path, errors) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    errors.push(`${path}: expected object`);
+    return { start: null, end: null };
+  }
+  const parsed = { start: null, end: null };
+  for (const field of ["start", "end"]) {
+    if (!(field in value)) continue;
+    if (typeof value[field] !== "string") {
+      errors.push(`${path}.${field}: expected string`);
+      continue;
+    }
+    parsed[field] = parseBattleTime(value[field]);
+    if (parsed[field] === null) errors.push(`${path}.${field}: invalid ISO battle time`);
+  }
+  if (parsed.start !== null && parsed.end !== null && parsed.end < parsed.start) {
+    errors.push(`${path}: end must not be before start`);
+  }
+  return parsed;
+}
+
+function timingValues(battle) {
+  const values = [];
+  for (const collectionName of ["historical_events", "movements", "engagements"]) {
+    const collection = Array.isArray(battle[collectionName]) ? battle[collectionName] : [];
+    collection.forEach((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return;
+      if (item.time && typeof item.time === "object" && !Array.isArray(item.time)) {
+        for (const field of ["start", "end"]) {
+          if (field in item.time) values.push([`$.${collectionName}[${index}].time.${field}`, item.time[field]]);
+        }
+      }
+      if (collectionName === "movements" && Array.isArray(item.waypoint_times)) {
+        item.waypoint_times.forEach((value, waypointIndex) => {
+          values.push([`$.movements[${index}].waypoint_times[${waypointIndex}]`, value]);
+        });
+      }
+    });
+  }
+  return values;
+}
+
+function validateOffsetStyles(battle, errors) {
+  let expectedOffsetStyle = null;
+  for (const [path, value] of timingValues(battle)) {
+    if (typeof value !== "string" || !value.includes("T") || parseBattleTime(value) === null) continue;
+    const offsetBearing = /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+    if (expectedOffsetStyle === null) expectedOffsetStyle = offsetBearing;
+    else if (offsetBearing !== expectedOffsetStyle) {
+      errors.push(`${path}: mixed offset-bearing and battle-local date-times are not allowed`);
+    }
+  }
+}
+
+function validateTiming(battle, errors, warnings) {
+  validateOffsetStyles(battle, errors);
+  for (const collectionName of ["historical_events", "engagements"]) {
+    const collection = Array.isArray(battle[collectionName]) ? battle[collectionName] : [];
+    collection.forEach((item, index) => {
+      if (item && typeof item === "object" && !Array.isArray(item) && "time" in item) {
+        validateTimeRange(item.time, `$.${collectionName}[${index}].time`, errors);
+      }
+    });
+  }
+
+  const movements = Array.isArray(battle.movements) ? battle.movements : [];
+  movements.forEach((movement, index) => {
+    if (!movement || typeof movement !== "object" || Array.isArray(movement)) return;
+    const path = `$.movements[${index}]`;
+    const range = "time" in movement
+      ? validateTimeRange(movement.time, `${path}.time`, errors)
+      : { start: null, end: null };
+    if (movement.precision === "inferred"
+        && movement.time && typeof movement.time === "object"
+        && typeof movement.time.confidence === "number"
+        && Number.isFinite(movement.time.confidence)
+        && movement.time.confidence > 0.6) {
+      warnings.push(`${path}.time.confidence: inferred time confidence must be <= 0.6`);
+    }
+    if (!("waypoint_times" in movement)) return;
+    if (!Array.isArray(movement.waypoint_times)) {
+      errors.push(`${path}.waypoint_times: expected array`);
+      return;
+    }
+    const coordinates = movement.path && typeof movement.path === "object" && Array.isArray(movement.path.coordinates)
+      ? movement.path.coordinates : null;
+    if (coordinates && coordinates.length !== movement.waypoint_times.length) {
+      errors.push(`${path}.waypoint_times: count must match path coordinate count`);
+    }
+    const parsed = movement.waypoint_times.map((value, waypointIndex) => {
+      if (typeof value !== "string") {
+        errors.push(`${path}.waypoint_times[${waypointIndex}]: expected string`);
+        return null;
+      }
+      const result = parseBattleTime(value);
+      if (result === null) errors.push(`${path}.waypoint_times[${waypointIndex}]: invalid ISO battle time`);
+      return result;
+    });
+    if (parsed.some((later, i) => i > 0 && later !== null && parsed[i - 1] !== null && later <= parsed[i - 1])) {
+      errors.push(`${path}.waypoint_times: values must be strictly increasing`);
+    }
+    if (parsed.length && parsed[0] !== null && range.start !== null && parsed[0] < range.start) {
+      errors.push(`${path}.waypoint_times[0]: value is before movement start`);
+    }
+    const last = parsed.length - 1;
+    if (last >= 0 && parsed[last] !== null && range.end !== null && parsed[last] > range.end) {
+      errors.push(`${path}.waypoint_times[${last}]: value is after movement end`);
+    }
+  });
+}
+
+function movementCoordinates(movement) {
+  return movement?.path && Array.isArray(movement.path.coordinates) ? movement.path.coordinates : null;
+}
+
+function validateMovementOverlaps(battle, errors, warnings) {
+  const byActor = new Map();
+  const movements = Array.isArray(battle.movements) ? battle.movements : [];
+  movements.forEach((movement, index) => {
+    if (!movement || typeof movement !== "object" || !movement.time || typeof movement.time !== "object") return;
+    if (!("start" in movement.time) || !("end" in movement.time)) return;
+    const start = parseBattleTime(movement.time.start);
+    const end = parseBattleTime(movement.time.end);
+    if (start === null || end === null || end < start) return;
+    const entries = byActor.get(movement.actor_id) || [];
+    entries.push({ start, end, index, movement });
+    byActor.set(movement.actor_id, entries);
+  });
+  for (const [actorId, entries] of byActor) {
+    entries.sort((a, b) => a.start - b.start || a.end - b.end || a.index - b.index);
+    entries.slice(1).forEach((later, laterOffset) => {
+      const previousEntries = entries.slice(0, laterOffset + 1).filter((previous) => later.start < previous.end);
+      if (!previousEntries.length) return;
+      const laterCoordinates = movementCoordinates(later.movement);
+      const connected = Boolean(laterCoordinates?.length) && previousEntries.every((previous) => {
+        const previousCoordinates = movementCoordinates(previous.movement);
+        return Boolean(previousCoordinates?.length)
+          && JSON.stringify(previousCoordinates.at(-1)) === JSON.stringify(laterCoordinates[0]);
+      });
+      const path = `$.movements[${later.index}]`;
+      if (connected) warnings.push(`${path}: overlap resolved in favor of later movement`);
+      else errors.push(`${path}: conflicting overlapping movements for actor ${JSON.stringify(actorId)}`);
+    });
+  }
+}
+
+function validateActorIconTokens(battle, warnings) {
+  if (battle.schema_version !== "0.3.0") return;
+  const actorIcons = battle.animation_hints?.style?.actor_icons;
+  if (!actorIcons || typeof actorIcons !== "object" || Array.isArray(actorIcons)) return;
+  const allowed = new Set(ACTOR_ICON_TOKENS);
+  for (const [actorId, token] of Object.entries(actorIcons)) {
+    if (typeof token !== "string" || !allowed.has(token)) {
+      warnings.push(`$.animation_hints.style.actor_icons.${actorId}: unknown actor icon token ${JSON.stringify(token)}`);
+    }
+  }
+}
+
+export function showDiagnosticList(documentRef, elementId, heading, diagnostics) {
+  const box = documentRef.getElementById(elementId);
+  if (!box) return;
+  box.replaceChildren();
+  if (!diagnostics.length) {
+    box.hidden = true;
+    return;
+  }
+  const title = documentRef.createElement("strong");
+  title.textContent = `${heading} (${diagnostics.length})`;
+  const list = documentRef.createElement("ul");
+  for (const diagnostic of diagnostics.slice(0, 12)) {
+    const item = documentRef.createElement("li");
+    item.textContent = diagnostic;
+    list.append(item);
+  }
+  if (diagnostics.length > 12) {
+    const item = documentRef.createElement("li");
+    item.textContent = `… and ${diagnostics.length - 12} more`;
+    list.append(item);
+  }
+  box.append(title, list);
+  box.hidden = false;
+}
+
+export function setBattleDocument(battle, {
+  documentRef = document,
+  render = renderBattle,
+  wireControls = wirePlaybackControls,
+  previousController,
+} = {}) {
+  previousController?.destroy?.();
+  const { errors, warnings } = validateBattle(battle);
+  showDiagnosticList(documentRef, "error-banner", "JSON validation failed", errors);
+  showDiagnosticList(documentRef, "validation-warnings", "JSON validation warnings", warnings);
+  if (errors.length) return undefined;
+  const controller = render(battle, documentRef);
+  wireControls(controller, documentRef);
+  return controller;
 }
 
 export function renderBattle(battle, documentRef = document) {

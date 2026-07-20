@@ -92,34 +92,35 @@
     </dialog>
 
     <script type="module">
-      import { loadBattle, validateBattle, renderBattle, wirePlaybackControls } from "./animate.js";
+      import {
+        loadBattle,
+        validateBattle,
+        renderBattle,
+        showDiagnosticList,
+        wirePlaybackControls,
+      } from "./animate.js";
 
       const $ = (id) => document.getElementById(id);
       let controller;
 
-      function escapeHtml(value) {
-        return String(value).replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[char]));
+      function showErrors(errors) {
+        showDiagnosticList(document, "error-banner", "JSON validation failed", errors);
       }
 
-      function showErrors(errors) {
-        const box = $("error-banner");
-        if (!errors.length) {
-          box.hidden = true;
-          box.innerHTML = "";
-          return;
-        }
-        const shown = errors.slice(0, 12).map((e) => `<li>${escapeHtml(e)}</li>`).join("");
-        const more = errors.length > 12 ? `<li>… and ${errors.length - 12} more</li>` : "";
-        box.innerHTML = `<strong>JSON validation failed (${errors.length})</strong><ul>${shown}${more}</ul>`;
-        box.hidden = false;
+      function showWarnings(warnings) {
+        showDiagnosticList(document, "validation-warnings", "JSON validation warnings", warnings);
+      }
+
+      function destroyController() {
+        controller?.destroy();
+        controller = undefined;
       }
 
       function setBattle(battle) {
-        const errors = validateBattle(battle);
-        const warnings = $("validation-warnings");
-        warnings.hidden = true;
-        warnings.textContent = "";
+        destroyController();
+        const { errors, warnings } = validateBattle(battle);
         showErrors(errors);
+        showWarnings(warnings);
         if (errors.length) return;
         controller = renderBattle(battle, document);
         wirePlaybackControls(controller, document);
@@ -130,6 +131,8 @@
         try {
           battle = JSON.parse(text);
         } catch (error) {
+          destroyController();
+          showWarnings([]);
           showErrors([`Invalid JSON: ${error.message}`]);
           return;
         }
@@ -174,6 +177,8 @@
         const battle = await loadBattle("../examples/battle-of-waterloo.json");
         setBattle(battle);
       } catch (error) {
+        destroyController();
+        showWarnings([]);
         showErrors([`Failed to load default example: ${error.message}`]);
       }
     </script>
