@@ -1,16 +1,18 @@
-# Battle Animation Schema MVP
+# Battle Animation Schema
 
 This project defines a small, stable JSON format for battle data that can be extracted from Wikipedia, Wikidata, and similar public sources, then used by downstream apps to generate map animations.
 
-The first version intentionally avoids military simulation standards such as MSDL or C-BML. It records source-backed historical facts and lightweight rendering hints without modeling command logic, firepower, supply, or tactical rules.
+The format intentionally avoids military simulation standards such as MSDL or C-BML. It records source-backed historical facts and lightweight rendering hints without modeling command logic, firepower, supply, or tactical rules.
 
 ## Files
 
-- `schemas/battle-animation-schema.json` defines `battle-animation-schema` version `0.1.0`.
+- `schemas/battle-animation-schema.json` defines `battle-animation-schema` versions `0.1.0`, `0.2.0`, and `0.3.0`; `0.3.0` adds timed movement tracks and historical-time playback hints.
 - `battle_animation/types.py` provides Python `TypedDict` definitions matching the schema.
-- `examples/battle-of-waterloo.json` is a hand-built MVP example.
-- `battle_animation/validator.py` validates documents with the schema subset used by this project and checks internal references.
-- `app/index.html` is a static "auto generate animate" app for the example JSON.
+- `examples/battle-of-waterloo.json` and `examples/battle-of-甲午.json` exercise legacy fallback; `examples/battle-of-甲午海戰.json` is the timed, ship-level `0.3.0` demonstration.
+- `battle_animation/validator.py` validates schema fields, internal references, movement timing, controlled icon tokens, and recoverable warnings.
+- `app/timeline.js` compiles historical timestamps, idle compression, and legacy synthetic timing into a deterministic presentation timeline.
+- `app/symbols.js` owns the controlled SVG unit-symbol catalog and kind-based legacy fallback.
+- `app/index.html` and `app/animate.js` provide continuous playback, scrubbing, speed controls, camera follow, and inline validation diagnostics.
 
 ## Schema Principles
 
@@ -51,7 +53,7 @@ Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, di
 Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
 
 ````text
-你是一個歷史資料標準化助理。請根據我提供的 Wikipedia / Wikidata / Wiki 頁面內容，產生「完全符合」 battle-animation-schema v0.1.0 的 JSON，供地圖動畫 app 使用。
+你是一個歷史資料標準化助理。請根據我提供的 Wikipedia / Wikidata / Wiki 頁面內容，產生「完全符合」 battle-animation-schema v0.1.0／v0.2.0／v0.3.0 的 JSON，供地圖動畫 app 使用。
 
 ===== 最重要的輸出規則（違反任何一條都算失敗）=====
 1. 只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
@@ -61,8 +63,9 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
    若提供逐單位交戰細節，可再加 1 個選填 key：engagements。除上述以外不要有其他 key。
 3. 絕對不要輸出 problems / suggested_fixes / corrected_json 這種檢查用包裝物件。
    要直接輸出最終 JSON 本體。
-4. schema_version：基本資料用字串 "0.1.0"；若使用 engagements 或 ship 等精細欄位，請用 "0.2.0"。
-   （不要寫成 "v0.1.0" 或數字。）
+4. schema_version：基本資料使用 "0.1.0"；engagements／ship／parent_id 使用 "0.2.0"；
+   使用 movement.time、waypoint_times 或歷史比例時間軌時請用字串 "0.3.0"。
+   schema_version：使用精細時間軌時請用字串 "0.3.0"。（不要加 `v`，也不要寫成數字。）
 5. 整份 schema 的每個物件都是 additionalProperties:false：
    「只能使用下方列出的欄位名稱，多出任何一個欄位都會驗證失敗。」
    不要自行新增 type / role / source_ids / precision / notes / language 等未列出的欄位。
@@ -86,10 +89,12 @@ places[]: *id *name *geometry *precision *confidence, wikidata_qid
 historical_events[]: *id *type *title *time *description *actor_ids *place_ids *precision *confidence *source_ids, target_actor_ids
   - type 只能是：advance, retreat, attack, defend, capture, surrender, reinforcement, bombardment, landing, other
   - title 是短標題；description 放完整敘述；time 是物件：*label *precision *confidence, start, end
-movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id, to_place_id
+movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id, to_place_id, time, waypoint_times
   - 每個 movement 都「必須」有 event_id，對應到某個 historical_events.id（否則動畫不會顯示這段移動）。
   - path 是 LineString：{"type":"LineString","coordinates":[[lon,lat],...]}（至少 2 個點）。
-  - 推估路線：precision 設 "inferred"，confidence <= 0.6。
+  - time 使用與 historical_events.time 相同結構。
+  - waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增；每個時間必須落在 movement.time 範圍內。
+  - 缺少可靠時間時可以合理推估，但 movement 必須標 precision:"inferred"，time.precision 使用 hour／range 等時間粒度，且 time.confidence <= 0.6。
 engagements[]（選填，但強烈建議提供；用來表現「誰打誰、結果如何」）:
   *id *event_id *attacker_actor_id *target_actor_id *type *confidence, result, result_actor_id, at_place_id, time, source_ids
   - type 只能是：fire, bombardment, ram, torpedo, charge, melee, other
@@ -104,22 +109,25 @@ sources[]: *id *title *url *retrieved_at *license, note
 animation_hints: *map *style *timeline, camera
   - map: *initial_center *initial_zoom, bounds_padding（initial_center 為 [lon,lat]）
   - style: side_colors, actor_icons, event_icons, movement_line_width
-  - timeline: default_event_duration_ms, ordered_event_ids（請依時間順序列出所有事件 id）
+  - timeline: default_event_duration_ms, ordered_event_ids, historical_seconds_per_playback_second, idle_compression_threshold_seconds, idle_compressed_duration_ms（請依時間順序列出所有事件 id）
   - camera[] 每項：*event_id *center, zoom（center 為 [lon,lat]）
   - animation_hints 只放渲染提示，不要在裡面放任何史實斷言或 source。
 
 ===== 顏色與圖示（讓動畫更清楚）=====
 - 為每個 side 指定對比明顯的 color，並在 animation_hints.style.side_colors 重複一份（key 用 side id）。
-- 為每個 actor 在 animation_hints.style.actor_icons 指定一個適當圖示（key 用 actor id）。
-  請依兵種推薦最貼切的 emoji，例如：
-    艦隊 / 軍艦 / 水師 → 🚢，運輸船 → ⛵，陸軍 / 步兵 → 🪖，騎兵 → 🐎，
-    砲兵 → 💥，裝甲 / 戰車旅 → 🛡️，航空 → ✈️，要塞 → 🏰，司令部 → 🚩
-  也可以填入 ship / cavalry / artillery / tank 等英文名稱，app 會轉成圖示。
-- 由你判斷每個單位最合適的圖示並主動指定，不要全部留空。
+- 為每個 actor 在 animation_hints.style.actor_icons 指定一個適當的受控名稱（key 用 actor id）。
+- actor_icons 只能使用以下 21 個受控名稱：
+  warship_generic, warship_ironclad, warship_battleship,
+  warship_armored_cruiser, warship_protected_cruiser, warship_destroyer,
+  warship_torpedo_boat, naval_transport, fleet_generic, infantry, cavalry,
+  artillery, armor, engineer, logistics, headquarters, fortress, aircraft,
+  aircraft_fighter, aircraft_bomber, unit_generic。
+- 不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱；不確定時使用同類 generic token（船艦用 warship_generic、艦隊用 fleet_generic、其他用 unit_generic）。
+- 由你判斷每個單位最合適的受控名稱並主動指定。例如 protected cruiser 可用 warship_protected_cruiser，但必須依史料中的艦種分類，不要只因外形相近就套用。
 
 ===== 精細度（資料越細，動畫越精緻）=====
 動畫的細緻程度完全取決於你提供多少資料。請盡量做到：
-1. 把關鍵單位拆細：海戰拆到主要軍艦、陸戰拆到師／旅／團級，各自當一個 actor
+1. 把關鍵單位拆細：海戰採船艦級，陸戰在來源允許時採師／旅級（必要時到團級），各自當一個 actor
    （kind 用 ship / division / brigade…），需要時用 parent_id 歸到上級單位。
 2. 給每個關鍵單位「分階段的位置與移動」：用多個 historical_events 切出戰役階段
    （遭遇、開火、包抄、混戰、追擊、撤退…）；每個階段為有移動的單位各補一條 movements
@@ -128,6 +136,8 @@ animation_hints: *map *style *timeline, camera
    畫出交火線，並讓被擊沉／失能的單位淡出。
 4. 讓事件分散在不同 place：不要把所有事件都掛在同一個粗略地點，否則標記會疊在一起；
    可為不同階段建立各自的近似 Point（標 inferred + 低 confidence）。
+5. 陸上師／旅的 Point 或 movement 座標是該時刻的代表位置，不是該單位的精確空間範圍；
+   不要把單一座標解讀成整個陣地、正面寬度或精確 footprint。
 
 資料來源不限於單一 wiki 條目 —— 可彙整其他百科、條目章節、戰役專文等；也允許你「合理推估」
 相對位置與隊形。但凡屬推估，務必標 precision:"inferred" 且 confidence 偏低（例如 <= 0.5），
@@ -141,7 +151,7 @@ animation_hints: *map *style *timeline, camera
 
 ===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
 {
-  "schema_version": "0.1.0",
+  "schema_version": "0.3.0",
   "metadata": { "id": "battle_example", "title": "範例戰役", "created_at": "2026-06-22", "updated_at": "2026-06-22", "license": "CC BY-SA 4.0", "source_system": "ai_extraction_zhwiki" },
   "battle": { "id": "battle_example", "name": "範例戰役", "also_known_as": ["別名"], "part_of": "某場戰爭", "date": { "label": "1894-09-15", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "summary": "一句話說明這場戰役。", "confidence": 0.85 },
   "sides": [
@@ -159,10 +169,10 @@ animation_hints: *map *style *timeline, camera
   ],
   "historical_events": [
     { "id": "evt_attack", "type": "attack", "title": "海上交戰", "time": { "label": "1894-09-15 上午", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "description": "甲方艦隊在某港外與乙方交戰。", "actor_ids": ["actor_a_fleet"], "place_ids": ["place_harbor"], "precision": "approximate", "confidence": 0.85, "source_ids": ["src_wiki"] },
-    { "id": "evt_advance", "type": "advance", "title": "乙方陸軍推進", "time": { "label": "1894-09-16", "start": "1894-09-16", "precision": "day", "confidence": 0.8 }, "description": "乙方陸軍向某高地推進。", "actor_ids": ["actor_b_army"], "place_ids": ["place_ridge"], "precision": "inferred", "confidence": 0.6, "source_ids": ["src_wiki"] }
+    { "id": "evt_advance", "type": "advance", "title": "乙方陸軍推進", "time": { "label": "1894-09-16 08:00–09:00", "start": "1894-09-16T08:00:00", "end": "1894-09-16T09:00:00", "precision": "range", "confidence": 0.5 }, "description": "乙方陸軍向某高地推進；座標是師級單位的代表位置，不代表精確部署範圍。", "actor_ids": ["actor_b_army"], "place_ids": ["place_ridge"], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_wiki"] }
   ],
   "movements": [
-    { "id": "mov_b_advance", "event_id": "evt_advance", "actor_id": "actor_b_army", "from_place_id": "place_harbor", "to_place_id": "place_ridge", "path": { "type": "LineString", "coordinates": [[122.1, 39.0], [123.4, 38.6]] }, "precision": "inferred", "confidence": 0.55 }
+    { "id": "mov_b_advance", "event_id": "evt_advance", "actor_id": "actor_b_army", "from_place_id": "place_harbor", "to_place_id": "place_ridge", "path": { "type": "LineString", "coordinates": [[122.1, 39.0], [122.7, 38.8], [123.4, 38.6]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1894-09-16 08:00–09:00", "start": "1894-09-16T08:00:00", "end": "1894-09-16T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1894-09-16T08:00:00", "1894-09-16T08:30:00", "1894-09-16T09:00:00"] }
   ],
   "outcome": { "summary": "乙方獲勝。", "winner_side_ids": ["side_b"], "casualties": [{ "side_id": "side_a", "label": "約 500 人", "min": 400, "max": 600, "confidence": 0.6 }], "confidence": 0.85, "source_ids": ["src_wiki"] },
   "sources": [ { "id": "src_wiki", "title": "維基百科條目", "url": "https://zh.wikipedia.org/wiki/...", "retrieved_at": "2026-06-22", "license": "CC BY-SA 4.0" } ],
@@ -170,11 +180,11 @@ animation_hints: *map *style *timeline, camera
     "map": { "initial_center": [122.8, 38.8], "initial_zoom": 7, "bounds_padding": 0.05 },
     "style": {
       "side_colors": { "side_a": "#2f6fb5", "side_b": "#c0392b" },
-      "actor_icons": { "actor_a_fleet": "🚢", "actor_b_army": "🪖" },
+      "actor_icons": { "actor_a_fleet": "fleet_generic", "actor_b_army": "infantry" },
       "event_icons": { "attack": "burst", "advance": "arrow-up-right" },
       "movement_line_width": 4
     },
-    "timeline": { "default_event_duration_ms": 1600, "ordered_event_ids": ["evt_attack", "evt_advance"] },
+    "timeline": { "default_event_duration_ms": 1600, "ordered_event_ids": ["evt_attack", "evt_advance"], "historical_seconds_per_playback_second": 120, "idle_compression_threshold_seconds": 900, "idle_compressed_duration_ms": 1200 },
     "camera": [{ "event_id": "evt_advance", "center": [123.4, 38.6], "zoom": 9 }]
   }
 }
@@ -198,17 +208,15 @@ Fix any reported field-name or reference errors until it prints `valid:`.
 
 ## Validate Data
 
-Run the validator against the example:
+Run the validator against all bundled examples:
 
 ```bash
 python3 -m battle_animation.validator examples/battle-of-waterloo.json
+python3 -m battle_animation.validator examples/battle-of-甲午.json
+python3 -m battle_animation.validator examples/battle-of-甲午海戰.json
 ```
 
-Expected output:
-
-```text
-valid: examples/battle-of-waterloo.json
-```
+Each command should print `valid:`. The canonical timed Yalu example should produce no warnings.
 
 Run the tests:
 
@@ -230,15 +238,19 @@ Open:
 http://localhost:8000/app/
 ```
 
-The app renders battle data over a Leaflet + OpenStreetMap basemap (map tiles require network access). It draws places, units, movement paths, and event markers as an SVG overlay, then plays the ordered timeline with playback, scrubber, and keyboard (arrow keys / space) controls.
+The app renders battle data over a Leaflet + OpenStreetMap basemap (map tiles require network access). Version `0.3.0` uses continuous historical-time playback（連續歷史時間播放）to interpolate each actor along timed waypoints instead of jumping between events. Long inactive gaps use idle compression（閒置時間壓縮）without changing the historical clock. The transport provides play/pause, a continuous scrubber, `0.5×`/`1×`/`2×`/`4×` speed controls, follow-camera control, and keyboard controls (arrow keys / space).
+
+Actor icons are controlled SVG tokens rendered as clear, top-down naval silhouettes or standard land/air symbols. A `0.3.0` document should provide only catalog tokens. Legacy `0.1.0` and `0.2.0` documents remain supported: missing historical timing receives a deterministic synthetic animation timeline, while missing or legacy icon values fall back by actor kind to a controlled SVG symbol.
 
 To animate your own data, load a different document with the **Load JSON file** button, the **Paste JSON…** dialog, or by dragging a `.json` file onto the map. The document is validated in the browser first; reference or schema errors are listed inline instead of rendering.
 
-## MVP Boundaries
+## Format Boundaries and Unit Granularity
 
-This format is designed for extraction and animation, not simulation. In version `0.1.0`:
+This format is designed for extraction and animation, not simulation. Across versions `0.1.0`, `0.2.0`, and `0.3.0`:
 
-- actors are coarse units such as armies, corps, divisions, or named units;
+- naval battles should use ship-level actors（船艦級）for important vessels where sources permit;
+- land battles should use division- or brigade-level actors（師／旅級）and representative positions where sources permit, rather than being restricted to coarse army-level markers;
+- a land coordinate is a representative position, not the formation's exact footprint, frontage, or occupied polygon;
 - movement paths may be inferred and should carry low confidence where appropriate;
 - strengths and casualties may use ranges and text labels;
 - source records point back to Wikipedia, Wikidata, or other public references;

@@ -386,6 +386,54 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
+    def test_readme_prompt_teaches_v030_timing_and_tokens(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        controlled_tokens = (
+            "warship_generic",
+            "warship_ironclad",
+            "warship_battleship",
+            "warship_armored_cruiser",
+            "warship_protected_cruiser",
+            "warship_destroyer",
+            "warship_torpedo_boat",
+            "naval_transport",
+            "fleet_generic",
+            "infantry",
+            "cavalry",
+            "artillery",
+            "armor",
+            "engineer",
+            "logistics",
+            "headquarters",
+            "fortress",
+            "aircraft",
+            "aircraft_fighter",
+            "aircraft_bomber",
+            "unit_generic",
+        )
+
+        for required in (
+            'schema_version：使用精細時間軌時請用字串 "0.3.0"',
+            "waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增",
+            "不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱",
+            'precision:"inferred"',
+            "confidence <= 0.6",
+            '"schema_version": "0.3.0"',
+            '"historical_seconds_per_playback_second": 120',
+            '"idle_compression_threshold_seconds": 900',
+            '"idle_compressed_duration_ms": 1200',
+            "代表位置，不是該單位的精確空間範圍",
+            "船艦級",
+            "師／旅級",
+            "連續歷史時間播放",
+            "閒置時間壓縮",
+        ):
+            self.assertIn(required, readme)
+        for token in controlled_tokens:
+            self.assertIn(token, readme)
+        for stale_emoji in ("🚢", "⛵", "🪖", "🐎", "💥", "🛡️", "✈️", "🏰", "🚩"):
+            self.assertNotIn(stale_emoji, readme)
+
     def test_schema_declares_v030_movement_timing(self):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
         self.assertIn("0.3.0", schema["properties"]["schema_version"]["enum"])
