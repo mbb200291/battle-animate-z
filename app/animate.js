@@ -475,7 +475,8 @@ export function renderBattle(battle, documentRef = document) {
     const pause = () => controller.pause();
     const pauseFromKey = (event) => {
       if (event.key !== "Enter" && event.key !== " ") return;
-      if (event.key === " ") event.preventDefault();
+      event.preventDefault();
+      event.stopPropagation();
       pause();
     };
     card.addEventListener("pointerenter", pause);

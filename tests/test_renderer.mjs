@@ -168,6 +168,10 @@ class FakeDocument {
   removeEventListener(type, listener) {
     this.listeners.get(type)?.delete(listener);
   }
+
+  dispatch(type, event = {}) {
+    for (const listener of this.listeners.get(type) || []) listener(event);
+  }
 }
 
 class FrameClock {
@@ -545,21 +549,40 @@ test("overlapping active events each create cards and the latest event is curren
   assert.deepEqual(stack.children.map((card) => card.dataset.eventId), ["opening", "finish", "finish"]);
 });
 
-test("event cards expose keyboard pause behavior", () => {
+test("event cards consume keyboard pause events before document shortcuts can re-toggle", () => {
   const { controller, document } = setup();
   const card = document.getElementById("event-card-stack").children[0];
   assert.equal(card.getAttribute("role"), "button");
   assert.equal(card.getAttribute("tabindex"), "0");
   assert.match(card.getAttribute("aria-label"), /pause/i);
 
-  controller.play();
-  card.dispatch("keydown", { key: "Enter", preventDefault() {} });
-  assert.equal(controller.isPlaying, false);
-  let prevented = false;
-  controller.play();
-  card.dispatch("keydown", { key: " ", preventDefault() { prevented = true; } });
-  assert.equal(controller.isPlaying, false);
-  assert.equal(prevented, true);
+  for (const key of ["Enter", " "]) {
+    let prevented = false;
+    let stopped = false;
+    const event = {
+      key,
+      target: card,
+      preventDefault() { prevented = true; },
+      stopPropagation() { stopped = true; },
+    };
+    controller.play();
+    card.dispatch("keydown", event);
+    if (!stopped) document.dispatch("keydown", event);
+    assert.equal(controller.isPlaying, false);
+    assert.equal(document.getElementById("play-button").textContent, "Play");
+    assert.equal(prevented, true);
+    assert.equal(stopped, true);
+  }
+
+  let documentPrevented = false;
+  document.dispatch("keydown", {
+    key: " ",
+    target: new FakeElement("div"),
+    preventDefault() { documentPrevented = true; },
+  });
+  assert.equal(controller.isPlaying, true);
+  assert.equal(documentPrevented, true);
+  controller.pause();
 });
 
 test("compression notice is deterministic and synthetic clocks never fabricate epoch dates", () => {
