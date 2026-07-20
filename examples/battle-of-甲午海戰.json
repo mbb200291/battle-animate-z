@@ -134,13 +134,6 @@
       "side_id": "side_japan",
       "kind": "ship",
       "confidence": 0.85
-    },
-    {
-      "id": "fleet_japan_first_flying",
-      "name": "日本第一游擊隊",
-      "side_id": "side_japan",
-      "kind": "fleet",
-      "confidence": 0.85
     }
   ],
   "places": [
@@ -258,9 +251,8 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "description": "日本第一游擊隊憑航速繞向北洋右翼，集火較弱的超勇、揚威，兩艦先後中彈起火。",
+      "description": "日本第一游擊隊憑航速繞向北洋右翼，集火較弱的超勇、揚威，兩艦先後中彈起火。交戰動畫以第一游擊隊旗艦吉野為集體行動的視覺代表，不表示單艦歸功。",
       "actor_ids": [
-        "fleet_japan_first_flying",
         "ship_yoshino",
         "ship_naniwa",
         "ship_chaoyong",
@@ -271,6 +263,31 @@
       ],
       "precision": "approximate",
       "confidence": 0.8,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    },
+    {
+      "id": "evt_chaoyong_sinking",
+      "type": "other",
+      "title": "超勇沉沒",
+      "time": {
+        "label": "1894-09-17 14:15–14:20（約）",
+        "start": "1894-09-17T14:15",
+        "end": "1894-09-17T14:20",
+        "precision": "range",
+        "confidence": 0.6
+      },
+      "description": "超勇遭第一游擊隊集中炮擊起火後，於約14時20分沉沒。交戰動畫以旗艦吉野為集體行動的視覺代表，不表示單艦歸功。",
+      "actor_ids": [
+        "ship_chaoyong",
+        "ship_yoshino"
+      ],
+      "place_ids": [
+        "place_right_wing"
+      ],
+      "precision": "approximate",
+      "confidence": 0.6,
       "source_ids": [
         "src_zhwiki_yalu"
       ]
@@ -312,10 +329,10 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "description": "致遠管帶鄧世昌試圖衝撞日本第一游擊隊艦艇，遭集中炮火攻擊後於約15時20分沉沒。",
+      "description": "致遠管帶鄧世昌試圖衝撞日本第一游擊隊艦艇，遭集中炮火攻擊後於約15時20分沉沒。交戰動畫以旗艦吉野為集體行動的視覺代表，不表示單艦歸功。",
       "actor_ids": [
         "ship_zhiyuan",
-        "fleet_japan_first_flying"
+        "ship_yoshino"
       ],
       "place_ids": [
         "place_right_wing"
@@ -337,10 +354,10 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "description": "經遠遭日本第一游擊隊追堵圍攻，於約17時29分傾覆沉沒。",
+      "description": "經遠遭日本第一游擊隊追堵圍攻，於約17時29分傾覆沉沒。交戰動畫以旗艦吉野為集體行動的視覺代表，不表示單艦歸功。",
       "actor_ids": [
         "ship_jingyuan",
-        "fleet_japan_first_flying"
+        "ship_yoshino"
       ],
       "place_ids": [
         "place_melee"
@@ -804,42 +821,6 @@
       ],
       "precision": "inferred",
       "confidence": 0.5
-    },
-    {
-      "id": "mov_first_flying_pursuit",
-      "event_id": "evt_jingyuan_sinking",
-      "actor_id": "fleet_japan_first_flying",
-      "path": {
-        "type": "LineString",
-        "coordinates": [
-          [
-            123.56,
-            39.333
-          ],
-          [
-            123.61,
-            39.35
-          ],
-          [
-            123.655,
-            39.368
-          ]
-        ]
-      },
-      "time": {
-        "label": "1894-09-17 17:00–17:29（推定）",
-        "start": "1894-09-17T17:00",
-        "end": "1894-09-17T17:29",
-        "precision": "range",
-        "confidence": 0.5
-      },
-      "waypoint_times": [
-        "1894-09-17T17:00",
-        "1894-09-17T17:15",
-        "1894-09-17T17:29"
-      ],
-      "precision": "inferred",
-      "confidence": 0.5
     }
   ],
   "outcome": {
@@ -901,8 +882,7 @@
         "ship_matsushima": "warship_protected_cruiser",
         "ship_yoshino": "warship_protected_cruiser",
         "ship_naniwa": "warship_protected_cruiser",
-        "ship_hiei": "warship_generic",
-        "fleet_japan_first_flying": "fleet_generic"
+        "ship_hiei": "warship_generic"
       },
       "event_icons": {
         "bombardment": "burst",
@@ -921,6 +901,7 @@
         "evt_encounter",
         "evt_open_fire",
         "evt_flying_flank",
+        "evt_chaoyong_sinking",
         "evt_melee",
         "evt_zhiyuan_charge",
         "evt_jingyuan_sinking",
@@ -969,7 +950,7 @@
     {
       "id": "eng_flying_squadron_chaoyong",
       "event_id": "evt_flying_flank",
-      "attacker_actor_id": "fleet_japan_first_flying",
+      "attacker_actor_id": "ship_yoshino",
       "target_actor_id": "ship_chaoyong",
       "type": "fire",
       "time": {
@@ -979,7 +960,7 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "confidence": 0.6,
+      "confidence": 0.4,
       "source_ids": [
         "src_zhwiki_yalu"
       ],
@@ -987,9 +968,29 @@
       "result_actor_id": "ship_chaoyong"
     },
     {
-      "id": "eng_naniwa_yangwei",
+      "id": "eng_chaoyong_sinking",
+      "event_id": "evt_chaoyong_sinking",
+      "attacker_actor_id": "ship_yoshino",
+      "target_actor_id": "ship_chaoyong",
+      "type": "fire",
+      "time": {
+        "label": "1894-09-17 14:15–14:20（約）",
+        "start": "1894-09-17T14:15",
+        "end": "1894-09-17T14:20",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "confidence": 0.4,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ],
+      "result": "sunk",
+      "result_actor_id": "ship_chaoyong"
+    },
+    {
+      "id": "eng_flying_squadron_yangwei",
       "event_id": "evt_flying_flank",
-      "attacker_actor_id": "ship_naniwa",
+      "attacker_actor_id": "ship_yoshino",
       "target_actor_id": "ship_yangwei",
       "type": "fire",
       "time": {
@@ -999,7 +1000,7 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "confidence": 0.6,
+      "confidence": 0.4,
       "source_ids": [
         "src_zhwiki_yalu"
       ],
@@ -1029,7 +1030,7 @@
     {
       "id": "eng_flying_squadron_zhiyuan",
       "event_id": "evt_zhiyuan_charge",
-      "attacker_actor_id": "fleet_japan_first_flying",
+      "attacker_actor_id": "ship_yoshino",
       "target_actor_id": "ship_zhiyuan",
       "type": "fire",
       "time": {
@@ -1039,7 +1040,7 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "confidence": 0.6,
+      "confidence": 0.4,
       "source_ids": [
         "src_zhwiki_yalu"
       ],
@@ -1049,7 +1050,7 @@
     {
       "id": "eng_flying_squadron_jingyuan",
       "event_id": "evt_jingyuan_sinking",
-      "attacker_actor_id": "fleet_japan_first_flying",
+      "attacker_actor_id": "ship_yoshino",
       "target_actor_id": "ship_jingyuan",
       "type": "fire",
       "time": {
@@ -1059,7 +1060,7 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "confidence": 0.6,
+      "confidence": 0.4,
       "source_ids": [
         "src_zhwiki_yalu"
       ],

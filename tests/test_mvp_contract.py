@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "battle-of-waterloo.json"
 YALU_EXAMPLE = ROOT / "examples" / "battle-of-甲午海戰.json"
 SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
+MAX_INFERRED_WITHDRAWAL_SPEED_KMH = 18
 
 
 class BattleAnimationMvpContractTest(unittest.TestCase):
@@ -77,7 +78,6 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "ship_yoshino": "warship_protected_cruiser",
             "ship_naniwa": "warship_protected_cruiser",
             "ship_hiei": "warship_generic",
-            "fleet_japan_first_flying": "fleet_generic",
         }
         expected_ship_ids = {
             "ship_dingyuan",
@@ -175,20 +175,21 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertNotIn("ship_jingyuan", events["evt_zhiyuan_charge"]["actor_ids"])
         self.assertEqual(events["evt_jingyuan_sinking"]["time"]["end"], "1894-09-17T17:30")
         self.assertIn("ship_jingyuan", events["evt_jingyuan_sinking"]["actor_ids"])
+        self.assertEqual(events["evt_chaoyong_sinking"]["time"]["end"], "1894-09-17T14:20")
 
         self.assertEqual(engagements["eng_dingyuan_open"]["result"], "none")
         self.assertNotIn("result_actor_id", engagements["eng_dingyuan_open"])
         self.assertEqual(
-            engagements["eng_naniwa_yangwei"]["result"],
+            engagements["eng_flying_squadron_yangwei"]["result"],
             "damaged",
         )
         self.assertEqual(
-            engagements["eng_naniwa_yangwei"]["attacker_actor_id"],
-            "ship_naniwa",
+            engagements["eng_flying_squadron_yangwei"]["attacker_actor_id"],
+            "ship_yoshino",
         )
         self.assertEqual(
             engagements["eng_flying_squadron_chaoyong"]["attacker_actor_id"],
-            "fleet_japan_first_flying",
+            "ship_yoshino",
         )
         self.assertEqual(
             engagements["eng_flying_squadron_chaoyong"]["result"],
@@ -206,6 +207,49 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             engagements["eng_flying_squadron_jingyuan"]["time"]["end"],
             "1894-09-17T17:29",
         )
+        self.assertEqual(engagements["eng_chaoyong_sinking"]["result"], "sunk")
+
+        actors = {actor["id"]: actor for actor in battle["actors"]}
+        self.assertNotIn("fleet_japan_first_flying", actors)
+        self.assertTrue(all(actor["kind"] == "ship" for actor in actors.values()))
+        self.assertTrue(
+            all(movement["actor_id"] in actors for movement in battle["movements"])
+        )
+        self.assertTrue(
+            all(
+                engagement[role] in actors and actors[engagement[role]]["kind"] == "ship"
+                for engagement in battle["engagements"]
+                for role in ("attacker_actor_id", "target_actor_id")
+            )
+        )
+        self.assertFalse(
+            any(
+                engagement.get("result") == "sunk"
+                and engagement.get("result_actor_id") == "ship_yangwei"
+                for engagement in battle["engagements"]
+            )
+        )
+        representative_engagement_ids = {
+            "eng_flying_squadron_chaoyong",
+            "eng_flying_squadron_yangwei",
+            "eng_flying_squadron_zhiyuan",
+            "eng_flying_squadron_jingyuan",
+            "eng_chaoyong_sinking",
+        }
+        for engagement_id in representative_engagement_ids:
+            with self.subTest(representative_engagement=engagement_id):
+                engagement = engagements[engagement_id]
+                self.assertEqual(engagement["attacker_actor_id"], "ship_yoshino")
+                self.assertLessEqual(engagement["confidence"], 0.5)
+        for event_id in (
+            "evt_flying_flank",
+            "evt_chaoyong_sinking",
+            "evt_zhiyuan_charge",
+            "evt_jingyuan_sinking",
+        ):
+            with self.subTest(representative_event=event_id):
+                self.assertIn("視覺代表", events[event_id]["description"])
+                self.assertIn("不表示單艦歸功", events[event_id]["description"])
 
         for movement_id in ("mov_qing_retreat", "mov_japan_withdraw"):
             with self.subTest(movement=movement_id):
@@ -218,7 +262,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 start = datetime.fromisoformat(movement["time"]["start"])
                 end = datetime.fromisoformat(movement["time"]["end"])
                 hours = (end - start).total_seconds() / 3600
-                self.assertLessEqual(distance_km / hours, 18)
+                self.assertLessEqual(distance_km / hours, MAX_INFERRED_WITHDRAWAL_SPEED_KMH)
 
     @staticmethod
     def _haversine_km(start, end):
