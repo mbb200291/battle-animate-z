@@ -24,7 +24,8 @@ export function parseBattleTime(value) {
   const hour = Number(match[4] ?? 0);
   const minute = Number(match[5] ?? 0);
   const second = Number(match[6] ?? 0);
-  const fractionMs = match[7] ? Number(`0.${match[7]}`) * 1000 : 0;
+  const microseconds = match[7] ? Number(match[7].slice(0, 6).padEnd(6, "0")) : 0;
+  const fractionMs = microseconds / 1000;
   const offsetHour = Number(match[10] ?? 0);
   const offsetMinute = Number(match[11] ?? 0);
   if (
@@ -100,14 +101,44 @@ function compileEventWindows(battle, fallbackDurationMs) {
     const range = completeRange(parsedRange(item?.time), fallbackDurationMs);
     return { id: item?.id, event: item, sourceIndex, ...range, synthetic: false };
   });
-  const real = partial.filter(({ startMs }) => startMs !== null);
-  let syntheticCursor = real.length ? Math.max(...real.map(({ endMs }) => endMs)) : 0;
-  for (const window of partial) {
-    if (window.startMs !== null) continue;
-    window.startMs = syntheticCursor;
-    window.endMs = syntheticCursor + fallbackDurationMs;
-    window.synthetic = true;
-    syntheticCursor = window.endMs;
+  if (partial.every(({ startMs }) => startMs === null)) {
+    let cursor = 0;
+    for (const window of partial) {
+      window.startMs = cursor;
+      window.endMs = cursor + fallbackDurationMs;
+      window.synthetic = true;
+      cursor = window.endMs;
+    }
+    return partial;
+  }
+
+  for (let index = 0; index < partial.length;) {
+    if (partial[index].startMs !== null) {
+      index += 1;
+      continue;
+    }
+    const runStart = index;
+    while (index < partial.length && partial[index].startMs === null) index += 1;
+    const runLength = index - runStart;
+    const previous = runStart > 0 ? partial[runStart - 1] : null;
+    const next = index < partial.length ? partial[index] : null;
+    let durationMs = fallbackDurationMs;
+    let cursor;
+    if (previous) {
+      cursor = previous.endMs;
+      if (next && next.startMs > cursor) {
+        durationMs = Math.min(durationMs, (next.startMs - cursor) / runLength);
+      }
+    } else {
+      cursor = next.startMs - durationMs * runLength;
+    }
+    for (let offset = 0; offset < runLength; offset += 1) {
+      const window = partial[runStart + offset];
+      window.startMs = cursor;
+      window.endMs = cursor + durationMs;
+      window.synthetic = true;
+      cursor = window.endMs;
+    }
   }
   return partial;
 }
@@ -240,7 +271,13 @@ function startingPositions(battle, tracks) {
   const positions = new Map();
   for (const actor of array(battle?.actors)) {
     const actorId = actor?.id;
-    const track = tracks.find((candidate) => candidate.actorId === actorId);
+    const track = tracks
+      .filter((candidate) => candidate.actorId === actorId)
+      .reduce((earliest, candidate) => {
+        if (!earliest || candidate.startMs < earliest.startMs) return candidate;
+        if (candidate.startMs === earliest.startMs && candidate.sourceIndex < earliest.sourceIndex) return candidate;
+        return earliest;
+      }, null);
     let point = track?.coordinates[0] ?? null;
     if (!point) {
       const actorEvent = array(battle?.historical_events).find((item) =>

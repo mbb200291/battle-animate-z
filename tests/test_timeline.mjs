@@ -66,6 +66,16 @@ test("parseBattleTime rejects non-grammar strings and invalid dates", () => {
   }
 });
 
+test("parseBattleTime truncates one through nine fractional digits to Python microseconds", () => {
+  const base = Date.UTC(2000, 0, 1);
+  const digits = "123456789";
+  for (let length = 1; length <= digits.length; length += 1) {
+    const fraction = digits.slice(0, length);
+    const microseconds = Number(fraction.slice(0, 6).padEnd(6, "0"));
+    assert.equal(parseBattleTime(`2000-01-01T00:00:00.${fraction}Z`), base + microseconds / 1000);
+  }
+});
+
 test("uniform path sampling uses cumulative projected distance", () => {
   const timeline = compileTimeline(battle({
     actors: [{ id: "a" }],
@@ -140,6 +150,46 @@ test("fully legacy documents get sequential synthetic ranges from zero", () => {
   assert.deepEqual([timeline.tracks[0].startMs, timeline.tracks[0].endMs], [60_000, 120_000]);
 });
 
+test("an ordered untimed event fills the interval between timed events", () => {
+  const fixture = battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("later", iso(10), iso(15)), event("untimed"), event("early", iso(0), iso(5))],
+    movements: [movement("linked", "a", "untimed", [[0, 0], [1, 0]])],
+    animation_hints: { timeline: { ordered_event_ids: ["early", "untimed", "later"], default_event_duration_ms: 1_000 } },
+  });
+  const timeline = compileTimeline(fixture);
+  const byId = new Map(timeline.eventWindows.map((window) => [window.id, window]));
+
+  assert.deepEqual([byId.get("untimed").startMs, byId.get("untimed").endMs], [parseBattleTime(iso(5)), parseBattleTime(iso(6))]);
+  assert.deepEqual([timeline.tracks[0].startMs, timeline.tracks[0].endMs], [parseBattleTime(iso(5)), parseBattleTime(iso(6))]);
+  assert.equal(timeline.tracks[0].synthetic, true);
+});
+
+test("untimed blocks backfill before and continue after known event anchors", () => {
+  const timeline = compileTimeline(battle({
+    historical_events: [event("before-1"), event("before-2"), event("anchor", iso(10), iso(11)), event("after")],
+    animation_hints: { timeline: { default_event_duration_ms: 2_000 } },
+  }));
+  const byId = new Map(timeline.eventWindows.map((window) => [window.id, window]));
+
+  assert.deepEqual([byId.get("before-1").startMs, byId.get("before-1").endMs], [parseBattleTime(iso(6)), parseBattleTime(iso(8))]);
+  assert.deepEqual([byId.get("before-2").startMs, byId.get("before-2").endMs], [parseBattleTime(iso(8)), parseBattleTime(iso(10))]);
+  assert.deepEqual([byId.get("after").startMs, byId.get("after").endMs], [parseBattleTime(iso(11)), parseBattleTime(iso(13))]);
+});
+
+test("multiple untimed events shorten deterministically inside a small anchored gap", () => {
+  const timeline = compileTimeline(battle({
+    historical_events: [event("left", iso(0), iso(10)), event("middle-1"), event("middle-2"), event("right", iso(11), iso(12))],
+    animation_hints: { timeline: { default_event_duration_ms: 2_000 } },
+  }));
+  const byId = new Map(timeline.eventWindows.map((window) => [window.id, window]));
+
+  assert.deepEqual([byId.get("middle-1").startMs, byId.get("middle-1").endMs], [parseBattleTime(iso(10)), parseBattleTime(iso(10.5))]);
+  assert.deepEqual([byId.get("middle-2").startMs, byId.get("middle-2").endMs], [parseBattleTime(iso(10.5)), parseBattleTime(iso(11))]);
+  assert.ok(byId.get("middle-1").endMs > byId.get("middle-1").startMs);
+  assert.ok(byId.get("middle-2").endMs > byId.get("middle-2").startMs);
+});
+
 test("mixed timelines anchor untimed events in the historical era", () => {
   const timeline = compileTimeline(battle({ historical_events: [event("legacy"), event("real", iso(5), iso(10))] }));
   assert.ok(timeline.eventWindows[0].startMs > Date.UTC(1800, 0, 1));
@@ -163,6 +213,19 @@ test("actor positions persist before, between, and after tracks and latest overl
   assert.deepEqual(at(15), [200, 0]);
   assert.deepEqual(at(22.5), [15, 0]);
   assert.deepEqual(at(30), [20, 0]);
+});
+
+test("actor starting position uses the chronologically earliest track", () => {
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("all", iso(0), iso(30))],
+    movements: [
+      movement("later-source-first", "a", "all", [[20, 20], [21, 20]], iso(20), iso(25)),
+      movement("earlier-source-last", "a", "all", [[1, 1], [2, 1]], iso(5), iso(10)),
+    ],
+  }));
+
+  assert.deepEqual(sampleTimeline(timeline, 0).actorPositions.get("a"), [1, 1]);
 });
 
 test("starting position falls back through event places then first place", () => {
