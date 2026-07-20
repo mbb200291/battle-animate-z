@@ -148,11 +148,12 @@ export function validateBattle(battle) {
   for (const key of required) {
     if (!(key in battle)) errors.push(`missing required property "${key}"`);
   }
-  validateTopLevelShapes(battle, errors);
+  const rendererShapesValid = validateRendererShapes(battle, errors);
 
   if ("schema_version" in battle && !["0.1.0", "0.2.0", "0.3.0"].includes(battle.schema_version)) {
     errors.push(`schema_version must be "0.1.0", "0.2.0", or "0.3.0", got ${JSON.stringify(battle.schema_version)}`);
   }
+  if (!rendererShapesValid) return { errors, warnings };
 
   const array = (value) => Array.isArray(value) ? value : [];
   const objects = (value) => array(value).filter((item) => item && typeof item === "object" && !Array.isArray(item));
@@ -221,7 +222,23 @@ export function validateBattle(battle) {
   return { errors, warnings };
 }
 
-function validateTopLevelShapes(battle, errors) {
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateCoordinatePair(value, path, errors) {
+  if (!Array.isArray(value)
+      || value.length < 2
+      || !Number.isFinite(value[0])
+      || !Number.isFinite(value[1])) {
+    errors.push(`${path}: expected coordinate pair`);
+    return false;
+  }
+  return true;
+}
+
+function validateRendererShapes(battle, errors) {
+  const initialErrorCount = errors.length;
   const arrayKeys = [
     "sides",
     "commanders",
@@ -236,11 +253,113 @@ function validateTopLevelShapes(battle, errors) {
     if (key in battle && !Array.isArray(battle[key])) errors.push(`$.${key}: expected array`);
   }
   for (const key of ["metadata", "battle", "outcome", "animation_hints"]) {
-    if (key in battle
-        && (!battle[key] || typeof battle[key] !== "object" || Array.isArray(battle[key]))) {
+    if (key in battle && !isObject(battle[key])) {
       errors.push(`$.${key}: expected object`);
     }
   }
+
+  const objectItemCollections = ["sides", "actors", "places", "historical_events", "movements", "engagements"];
+  for (const key of objectItemCollections) {
+    if (!Array.isArray(battle[key])) continue;
+    battle[key].forEach((item, index) => {
+      if (!isObject(item)) errors.push(`$.${key}[${index}]: expected object`);
+    });
+  }
+
+  if (isObject(battle.battle) && !isObject(battle.battle.date)) {
+    errors.push("$.battle.date: expected object");
+  }
+  if (Array.isArray(battle.places)) {
+    battle.places.forEach((place, index) => {
+      if (!isObject(place)) return;
+      if (!isObject(place.geometry)) {
+        errors.push(`$.places[${index}].geometry: expected object`);
+      } else if (!Array.isArray(place.geometry.coordinates)) {
+        errors.push(`$.places[${index}].geometry.coordinates: expected array`);
+      } else if (place.geometry.type === "Point") {
+        validateCoordinatePair(place.geometry.coordinates, `$.places[${index}].geometry.coordinates`, errors);
+      } else if (place.geometry.type === "LineString") {
+        if (!place.geometry.coordinates.length) {
+          errors.push(`$.places[${index}].geometry.coordinates: expected at least one position`);
+        }
+        place.geometry.coordinates.forEach((position, positionIndex) => {
+          validateCoordinatePair(position, `$.places[${index}].geometry.coordinates[${positionIndex}]`, errors);
+        });
+      } else if (place.geometry.type === "Polygon") {
+        if (!place.geometry.coordinates.length) {
+          errors.push(`$.places[${index}].geometry.coordinates: expected coordinate ring`);
+        }
+        place.geometry.coordinates.forEach((ring, ringIndex) => {
+          const ringPath = `$.places[${index}].geometry.coordinates[${ringIndex}]`;
+          if (!Array.isArray(ring) || !ring.length) {
+            errors.push(`${ringPath}: expected coordinate ring`);
+            return;
+          }
+          ring.forEach((position, positionIndex) => {
+            validateCoordinatePair(position, `${ringPath}[${positionIndex}]`, errors);
+          });
+        });
+      }
+    });
+  }
+  if (Array.isArray(battle.historical_events)) {
+    battle.historical_events.forEach((event, index) => {
+      if (!isObject(event)) return;
+      if (!isObject(event.time)) errors.push(`$.historical_events[${index}].time: expected object`);
+      for (const field of ["actor_ids", "target_actor_ids", "place_ids"]) {
+        if (field in event && !Array.isArray(event[field])) {
+          errors.push(`$.historical_events[${index}].${field}: expected array`);
+        }
+      }
+    });
+  }
+  if (Array.isArray(battle.movements)) {
+    battle.movements.forEach((movement, index) => {
+      if (!isObject(movement)) return;
+      if ("time" in movement && !isObject(movement.time)) {
+        errors.push(`$.movements[${index}].time: expected object`);
+      }
+      if ("waypoint_times" in movement && !Array.isArray(movement.waypoint_times)) {
+        errors.push(`$.movements[${index}].waypoint_times: expected array`);
+      }
+      if (!isObject(movement.path)) {
+        errors.push(`$.movements[${index}].path: expected object`);
+      } else if (!Array.isArray(movement.path.coordinates)) {
+        errors.push(`$.movements[${index}].path.coordinates: expected array`);
+      } else {
+        movement.path.coordinates.forEach((position, positionIndex) => {
+          validateCoordinatePair(position, `$.movements[${index}].path.coordinates[${positionIndex}]`, errors);
+        });
+      }
+    });
+  }
+  if (Array.isArray(battle.engagements)) {
+    battle.engagements.forEach((engagement, index) => {
+      if (isObject(engagement) && "time" in engagement && !isObject(engagement.time)) {
+        errors.push(`$.engagements[${index}].time: expected object`);
+      }
+    });
+  }
+  if (isObject(battle.animation_hints)) {
+    for (const field of ["map", "style", "timeline"]) {
+      if (field in battle.animation_hints && !isObject(battle.animation_hints[field])) {
+        errors.push(`$.animation_hints.${field}: expected object`);
+      }
+    }
+    const style = battle.animation_hints.style;
+    if (isObject(style) && "event_icons" in style) {
+      if (!isObject(style.event_icons)) {
+        errors.push("$.animation_hints.style.event_icons: expected object");
+      } else {
+        for (const [eventType, token] of Object.entries(style.event_icons)) {
+          if (typeof token !== "string") {
+            errors.push(`$.animation_hints.style.event_icons.${eventType}: expected string`);
+          }
+        }
+      }
+    }
+  }
+  return errors.length === initialErrorCount;
 }
 
 function validateTimeRange(value, path, errors) {

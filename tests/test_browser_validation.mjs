@@ -9,14 +9,17 @@ function fixture(version = "0.3.0") {
   const battle = {
     schema_version: version,
     metadata: {},
-    battle: {},
-    sides: [{ id: "side-a" }, { id: "side-b" }],
+    battle: { name: "Test", summary: "Test", part_of: "Test", date: { label: "18 June 1815" } },
+    sides: [{ id: "side-a", name: "A" }, { id: "side-b", name: "B" }],
     commanders: [{ id: "commander-a", side_id: "side-a" }],
     actors: [
-      { id: "actor-a", side_id: "side-a", commander_ids: ["commander-a"] },
-      { id: "actor-b", side_id: "side-b", commander_ids: [] },
+      { id: "actor-a", name: "A", side_id: "side-a", commander_ids: ["commander-a"] },
+      { id: "actor-b", name: "B", side_id: "side-b", commander_ids: [] },
     ],
-    places: [{ id: "place-a" }, { id: "place-b" }],
+    places: [
+      { id: "place-a", name: "A", geometry: { type: "Point", coordinates: [0, 0] } },
+      { id: "place-b", name: "B", geometry: { type: "Point", coordinates: [1, 1] } },
+    ],
     historical_events: [{
       id: "event-a",
       type: "advance",
@@ -24,7 +27,7 @@ function fixture(version = "0.3.0") {
       target_actor_ids: ["actor-b"],
       place_ids: ["place-a"],
       source_ids: ["source-a"],
-      time: { start: "1815-06-18T10:00:00Z", end: "1815-06-18T10:10:00Z" },
+      time: { label: "10:00–10:10", start: "1815-06-18T10:00:00Z", end: "1815-06-18T10:10:00Z" },
     }],
     movements: [{
       id: "movement-a",
@@ -34,7 +37,7 @@ function fixture(version = "0.3.0") {
       to_place_id: "place-b",
       precision: "exact",
       time: { start: "1815-06-18T10:00:00Z", end: "1815-06-18T10:10:00Z", confidence: 0.5 },
-      path: { coordinates: [[0, 0], [1, 1]] },
+      path: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
       waypoint_times: ["1815-06-18T10:00:00Z", "1815-06-18T10:10:00Z"],
     }],
     engagements: [{
@@ -89,6 +92,37 @@ test("renderer-required top-level containers reject malformed shapes", () => {
     const matching = validateBattle(battle).errors.filter((item) => item.includes(`$.${key}`));
     assert.equal(matching.length, 1, key);
     assert.match(matching[0], /expected object/i, key);
+  }
+});
+
+test("renderer-required collection members and nested containers reject malformed shapes", () => {
+  const cases = [
+    ["side item", (battle) => { battle.sides[0] = null; }, /\$\.sides\[0\].*expected object/i],
+    ["actor item", (battle) => { battle.actors[0] = []; }, /\$\.actors\[0\].*expected object/i],
+    ["place item", (battle) => { battle.places[0] = null; }, /\$\.places\[0\].*expected object/i],
+    ["event item", (battle) => { battle.historical_events[0] = null; }, /\$\.historical_events\[0\].*expected object/i],
+    ["movement item", (battle) => { battle.movements[0] = null; }, /\$\.movements\[0\].*expected object/i],
+    ["engagement item", (battle) => { battle.engagements[0] = null; }, /\$\.engagements\[0\].*expected object/i],
+    ["battle date", (battle) => { battle.battle.date = null; }, /\$\.battle\.date.*expected object/i],
+    ["place geometry", (battle) => { delete battle.places[0].geometry; }, /\$\.places\[0\]\.geometry.*expected object/i],
+    ["place coordinates", (battle) => { battle.places[0].geometry.coordinates = {}; }, /\$\.places\[0\]\.geometry\.coordinates.*expected array/i],
+    ["point coordinate", (battle) => { battle.places[0].geometry.coordinates = [0]; }, /\$\.places\[0\]\.geometry\.coordinates.*coordinate pair/i],
+    ["line coordinate", (battle) => { battle.places[0].geometry = { type: "LineString", coordinates: [null] }; }, /\$\.places\[0\]\.geometry\.coordinates\[0\].*coordinate pair/i],
+    ["empty line", (battle) => { battle.places[0].geometry = { type: "LineString", coordinates: [] }; }, /\$\.places\[0\]\.geometry\.coordinates.*position/i],
+    ["polygon ring", (battle) => { battle.places[0].geometry = { type: "Polygon", coordinates: [] }; }, /\$\.places\[0\]\.geometry\.coordinates.*ring/i],
+    ["event time", (battle) => { delete battle.historical_events[0].time; }, /\$\.historical_events\[0\]\.time.*expected object/i],
+    ["event actors", (battle) => { battle.historical_events[0].actor_ids = {}; }, /\$\.historical_events\[0\]\.actor_ids.*expected array/i],
+    ["movement path", (battle) => { delete battle.movements[0].path; }, /\$\.movements\[0\]\.path.*expected object/i],
+    ["movement coordinates", (battle) => { delete battle.movements[0].path.coordinates; }, /\$\.movements\[0\]\.path\.coordinates.*expected array/i],
+    ["movement coordinate", (battle) => { battle.movements[0].path.coordinates[1] = null; }, /\$\.movements\[0\]\.path\.coordinates\[1\].*coordinate pair/i],
+    ["event icon", (battle) => { battle.animation_hints.style.event_icons = { advance: 5 }; }, /\$\.animation_hints\.style\.event_icons\.advance.*expected string/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = fixture();
+    mutate(battle);
+    const errors = validateBattle(battle).errors;
+    assert.equal(errors.length, 1, `${label}: ${errors.join("\n")}`);
+    assert.match(errors[0], expected, label);
   }
 });
 
@@ -306,4 +340,30 @@ test("malformed renderer collection blocks rendering and destroys the previous c
   assert.equal(renderCalls, 0);
   assert.equal(destroyCalls, 1);
   assert.match(documentRef.elements.get("error-banner").textContent, /\$\.sides.*expected array/i);
+});
+
+test("malformed renderer members and nested shapes never render and tear down safely", () => {
+  const cases = [
+    (battle) => { battle.actors[0] = null; },
+    (battle) => { delete battle.places[0].geometry; },
+    (battle) => { delete battle.movements[0].path.coordinates; },
+    (battle) => { battle.animation_hints.style.event_icons = { advance: 5 }; },
+  ];
+  for (const mutate of cases) {
+    const documentRef = fakeDocument();
+    let renderCalls = 0;
+    let destroyCalls = 0;
+    const malformed = fixture();
+    mutate(malformed);
+    const result = animate.setBattleDocument(malformed, {
+      documentRef,
+      render() { renderCalls += 1; },
+      wireControls() {},
+      previousController: { destroy() { destroyCalls += 1; } },
+    });
+    assert.equal(result, undefined);
+    assert.equal(renderCalls, 0);
+    assert.equal(destroyCalls, 1);
+    assert.equal(documentRef.elements.get("error-banner").hidden, false);
+  }
 });
