@@ -28,6 +28,86 @@ const EXPECTED_TOKENS = [
   "unit_generic",
 ];
 
+const SVG_NUMBER_SOURCE = String.raw`[+-]?(?:\d+\.?(?:\d*)?|\.\d+)(?:[eE][+-]?\d+)?`;
+const SVG_COMMAND_ARITY = Object.freeze({ M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 });
+
+function tokenizeSvgPath(path) {
+  if (typeof path !== "string" || path.trim() === "") return null;
+  const separator = /[\t\n\f\r ,]*/y;
+  const command = /[MmLlHhVvCcSsQqTtAaZz]/y;
+  const number = new RegExp(SVG_NUMBER_SOURCE, "y");
+  const tokens = [];
+  let index = 0;
+
+  while (index < path.length) {
+    separator.lastIndex = index;
+    separator.exec(path);
+    index = separator.lastIndex;
+    if (index === path.length) break;
+
+    command.lastIndex = index;
+    const commandMatch = command.exec(path);
+    if (commandMatch) {
+      tokens.push({ type: "command", value: commandMatch[0] });
+      index = command.lastIndex;
+      continue;
+    }
+
+    number.lastIndex = index;
+    const numberMatch = number.exec(path);
+    if (!numberMatch) return null;
+    const value = Number(numberMatch[0]);
+    if (!Number.isFinite(value)) return null;
+    tokens.push({ type: "number", value });
+    index = number.lastIndex;
+  }
+
+  return tokens;
+}
+
+function isValidSvgPath(path) {
+  const tokens = tokenizeSvgPath(path);
+  if (!tokens?.length || tokens[0].type !== "command" || tokens[0].value.toUpperCase() !== "M") return false;
+
+  let currentCommand = null;
+  let index = 0;
+  while (index < tokens.length) {
+    if (tokens[index].type === "command") {
+      currentCommand = tokens[index].value.toUpperCase();
+      index += 1;
+      if (currentCommand === "Z") {
+        currentCommand = null;
+        continue;
+      }
+    }
+    if (!currentCommand || !(currentCommand in SVG_COMMAND_ARITY)) return false;
+
+    const values = [];
+    while (index < tokens.length && tokens[index].type === "number") {
+      values.push(tokens[index].value);
+      index += 1;
+    }
+    const arity = SVG_COMMAND_ARITY[currentCommand];
+    if (values.length === 0 || values.length % arity !== 0) return false;
+    if (currentCommand === "A") {
+      for (let group = 0; group < values.length; group += arity) {
+        if (![0, 1].includes(values[group + 3]) || ![0, 1].includes(values[group + 4])) return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function parseViewBox(viewBox) {
+  if (typeof viewBox !== "string") return null;
+  const parts = viewBox.trim().split(/[\s,]+/);
+  const numberPattern = new RegExp(`^(?:${SVG_NUMBER_SOURCE})$`);
+  if (parts.length !== 4 || parts.some((part) => !numberPattern.test(part))) return null;
+  const values = parts.map(Number);
+  return values.every(Number.isFinite) ? values : null;
+}
+
 test("catalog exposes the exact controlled vocabulary in deterministic order", () => {
   assert.deepEqual(ACTOR_ICON_TOKENS, EXPECTED_TOKENS);
   assert.deepEqual(Object.keys(SYMBOL_DEFS), EXPECTED_TOKENS);
@@ -35,15 +115,33 @@ test("catalog exposes the exact controlled vocabulary in deterministic order", (
   assert.equal(new Set(ACTOR_ICON_TOKENS).size, ACTOR_ICON_TOKENS.length);
 });
 
+test("SVG path validation rejects malformed and unsupported data", () => {
+  for (const path of [
+    "M 0 0 totally-invalid",
+    "M 0",
+    "M 0 0 L 1",
+    "M 0 0 A 1 1 0 0 1 2",
+    "M 0 0 R 1 1",
+    "M 0 0 L NaN 1",
+    "M 0 0 L Infinity 1",
+    "M 0 0 A 1 1 0 2 0 4 4",
+  ]) {
+    assert.equal(isValidSvgPath(path), false, path);
+  }
+  assert.equal(isValidSvgPath("M 0 0 1 1 H 2 3 V 4 C 1 2 3 4 5 6 S 7 8 9 10 Q 1 2 3 4 T 5 6 A 2 3 45 0 1 7 8 Z"), true);
+});
+
 test("every definition contains safe custom SVG path metadata", () => {
   const forbidden = /[^\x00-\x7f]|[<>]|url\s*\(|data:|on\w+\s*=/i;
   for (const [token, definition] of Object.entries(SYMBOL_DEFS)) {
-    assert.equal(typeof definition.viewBox, "string", token);
-    assert.match(definition.viewBox, /^-?\d+(?:\.\d+)?(?:\s+-?\d+(?:\.\d+)?){3}$/, token);
+    const viewBox = parseViewBox(definition.viewBox);
+    assert.ok(viewBox, token);
+    assert.ok(viewBox[2] > 0, `${token} viewBox width`);
+    assert.ok(viewBox[3] > 0, `${token} viewBox height`);
     assert.ok(Array.isArray(definition.paths) && definition.paths.length > 0, token);
     for (const path of definition.paths) {
       assert.equal(typeof path, "string", token);
-      assert.match(path, /^M(?:\s*-?\d|\s*\.)/i, token);
+      assert.equal(isValidSvgPath(path), true, token);
       assert.doesNotMatch(path, forbidden, token);
     }
     assert.equal(typeof definition.rotatesWithHeading, "boolean", token);
