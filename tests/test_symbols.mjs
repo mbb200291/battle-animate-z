@@ -33,23 +33,37 @@ const SVG_COMMAND_ARITY = Object.freeze({ M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q:
 
 function tokenizeSvgPath(path) {
   if (typeof path !== "string" || path.trim() === "") return null;
-  const separator = /[\t\n\f\r ,]*/y;
+  const whitespace = /[\t\n\f\r ]*/y;
   const command = /[MmLlHhVvCcSsQqTtAaZz]/y;
   const number = new RegExp(SVG_NUMBER_SOURCE, "y");
   const tokens = [];
   let index = 0;
+  let previousType = null;
 
   while (index < path.length) {
-    separator.lastIndex = index;
-    separator.exec(path);
-    index = separator.lastIndex;
+    whitespace.lastIndex = index;
+    whitespace.exec(path);
+    index = whitespace.lastIndex;
     if (index === path.length) break;
+
+    let hasComma = false;
+    if (path[index] === ",") {
+      if (previousType !== "number") return null;
+      hasComma = true;
+      index += 1;
+      whitespace.lastIndex = index;
+      whitespace.exec(path);
+      index = whitespace.lastIndex;
+      if (index === path.length || path[index] === ",") return null;
+    }
 
     command.lastIndex = index;
     const commandMatch = command.exec(path);
     if (commandMatch) {
+      if (hasComma) return null;
       tokens.push({ type: "command", value: commandMatch[0] });
       index = command.lastIndex;
+      previousType = "command";
       continue;
     }
 
@@ -58,8 +72,9 @@ function tokenizeSvgPath(path) {
     if (!numberMatch) return null;
     const value = Number(numberMatch[0]);
     if (!Number.isFinite(value)) return null;
-    tokens.push({ type: "number", value });
+    tokens.push({ type: "number", value, raw: numberMatch[0] });
     index = number.lastIndex;
+    previousType = "number";
   }
 
   return tokens;
@@ -82,16 +97,16 @@ function isValidSvgPath(path) {
     }
     if (!currentCommand || !(currentCommand in SVG_COMMAND_ARITY)) return false;
 
-    const values = [];
+    const parameters = [];
     while (index < tokens.length && tokens[index].type === "number") {
-      values.push(tokens[index].value);
+      parameters.push(tokens[index]);
       index += 1;
     }
     const arity = SVG_COMMAND_ARITY[currentCommand];
-    if (values.length === 0 || values.length % arity !== 0) return false;
+    if (parameters.length === 0 || parameters.length % arity !== 0) return false;
     if (currentCommand === "A") {
-      for (let group = 0; group < values.length; group += arity) {
-        if (![0, 1].includes(values[group + 3]) || ![0, 1].includes(values[group + 4])) return false;
+      for (let group = 0; group < parameters.length; group += arity) {
+        if (!/^[01]$/.test(parameters[group + 3].raw) || !/^[01]$/.test(parameters[group + 4].raw)) return false;
       }
     }
   }
@@ -125,9 +140,18 @@ test("SVG path validation rejects malformed and unsupported data", () => {
     "M 0 0 L NaN 1",
     "M 0 0 L Infinity 1",
     "M 0 0 A 1 1 0 2 0 4 4",
+    "M 0 0 A 1 1 0 0.0 1 4 4",
+    "M 0 0 A 1 1 0 1.0 0 4 4",
+    "M 0 0 A 1 1 0 +0 1 4 4",
+    "M 0 0 A 1 1 0 -0 1 4 4",
+    "M 0 0 A 1 1 0 01e0 0 4 4",
+    "M,0 0",
+    "M0,,0",
+    "M0 0,",
   ]) {
     assert.equal(isValidSvgPath(path), false, path);
   }
+  assert.equal(isValidSvgPath("M0,0L1,1"), true);
   assert.equal(isValidSvgPath("M 0 0 1 1 H 2 3 V 4 C 1 2 3 4 5 6 S 7 8 9 10 Q 1 2 3 4 T 5 6 A 2 3 45 0 1 7 8 Z"), true);
 });
 
