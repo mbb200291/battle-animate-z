@@ -4,7 +4,7 @@ const DEFAULT_EVENT_DURATION_MS = 1800;
 const DEFAULT_SCALE = 60;
 const DEFAULT_IDLE_THRESHOLD_SECONDS = 900;
 const DEFAULT_COMPRESSED_DURATION_MS = 1200;
-const DESTRUCTIVE_RESULTS = new Set(["sunk", "disabled", "captured"]);
+const DESTRUCTIVE_RESULTS = Object.freeze(["sunk", "disabled", "captured"]);
 
 function daysInMonth(year, month) {
   if (month === 2) {
@@ -308,7 +308,7 @@ export function compileTimeline(battle = {}) {
   const fallbackPresentationDurationMs = positive(hints.default_event_duration_ms, DEFAULT_EVENT_DURATION_MS);
   const fallbackDurationMs = fallbackPresentationDurationMs * scale;
   const thresholdMs = nonnegative(hints.idle_compression_threshold_seconds, DEFAULT_IDLE_THRESHOLD_SECONDS) * 1000;
-  const compressedDurationMs = nonnegative(hints.idle_compressed_duration_ms, DEFAULT_COMPRESSED_DURATION_MS);
+  const compressedDurationMs = positive(hints.idle_compressed_duration_ms, DEFAULT_COMPRESSED_DURATION_MS);
   const eventWindows = compileEventWindows(battle, fallbackDurationMs);
   const eventById = new Map(eventWindows.map((window) => [window.id, window]));
   const tracks = compileTracks(battle, eventById, fallbackDurationMs);
@@ -356,8 +356,8 @@ function segmentForPresentation(timeline, presentationMs) {
 }
 
 export function toPresentationTime(timeline, historicalMs) {
-  const start = Number(timeline?.historicalStartMs) || 0;
-  const end = Number(timeline?.historicalEndMs) || start;
+  const start = Number.isFinite(timeline?.historicalStartMs) ? timeline.historicalStartMs : 0;
+  const end = Number.isFinite(timeline?.historicalEndMs) ? timeline.historicalEndMs : start;
   const value = Math.min(end, Math.max(start, Number.isFinite(historicalMs) ? historicalMs : start));
   const segment = segmentForHistorical(timeline, value);
   if (!segment) return 0;
@@ -367,10 +367,10 @@ export function toPresentationTime(timeline, historicalMs) {
 }
 
 export function toHistoricalTime(timeline, presentationMs) {
-  const duration = Number(timeline?.presentationDurationMs) || 0;
+  const duration = Number.isFinite(timeline?.presentationDurationMs) ? timeline.presentationDurationMs : 0;
   const value = Math.min(duration, Math.max(0, Number.isFinite(presentationMs) ? presentationMs : 0));
   const segment = segmentForPresentation(timeline, value);
-  if (!segment) return Number(timeline?.historicalStartMs) || 0;
+  if (!segment) return Number.isFinite(timeline?.historicalStartMs) ? timeline.historicalStartMs : 0;
   if (segment.presentationDurationMs === 0) return segment.historicalEndMs;
   const ratio = (value - segment.presentationStartMs) / segment.presentationDurationMs;
   return segment.historicalStartMs + ratio * segment.historicalDurationMs;
@@ -380,21 +380,30 @@ function segmentHeading(from, to) {
   return Math.atan2(-(to[1] - from[1]), to[0] - from[0]);
 }
 
+function latestHeading(coordinates, segmentIndex) {
+  for (let index = segmentIndex; index >= 0; index -= 1) {
+    const from = coordinates[index];
+    const to = coordinates[index + 1];
+    if (from[0] !== to[0] || from[1] !== to[1]) return segmentHeading(from, to);
+  }
+  return 0;
+}
+
 function interpolateSegment(coordinates, index, ratio) {
   const from = coordinates[index];
   const to = coordinates[index + 1];
   return {
     position: [from[0] + (to[0] - from[0]) * ratio, from[1] + (to[1] - from[1]) * ratio],
-    heading: segmentHeading(from, to),
+    heading: latestHeading(coordinates, index),
   };
 }
 
 function sampleTrack(track, historicalMs) {
   const coordinates = track.coordinates;
   if (coordinates.length === 1) return { position: [...coordinates[0]], heading: 0 };
-  if (historicalMs <= track.startMs) return { position: [...coordinates[0]], heading: segmentHeading(coordinates[0], coordinates[1]) };
+  if (historicalMs <= track.startMs) return { position: [...coordinates[0]], heading: latestHeading(coordinates, 0) };
   if (historicalMs >= track.endMs) {
-    return { position: [...coordinates.at(-1)], heading: segmentHeading(coordinates.at(-2), coordinates.at(-1)) };
+    return { position: [...coordinates.at(-1)], heading: latestHeading(coordinates, coordinates.length - 2) };
   }
 
   if (track.waypointTimes) {
@@ -460,7 +469,7 @@ export function sampleTimeline(timeline, presentationMs) {
   const persistentOutcomeActorIds = new Set();
   for (const window of array(timeline?.engagementWindows)) {
     const engagement = window.engagement;
-    if (historicalMs >= window.endMs && DESTRUCTIVE_RESULTS.has(engagement?.result)) {
+    if (historicalMs >= window.endMs && DESTRUCTIVE_RESULTS.includes(engagement?.result)) {
       persistentOutcomeActorIds.add(engagement?.result_actor_id ?? engagement?.target_actor_id);
     }
   }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -253,4 +254,55 @@ test("empty documents compile and sample without throwing", () => {
   assert.equal(sample.actorPositions.size, 0);
   assert.equal(sample.activeEventIds.size, 0);
   assert.equal(Number.isFinite(sample.historicalMs), true);
+});
+
+test("historical mapping preserves a legitimate epoch-zero end bound", () => {
+  const timeline = compileTimeline(battle({
+    historical_events: [event("epoch", undefined, "1970-01-01T00:00:00Z")],
+  }));
+
+  assert.equal(timeline.historicalEndMs, 0);
+  for (const historicalMs of [timeline.historicalStartMs, timeline.historicalStartMs / 2, 0]) {
+    const presentationMs = toPresentationTime(timeline, historicalMs);
+    assert.ok(Math.abs(toHistoricalTime(timeline, presentationMs) - historicalMs) < 0.001);
+  }
+  assert.equal(toPresentationTime(timeline, 0), timeline.presentationDurationMs);
+});
+
+test("final stationary segments retain the latest non-stationary heading", () => {
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("e", iso(0), iso(10))],
+    movements: [movement("m", "a", "e", [[0, 0], [0, 1], [0, 1]], iso(0), iso(10))],
+  }));
+
+  assert.equal(sampleTimeline(timeline, timeline.presentationDurationMs).headings.get("a"), -Math.PI / 2);
+});
+
+test("entirely stationary tracks use the default zero heading", () => {
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("e", iso(0), iso(10))],
+    movements: [movement("m", "a", "e", [[0, 0], [0, 0]], iso(0), iso(10))],
+  }));
+
+  assert.equal(sampleTimeline(timeline, 0).headings.get("a"), 0);
+});
+
+test("zero configured compression duration normalizes to an invertible positive span", () => {
+  const timeline = compileTimeline(battle({
+    historical_events: [event("a", iso(0), iso(1)), event("b", iso(21), iso(22))],
+    animation_hints: { timeline: { historical_seconds_per_playback_second: 60, idle_compression_threshold_seconds: 900, idle_compressed_duration_ms: 0 } },
+  }));
+  const gap = timeline.compressedGaps[0];
+
+  assert.equal(gap.presentationDurationMs, 1_200);
+  for (const historicalMs of [gap.historicalStartMs, (gap.historicalStartMs + gap.historicalEndMs) / 2, gap.historicalEndMs]) {
+    assert.ok(Math.abs(toHistoricalTime(timeline, toPresentationTime(timeline, historicalMs)) - historicalMs) < 0.001);
+  }
+});
+
+test("timeline module has no mutable global collections", () => {
+  const source = readFileSync(new URL("../app/timeline.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /^const\s+[A-Z_]+\s*=\s*new\s+(?:Set|Map)\b/m);
 });
