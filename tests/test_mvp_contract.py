@@ -49,10 +49,14 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn("0.3.0", schema["properties"]["schema_version"]["enum"])
         movement = schema["$defs"]["Movement"]["properties"]
         self.assertEqual(movement["time"], {"$ref": "#/$defs/DateValue"})
+        self.assertEqual(movement["waypoint_times"]["minItems"], 2)
         self.assertEqual(movement["waypoint_times"]["items"]["type"], "string")
         timeline = schema["$defs"]["AnimationHints"]["properties"]["timeline"]["properties"]
+        self.assertEqual(timeline["historical_seconds_per_playback_second"]["type"], "number")
         self.assertEqual(timeline["historical_seconds_per_playback_second"]["exclusiveMinimum"], 0)
+        self.assertEqual(timeline["idle_compression_threshold_seconds"]["type"], "number")
         self.assertEqual(timeline["idle_compression_threshold_seconds"]["minimum"], 0)
+        self.assertEqual(timeline["idle_compressed_duration_ms"]["type"], "number")
         self.assertEqual(timeline["idle_compressed_duration_ms"]["minimum"], 0)
 
     def test_python_types_declare_v030_fields(self):
@@ -61,6 +65,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn("time: NotRequired[DateValue]", source)
         self.assertIn("waypoint_times: NotRequired[list[str]]", source)
         self.assertIn("historical_seconds_per_playback_second: float", source)
+        self.assertIn("idle_compression_threshold_seconds: float", source)
+        self.assertIn("idle_compressed_duration_ms: float", source)
 
     def test_example_separates_history_from_animation_hints(self):
         battle = json.loads(EXAMPLE.read_text(encoding="utf-8"))
