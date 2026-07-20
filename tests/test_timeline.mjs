@@ -169,6 +169,71 @@ test("fully legacy documents get sequential synthetic ranges from zero", () => {
   assert.deepEqual([timeline.tracks[0].startMs, timeline.tracks[0].endMs], [60_000, 120_000]);
 });
 
+test("date-only legacy events keep their calendar anchor but use ordered synthetic fallback windows", () => {
+  const anchor = parseBattleTime("1815-06-18");
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [
+      event("advance", undefined, undefined, { time: { label: "morning", start: "1815-06-18", precision: "day", confidence: 0.7 } }),
+      event("retreat", undefined, undefined, { time: { label: "evening", start: "1815-06-18", precision: "day", confidence: 0.7 } }),
+    ],
+    movements: [
+      movement("out", "a", "advance", [[0, 0], [10, 0]]),
+      movement("back", "a", "retreat", [[10, 0], [0, 0]]),
+    ],
+    animation_hints: {
+      timeline: {
+        default_event_duration_ms: 1_000,
+        historical_seconds_per_playback_second: 60,
+        ordered_event_ids: ["advance", "retreat"],
+      },
+    },
+  }));
+
+  assert.deepEqual(timeline.eventWindows.map(({ startMs, endMs, synthetic }) => [startMs, endMs, synthetic]), [
+    [anchor, anchor + 60_000, true],
+    [anchor + 60_000, anchor + 120_000, true],
+  ]);
+  assert.equal(timeline.presentationDurationMs, 2_000);
+  assert.deepEqual(sampleTimeline(timeline, 500).actorPositions.get("a"), [5, 0]);
+  assert.deepEqual(sampleTimeline(timeline, 1_500).actorPositions.get("a"), [5, 0]);
+  assert.equal(sampleTimeline(timeline, 1_000).synthetic, true);
+});
+
+test("year and month precision without a time of day also use synthetic fallback display", () => {
+  for (const [precision, start] of [["year", "1815"], ["month", "1815-06"]]) {
+    const timeline = compileTimeline(battle({
+      historical_events: [event(precision, undefined, undefined, {
+        time: { label: start, start, precision, confidence: 0.7 },
+      })],
+      animation_hints: { timeline: { default_event_duration_ms: 1_000 } },
+    }));
+
+    assert.equal(timeline.eventWindows[0].startMs, parseBattleTime(start), precision);
+    assert.equal(timeline.eventWindows[0].synthetic, true, precision);
+    assert.equal(sampleTimeline(timeline, 500).synthetic, true, precision);
+  }
+});
+
+test("mixed coarse and explicit windows mark only the coarse fallback as synthetic", () => {
+  const timeline = compileTimeline(battle({
+    historical_events: [
+      event("coarse", undefined, undefined, { time: { label: "day", start: "1815-06-18", precision: "day", confidence: 0.7 } }),
+      event("explicit", "1815-06-19T12:00:00", "1815-06-19T12:10:00", {
+        time: { label: "noon", start: "1815-06-19T12:00:00", end: "1815-06-19T12:10:00", precision: "range", confidence: 0.8 },
+      }),
+    ],
+    animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+  }));
+  const [coarse, explicit] = timeline.eventWindows;
+
+  assert.equal(coarse.synthetic, true);
+  assert.equal(explicit.synthetic, false);
+  assert.equal(timeline.synthetic, false);
+  assert.equal(sampleTimeline(timeline, toPresentationTime(timeline, coarse.startMs + 30_000)).synthetic, true);
+  assert.equal(sampleTimeline(timeline, toPresentationTime(timeline, explicit.startMs + 300_000)).synthetic, false);
+});
+
 test("an ordered untimed event fills the interval between timed events", () => {
   const fixture = battle({
     actors: [{ id: "a" }],

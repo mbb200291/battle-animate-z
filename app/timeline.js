@@ -5,6 +5,7 @@ const DEFAULT_SCALE = 60;
 const DEFAULT_IDLE_THRESHOLD_SECONDS = 900;
 const DEFAULT_COMPRESSED_DURATION_MS = 1200;
 const DESTRUCTIVE_RESULTS = Object.freeze(["sunk", "disabled", "captured"]);
+const COARSE_DATE_PRECISIONS = Object.freeze(["year", "month", "day"]);
 
 function daysInMonth(year, month) {
   if (month === 2) {
@@ -68,6 +69,17 @@ function parsedRange(value) {
   };
 }
 
+function isCoarseDateValue(value) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && COARSE_DATE_PRECISIONS.includes(value.precision)
+    && typeof value.start === "string"
+    && !value.start.includes("T")
+    && parseBattleTime(value.start) !== null,
+  );
+}
+
 function orderedEvents(battle) {
   const events = array(battle?.historical_events);
   const byId = new Map(events.map((item) => [item?.id, item]));
@@ -99,8 +111,11 @@ function completeRange(range, fallbackDurationMs) {
 function compileEventWindows(battle, fallbackDurationMs) {
   const events = orderedEvents(battle);
   const partial = events.map((item, sourceIndex) => {
-    const range = completeRange(parsedRange(item?.time), fallbackDurationMs);
-    return { id: item?.id, event: item, sourceIndex, ...range, synthetic: false };
+    const coarseDate = isCoarseDateValue(item?.time);
+    const range = coarseDate
+      ? { startMs: parseBattleTime(item.time.start), endMs: null }
+      : completeRange(parsedRange(item?.time), fallbackDurationMs);
+    return { id: item?.id, event: item, sourceIndex, ...range, synthetic: coarseDate };
   });
   if (partial.every(({ startMs }) => startMs === null)) {
     let cursor = 0;
@@ -111,6 +126,14 @@ function compileEventWindows(battle, fallbackDurationMs) {
       cursor = window.endMs;
     }
     return partial;
+  }
+  let previousWindow = null;
+  for (const window of partial) {
+    if (window.synthetic && window.startMs !== null) {
+      window.startMs = Math.max(window.startMs, previousWindow?.endMs ?? window.startMs);
+      window.endMs = window.startMs + fallbackDurationMs;
+    }
+    if (window.startMs !== null) previousWindow = window;
   }
 
   for (let index = 0; index < partial.length;) {

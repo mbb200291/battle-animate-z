@@ -612,6 +612,33 @@ test("compression notice is deterministic and synthetic clocks never fabricate e
   assert.equal(syntheticDocument.getElementById("historical-time").textContent, "Animation time 00:01");
 });
 
+test("date-only legacy playback uses the animation clock while moving continuously", () => {
+  const legacyBattle = battleFixture();
+  legacyBattle.schema_version = "0.1.0";
+  for (const event of legacyBattle.historical_events) {
+    event.time = { label: "1 January 2020", start: "2020-01-01", precision: "day", confidence: 0.7 };
+  }
+  for (const movement of legacyBattle.movements) delete movement.time;
+  legacyBattle.engagements = [];
+  legacyBattle.animation_hints.timeline = {
+    default_event_duration_ms: 1_000,
+    historical_seconds_per_playback_second: 1,
+    ordered_event_ids: ["opening", "finish"],
+  };
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(legacyBattle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const alpha = descendants(svg).find((element) => element.getAttribute("data-actor-id") === "alpha");
+  const initialTransform = alpha.getAttribute("transform");
+
+  controller.seek(500);
+  assert.notEqual(alpha.getAttribute("transform"), initialTransform);
+  controller.seek(1_000);
+  assert.equal(document.getElementById("historical-time").textContent, "Animation time 00:01");
+});
+
 test("follow uses wall-clock throttling and manual map interaction suspends it", () => {
   const battle = battleFixture();
   battle.movements[0].path.coordinates = [[0, 0], [8, 0]];
