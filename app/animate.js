@@ -358,6 +358,20 @@ function validateRendererShapes(battle, errors) {
         }
       }
     }
+    const mapHints = battle.animation_hints.map;
+    if (isObject(mapHints)) {
+      if ("initial_center" in mapHints) {
+        validateCoordinatePair(
+          mapHints.initial_center,
+          "$.animation_hints.map.initial_center",
+          errors,
+        );
+      }
+      if ("initial_zoom" in mapHints
+          && (typeof mapHints.initial_zoom !== "number" || !Number.isFinite(mapHints.initial_zoom))) {
+        errors.push("$.animation_hints.map.initial_zoom: expected finite number");
+      }
+    }
   }
   return errors.length === initialErrorCount;
 }

@@ -116,6 +116,8 @@ test("renderer-required collection members and nested containers reject malforme
     ["movement coordinates", (battle) => { delete battle.movements[0].path.coordinates; }, /\$\.movements\[0\]\.path\.coordinates.*expected array/i],
     ["movement coordinate", (battle) => { battle.movements[0].path.coordinates[1] = null; }, /\$\.movements\[0\]\.path\.coordinates\[1\].*coordinate pair/i],
     ["event icon", (battle) => { battle.animation_hints.style.event_icons = { advance: 5 }; }, /\$\.animation_hints\.style\.event_icons\.advance.*expected string/i],
+    ["map center", (battle) => { battle.animation_hints.map = { initial_center: [0] }; }, /\$\.animation_hints\.map\.initial_center.*coordinate pair/i],
+    ["map zoom", (battle) => { battle.animation_hints.map = { initial_zoom: "8" }; }, /\$\.animation_hints\.map\.initial_zoom.*finite number/i],
   ];
   for (const [label, mutate, expected] of cases) {
     const battle = fixture();
@@ -348,6 +350,8 @@ test("malformed renderer members and nested shapes never render and tear down sa
     (battle) => { delete battle.places[0].geometry; },
     (battle) => { delete battle.movements[0].path.coordinates; },
     (battle) => { battle.animation_hints.style.event_icons = { advance: 5 }; },
+    (battle) => { battle.animation_hints.map = { initial_center: null }; },
+    (battle) => { battle.animation_hints.map = { initial_zoom: Number.POSITIVE_INFINITY }; },
   ];
   for (const mutate of cases) {
     const documentRef = fakeDocument();
