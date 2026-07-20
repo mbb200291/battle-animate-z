@@ -15,7 +15,7 @@ The project remains a historical visualization format, not a combat simulation. 
 - Naval actors may be individual ships. Land actors target divisions or brigades.
 - Playback preserves relative historical time while compressing inactive gaps.
 - The user can change playback speed.
-- Missing exact times may be inferred by an LLM only when marked `precision: "inferred"` with low confidence.
+- Missing exact times may be inferred by an LLM only when the containing movement is marked `precision: "inferred"` and its time has low confidence.
 - The camera follows the active area smoothly and moves only when active units approach the viewport safe boundary.
 - Unit graphics use built-in SVG symbols selected by controlled semantic tokens. Generated `0.3.0` data does not use emoji or embed SVG.
 - Unknown icon tokens fall back to a generic built-in SVG for the actor kind and produce a warning.
@@ -71,7 +71,7 @@ This separation makes the core trajectory engine domain-neutral. Naval, land, an
     "label": "約 12:50–13:05",
     "start": "1894-09-17T12:50:00",
     "end": "1894-09-17T13:05:00",
-    "precision": "inferred",
+    "precision": "range",
     "confidence": 0.45
   },
   "waypoint_times": [
@@ -90,7 +90,7 @@ This separation makes the core trajectory engine domain-neutral. Naval, land, an
 - With no movement `time`, the compiler uses the linked event's start and end.
 - If the event has only one usable time, the compiler assigns the legacy presentation duration beginning at that time.
 - If neither movement nor event provides a parseable time range, the compiler assigns a synthetic range after the preceding ordered event. The UI labels that range as animation timing rather than historical timing.
-- If an LLM estimates movement timing or intermediate positions, both movement precision and time precision are `inferred`, and confidence is at most `0.6`.
+- If an LLM estimates movement timing or intermediate positions, movement precision is `inferred` and time confidence is at most `0.6`. `time.precision` continues to describe temporal granularity (`hour`, `range`, and so on), not evidentiary certainty.
 
 All ISO date-time values within one document must use a consistent interpretation. Offset-bearing values are preferred. Offset-free historical values are treated as local battle time, never as the viewer's device timezone.
 
@@ -183,7 +183,7 @@ Recoverable conditions produce visible warnings:
 
 - unknown icon token, followed by kind-based SVG fallback;
 - absent timing, followed by event-time or synthetic-range fallback;
-- `inferred` timing with confidence above `0.6`;
+- movement timing with confidence above `0.6` when the containing movement is `inferred`;
 - a boundary overlap in which the later movement begins at the previous movement's final position; the later movement owns the shared instant;
 - label collision, followed by secondary-label suppression.
 
@@ -195,7 +195,7 @@ The README prompt is updated for `0.3.0` with:
 
 - instructions to split naval actions into ships and land actions into divisions or brigades when sources permit;
 - `movement.time` and optional `waypoint_times` examples;
-- a rule that inferred intermediate times and positions use `precision: "inferred"` and confidence at most `0.6`;
+- a rule that inferred intermediate times and positions set movement `precision: "inferred"`, use the appropriate temporal granularity in `time.precision`, and keep confidence at most `0.6`;
 - the complete controlled icon vocabulary and a short selection table;
 - an explicit prohibition on emoji, arbitrary icon names, data URLs, and SVG markup in `actor_icons`;
 - guidance to use the generic token when a specific platform is uncertain;
