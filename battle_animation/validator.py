@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +12,39 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
 
+ACTOR_ICON_TOKENS = {
+    "warship_generic",
+    "warship_ironclad",
+    "warship_battleship",
+    "warship_armored_cruiser",
+    "warship_protected_cruiser",
+    "warship_destroyer",
+    "warship_torpedo_boat",
+    "naval_transport",
+    "fleet_generic",
+    "infantry",
+    "cavalry",
+    "artillery",
+    "armor",
+    "engineer",
+    "logistics",
+    "headquarters",
+    "fortress",
+    "aircraft",
+    "aircraft_fighter",
+    "aircraft_bomber",
+    "unit_generic",
+}
+
 
 class ValidationError(ValueError):
+    def __init__(self, path: str, message: str) -> None:
+        super().__init__(f"{path}: {message}")
+        self.path = path
+        self.message = message
+
+
+class ValidationWarning(ValueError):
     def __init__(self, path: str, message: str) -> None:
         super().__init__(f"{path}: {message}")
         self.path = path
@@ -25,11 +57,39 @@ def load_json(path: Path) -> Any:
 
 
 def validate_document(document: Any, schema: dict[str, Any] | None = None) -> list[ValidationError]:
+    errors, _warnings = validate_document_with_warnings(document, schema)
+    return errors
+
+
+def validate_document_with_warnings(
+    document: Any, schema: dict[str, Any] | None = None
+) -> tuple[list[ValidationError], list[ValidationWarning]]:
     schema = schema or load_json(DEFAULT_SCHEMA)
     errors: list[ValidationError] = []
+    warnings: list[ValidationWarning] = []
     _validate(document, schema, schema, "$", errors)
     _validate_references(document, errors)
-    return errors
+    _validate_timing(document, errors, warnings)
+    _validate_movement_overlaps(document, errors, warnings)
+    _validate_icon_tokens(document, warnings)
+    return errors, warnings
+
+
+def _parse_battle_time(value: str) -> float:
+    if not isinstance(value, str):
+        raise ValueError("battle time must be a string")
+    normalized = f"{value[:-1]}+00:00" if value.endswith("Z") else value
+    if re.fullmatch(r"\d{4}", normalized):
+        normalized = f"{normalized}-01-01"
+    elif re.fullmatch(r"\d{4}-\d{2}", normalized):
+        normalized = f"{normalized}-01"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError("invalid ISO battle time") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp() * 1000
 
 
 def _resolve_ref(ref: str, root_schema: dict[str, Any]) -> dict[str, Any]:
@@ -212,6 +272,170 @@ def _check_optional_ref(parent: dict[str, Any], key: str, allowed: set[Any], pat
         errors.append(ValidationError(f"{path}.{key}", f"unknown id {parent.get(key)!r}"))
 
 
+def _validate_timing(
+    document: Any, errors: list[ValidationError], warnings: list[ValidationWarning]
+) -> None:
+    if not isinstance(document, dict):
+        return
+
+    for collection_name in ("historical_events", "engagements"):
+        collection = document.get(collection_name, [])
+        if not isinstance(collection, list):
+            continue
+        for index, item in enumerate(collection):
+            if isinstance(item, dict) and "time" in item:
+                _validate_date_value_time(item["time"], f"$.{collection_name}[{index}].time", errors)
+
+    movements = document.get("movements", [])
+    if not isinstance(movements, list):
+        return
+    for index, movement in enumerate(movements):
+        if not isinstance(movement, dict):
+            continue
+        path = f"$.movements[{index}]"
+        start = end = None
+        time_value = movement.get("time")
+        if "time" in movement:
+            start, end = _validate_date_value_time(time_value, f"{path}.time", errors)
+        if (
+            movement.get("precision") == "inferred"
+            and isinstance(time_value, dict)
+            and isinstance(time_value.get("confidence"), (int, float))
+            and not isinstance(time_value.get("confidence"), bool)
+            and time_value["confidence"] > 0.6
+        ):
+            warnings.append(
+                ValidationWarning(f"{path}.time.confidence", "inferred time confidence must be <= 0.6")
+            )
+
+        waypoint_values = movement.get("waypoint_times")
+        if not isinstance(waypoint_values, list):
+            continue
+        coordinates = movement.get("path", {}).get("coordinates") if isinstance(movement.get("path"), dict) else None
+        if isinstance(coordinates, list) and len(waypoint_values) != len(coordinates):
+            errors.append(
+                ValidationError(f"{path}.waypoint_times", "count must match path coordinate count")
+            )
+
+        waypoint_times: list[float | None] = []
+        for waypoint_index, value in enumerate(waypoint_values):
+            try:
+                waypoint_times.append(_parse_battle_time(value))
+            except ValueError:
+                errors.append(
+                    ValidationError(
+                        f"{path}.waypoint_times[{waypoint_index}]", "invalid ISO battle time"
+                    )
+                )
+                waypoint_times.append(None)
+
+        if any(
+            earlier is not None and later is not None and later <= earlier
+            for earlier, later in zip(waypoint_times, waypoint_times[1:])
+        ):
+            errors.append(ValidationError(f"{path}.waypoint_times", "values must be strictly increasing"))
+        if waypoint_times and waypoint_times[0] is not None and start is not None and waypoint_times[0] < start:
+            errors.append(ValidationError(f"{path}.waypoint_times[0]", "value is before movement start"))
+        if waypoint_times and waypoint_times[-1] is not None and end is not None and waypoint_times[-1] > end:
+            errors.append(
+                ValidationError(
+                    f"{path}.waypoint_times[{len(waypoint_times) - 1}]", "value is after movement end"
+                )
+            )
+
+
+def _validate_date_value_time(
+    value: Any, path: str, errors: list[ValidationError]
+) -> tuple[float | None, float | None]:
+    if not isinstance(value, dict):
+        return None, None
+    parsed: dict[str, float | None] = {"start": None, "end": None}
+    for field in parsed:
+        if field not in value:
+            continue
+        try:
+            parsed[field] = _parse_battle_time(value[field])
+        except ValueError:
+            errors.append(ValidationError(f"{path}.{field}", "invalid ISO battle time"))
+    start, end = parsed["start"], parsed["end"]
+    if start is not None and end is not None and end < start:
+        errors.append(ValidationError(path, "end must not be before start"))
+    return start, end
+
+
+def _validate_movement_overlaps(
+    document: Any, errors: list[ValidationError], warnings: list[ValidationWarning]
+) -> None:
+    if not isinstance(document, dict) or not isinstance(document.get("movements", []), list):
+        return
+    by_actor: dict[Any, list[tuple[float, float, int, dict[str, Any]]]] = {}
+    for index, movement in enumerate(document.get("movements", [])):
+        if not isinstance(movement, dict) or not isinstance(movement.get("time"), dict):
+            continue
+        time_value = movement["time"]
+        if "start" not in time_value or "end" not in time_value:
+            continue
+        try:
+            start = _parse_battle_time(time_value["start"])
+            end = _parse_battle_time(time_value["end"])
+        except ValueError:
+            continue
+        if end < start:
+            continue
+        by_actor.setdefault(movement.get("actor_id"), []).append((start, end, index, movement))
+
+    for actor_id, timed_movements in by_actor.items():
+        timed_movements.sort(key=lambda item: (item[0], item[1], item[2]))
+        for later_position, later in enumerate(timed_movements[1:], start=1):
+            overlapping_previous = [
+                previous
+                for previous in timed_movements[:later_position]
+                if later[0] < previous[1]
+            ]
+            if not overlapping_previous:
+                continue
+            later_coordinates = _movement_coordinates(later[3])
+            path = f"$.movements[{later[2]}]"
+            connects_to_all = bool(later_coordinates) and all(
+                (previous_coordinates := _movement_coordinates(previous[3]))
+                and previous_coordinates[-1] == later_coordinates[0]
+                for previous in overlapping_previous
+            )
+            if connects_to_all:
+                warnings.append(
+                    ValidationWarning(path, "overlap resolved in favor of later movement")
+                )
+            else:
+                errors.append(
+                    ValidationError(path, f"conflicting overlapping movements for actor {actor_id!r}")
+                )
+
+
+def _movement_coordinates(movement: dict[str, Any]) -> list[Any] | None:
+    path = movement.get("path")
+    if not isinstance(path, dict) or not isinstance(path.get("coordinates"), list):
+        return None
+    return path["coordinates"]
+
+
+def _validate_icon_tokens(document: Any, warnings: list[ValidationWarning]) -> None:
+    if not isinstance(document, dict) or document.get("schema_version") != "0.3.0":
+        return
+    animation_hints = document.get("animation_hints")
+    style = animation_hints.get("style") if isinstance(animation_hints, dict) else None
+    actor_icons = style.get("actor_icons") if isinstance(style, dict) else None
+    if not isinstance(actor_icons, dict):
+        return
+    for actor_id, token in actor_icons.items():
+        if not isinstance(token, str) or token not in ACTOR_ICON_TOKENS:
+            warnings.append(
+                ValidationWarning(
+                    f"$.animation_hints.style.actor_icons.{actor_id}",
+                    f"unknown actor icon token {token!r}",
+                )
+            )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate a battle-animation-schema JSON document.")
     parser.add_argument("document", type=Path)
@@ -228,7 +452,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: invalid JSON: {exc}", file=sys.stderr)
         return 2
 
-    errors = validate_document(document, schema)
+    errors, warnings = validate_document_with_warnings(document, schema)
+    for warning in warnings:
+        print(f"warning: {warning}", file=sys.stderr)
     if errors:
         for error in errors:
             print(f"error: {error}", file=sys.stderr)

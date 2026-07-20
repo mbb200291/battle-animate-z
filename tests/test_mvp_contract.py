@@ -1,11 +1,12 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
 
-from battle_animation.validator import validate_document
+from battle_animation.validator import validate_document, validate_document_with_warnings
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,22 @@ SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
 
 
 class BattleAnimationMvpContractTest(unittest.TestCase):
+    def _minimal_timed_document(self):
+        document = deepcopy(json.loads(EXAMPLE.read_text(encoding="utf-8")))
+        document["schema_version"] = "0.3.0"
+        movement = document["movements"][0]
+        movement["path"]["coordinates"] = movement["path"]["coordinates"][:2]
+        movement["time"] = {
+            "label": "10:00–10:10",
+            "start": "1815-06-18T10:00:00Z",
+            "end": "1815-06-18T10:10:00Z",
+            "precision": "range",
+            "confidence": 0.5,
+        }
+        movement["waypoint_times"] = ["1815-06-18T10:00:00Z", "1815-06-18T10:10:00Z"]
+        movement["precision"] = "inferred"
+        return document
+
     def _valid_v030_document(self):
         document = deepcopy(json.loads(EXAMPLE.read_text(encoding="utf-8")))
         document["schema_version"] = "0.3.0"
@@ -163,6 +180,179 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 for error in errors
             )
         )
+
+    def test_waypoint_times_count_must_match_path_coordinates(self):
+        document = self._minimal_timed_document()
+        document["movements"][0]["path"]["coordinates"].append([4.405, 50.685])
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(any("count must match path coordinate count" in error.message for error in errors))
+
+    def test_waypoint_times_must_be_strictly_increasing(self):
+        document = self._minimal_timed_document()
+        document["movements"][0]["waypoint_times"][1] = "1815-06-18T10:00:00Z"
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(any("strictly increasing" in error.message for error in errors))
+
+    def test_movement_time_must_be_valid_and_ordered(self):
+        for field, value in (("start", "not-a-date"), ("end", "1815-06-18T09:59:00Z")):
+            with self.subTest(field=field):
+                document = self._minimal_timed_document()
+                document["movements"][0]["time"][field] = value
+
+                errors, _warnings = validate_document_with_warnings(document)
+
+                self.assertTrue(errors)
+
+    def test_waypoint_times_must_fall_within_movement_range(self):
+        for index, value in ((0, "1815-06-18T09:59:00Z"), (1, "1815-06-18T10:11:00Z")):
+            with self.subTest(index=index):
+                document = self._minimal_timed_document()
+                document["movements"][0]["waypoint_times"][index] = value
+
+                errors, _warnings = validate_document_with_warnings(document)
+
+                self.assertTrue(errors)
+
+    def test_engagement_time_must_be_valid_and_ordered(self):
+        for start, end in (("not-a-date", "1815-06-18T10:05:00Z"), ("1815-06-18T10:10:00Z", "1815-06-18T10:05:00Z")):
+            with self.subTest(start=start, end=end):
+                document = self._minimal_timed_document()
+                document["engagements"] = [{
+                    "id": "engagement_test",
+                    "event_id": document["historical_events"][0]["id"],
+                    "attacker_actor_id": document["actors"][0]["id"],
+                    "target_actor_id": document["actors"][1]["id"],
+                    "type": "fire",
+                    "time": {
+                        "label": "test engagement",
+                        "start": start,
+                        "end": end,
+                        "precision": "range",
+                        "confidence": 0.5,
+                    },
+                    "confidence": 0.5,
+                }]
+
+                errors, _warnings = validate_document_with_warnings(document)
+
+                self.assertTrue(errors)
+
+    def test_historical_event_time_must_be_valid_and_ordered(self):
+        document = self._minimal_timed_document()
+        document["historical_events"][0]["time"]["start"] = "not-a-date"
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(errors)
+
+    def test_reduced_iso_month_is_valid_battle_time(self):
+        document = self._minimal_timed_document()
+        document["historical_events"][0]["time"]["start"] = "1815-06"
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertFalse(any(error.path == "$.historical_events[0].time.start" for error in errors))
+
+    def test_unknown_v030_actor_icon_token_is_warning_only(self):
+        document = self._minimal_timed_document()
+        document["animation_hints"]["style"]["actor_icons"] = {document["actors"][0]["id"]: "🚢"}
+
+        errors, warnings = validate_document_with_warnings(document)
+
+        self.assertEqual(errors, [])
+        self.assertTrue(any("unknown actor icon token" in warning.message for warning in warnings))
+
+    def test_inferred_movement_high_time_confidence_is_warning_only(self):
+        document = self._minimal_timed_document()
+        document["movements"][0]["time"]["confidence"] = 0.9
+
+        errors, warnings = validate_document_with_warnings(document)
+
+        self.assertEqual(errors, [])
+        self.assertTrue(any("inferred time confidence must be <= 0.6" in warning.message for warning in warnings))
+
+    def test_disconnected_overlapping_movements_are_fatal(self):
+        document = self._minimal_timed_document()
+        later = deepcopy(document["movements"][0])
+        later["id"] = "move_french_overlap"
+        later["time"]["start"] = "1815-06-18T10:05:00Z"
+        later["time"]["end"] = "1815-06-18T10:15:00Z"
+        later["waypoint_times"] = ["1815-06-18T10:05:00Z", "1815-06-18T10:15:00Z"]
+        later["path"]["coordinates"] = [[4.500, 50.700], [4.510, 50.710]]
+        document["movements"].append(later)
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(any("conflicting overlapping movements for actor" in error.message for error in errors))
+
+    def test_connected_overlapping_movements_warn_and_later_wins(self):
+        document = self._minimal_timed_document()
+        previous_last = document["movements"][0]["path"]["coordinates"][-1]
+        later = deepcopy(document["movements"][0])
+        later["id"] = "move_french_overlap"
+        later["time"]["start"] = "1815-06-18T10:05:00Z"
+        later["time"]["end"] = "1815-06-18T10:15:00Z"
+        later["waypoint_times"] = ["1815-06-18T10:05:00Z", "1815-06-18T10:15:00Z"]
+        later["path"]["coordinates"] = [previous_last, [4.400, 50.690]]
+        document["movements"].append(later)
+
+        errors, warnings = validate_document_with_warnings(document)
+
+        self.assertEqual(errors, [])
+        self.assertTrue(any("overlap resolved in favor of later movement" in warning.message for warning in warnings))
+
+    def test_nested_overlap_checks_all_active_previous_movements(self):
+        document = self._minimal_timed_document()
+        first = document["movements"][0]
+        first["time"]["end"] = "1815-06-18T10:20:00Z"
+        first["waypoint_times"][-1] = "1815-06-18T10:20:00Z"
+
+        middle = deepcopy(first)
+        middle["id"] = "move_french_middle"
+        middle["time"]["start"] = "1815-06-18T10:01:00Z"
+        middle["time"]["end"] = "1815-06-18T10:02:00Z"
+        middle["waypoint_times"] = ["1815-06-18T10:01:00Z", "1815-06-18T10:02:00Z"]
+        middle["path"]["coordinates"] = [first["path"]["coordinates"][-1], [4.400, 50.690]]
+
+        later = deepcopy(middle)
+        later["id"] = "move_french_later"
+        later["time"]["start"] = "1815-06-18T10:03:00Z"
+        later["time"]["end"] = "1815-06-18T10:04:00Z"
+        later["waypoint_times"] = ["1815-06-18T10:03:00Z", "1815-06-18T10:04:00Z"]
+        later["path"]["coordinates"] = [middle["path"]["coordinates"][-1], [4.390, 50.695]]
+        document["movements"].extend([middle, later])
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(any("conflicting overlapping movements for actor" in error.message for error in errors))
+
+    def test_validate_document_remains_errors_only(self):
+        document = self._minimal_timed_document()
+        document["movements"][0]["time"]["confidence"] = 0.9
+
+        self.assertEqual(validate_document(document), [])
+
+    def test_cli_prints_warning_but_accepts_warning_only_document(self):
+        document = self._minimal_timed_document()
+        document["movements"][0]["time"]["confidence"] = 0.9
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "warning-only.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, "-m", "battle_animation.validator", str(path)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("warning:", result.stderr)
+        self.assertIn("valid:", result.stdout)
 
     def test_example_separates_history_from_animation_hints(self):
         battle = json.loads(EXAMPLE.read_text(encoding="utf-8"))
