@@ -35,6 +35,7 @@ textarea {
 }
 
 .workspace {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
   gap: 20px;
@@ -151,7 +152,7 @@ textarea {
   z-index: 710;
   display: grid;
   gap: 8px;
-  width: min(340px, calc(100% - 150px));
+  width: min(340px, calc(100% - 420px));
   pointer-events: none;
 }
 
@@ -656,9 +657,9 @@ button.ghost,
   }
 
   .event-card-stack {
-    top: 12px;
-    left: 12px;
-    width: min(300px, calc(100% - 116px));
+    position: static;
+    z-index: auto;
+    width: auto;
   }
 
   .event-card {

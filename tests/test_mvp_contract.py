@@ -492,6 +492,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             index,
             r'id="event-scrubber"[^>]*step="any"',
         )
+        self.assertRegex(
+            index,
+            r'</div>\s*</div>\s*<section id="event-card-stack"[^>]*></section>\s*<aside class="inspector"',
+        )
 
     def test_renderer_uses_timeline_and_symbol_modules(self):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")

@@ -107,7 +107,7 @@ class FakeElement {
     this[`on${type}`]?.({ target: this, ...event });
   }
 
-  scrollIntoView() {}
+  scrollIntoView(options) { this.scrollOptions = options; }
 }
 
 function descendants(root) {
@@ -171,13 +171,14 @@ class FakeDocument {
 }
 
 class FrameClock {
-  constructor() {
+  constructor(reducedMotion = false) {
     this.nextId = 0;
     this.callbacks = new Map();
     this.cancelled = [];
     this.now = 0;
     this.window = {
       performance: { now: () => this.now },
+      matchMedia: () => ({ matches: reducedMotion }),
       requestAnimationFrame: (callback) => {
         const id = this.nextId;
         this.nextId += 1;
@@ -207,6 +208,7 @@ class FakeMap {
     this.offCount = 0;
     this.zoom = 8;
     this.flyCalls = [];
+    this.pointFlyCalls = [];
   }
 
   getContainer() { return this.container; }
@@ -225,6 +227,7 @@ class FakeMap {
   }
   fire(event) { for (const listener of this.listeners.get(event) || []) listener(); }
   flyToBounds(bounds, options) { this.flyCalls.push({ bounds, options }); return this; }
+  flyTo(point, zoom, options) { this.pointFlyCalls.push({ point, zoom, options }); return this; }
   off() { this.offCount += 1; this.listeners.clear(); return this; }
   remove() { this.removeCount += 1; }
 }
@@ -522,6 +525,43 @@ test("event card stack caps at three and keeps the current card", () => {
   assert.equal(stack.children.at(-1).dataset.eventId, "fourth");
 });
 
+test("overlapping active events each create cards and the latest event is current", () => {
+  const battle = battleFixture();
+  battle.historical_events[0].time.end = "2020-01-01T00:00:03Z";
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const stack = document.getElementById("event-card-stack");
+  assert.deepEqual(stack.children.map((card) => card.dataset.eventId), ["opening"]);
+
+  controller.seek(1200);
+  assert.equal(controller.currentIndex, 1);
+  assert.deepEqual(stack.children.map((card) => card.dataset.eventId), ["opening", "finish"]);
+  controller.seek(1300);
+  assert.equal(stack.children.length, 2);
+  controller.seek(2500);
+  controller.seek(1200);
+  assert.deepEqual(stack.children.map((card) => card.dataset.eventId), ["opening", "finish", "finish"]);
+});
+
+test("event cards expose keyboard pause behavior", () => {
+  const { controller, document } = setup();
+  const card = document.getElementById("event-card-stack").children[0];
+  assert.equal(card.getAttribute("role"), "button");
+  assert.equal(card.getAttribute("tabindex"), "0");
+  assert.match(card.getAttribute("aria-label"), /pause/i);
+
+  controller.play();
+  card.dispatch("keydown", { key: "Enter", preventDefault() {} });
+  assert.equal(controller.isPlaying, false);
+  let prevented = false;
+  controller.play();
+  card.dispatch("keydown", { key: " ", preventDefault() { prevented = true; } });
+  assert.equal(controller.isPlaying, false);
+  assert.equal(prevented, true);
+});
+
 test("compression notice is deterministic and synthetic clocks never fabricate epoch dates", () => {
   const battle = battleFixture();
   battle.historical_events[1].time = {
@@ -562,6 +602,7 @@ test("follow uses wall-clock throttling and manual map interaction suspends it",
   controller.seek(900);
   assert.equal(map.flyCalls.length, 1);
   assert.equal(map.flyCalls[0].bounds.padRatio, 0.35);
+  assert.equal(map.flyCalls[0].options.maxZoom, map.getZoom());
   assert.ok(map.flyCalls[0].options.duration >= 0.8 && map.flyCalls[0].options.duration <= 2.4);
   assert.equal(controller._programmaticMove, true);
   map.fire("moveend");
@@ -579,6 +620,30 @@ test("follow uses wall-clock throttling and manual map interaction suspends it",
   map.fire("dragstart");
   assert.equal(controller.followEnabled, false);
   assert.equal(document.getElementById("follow-button").textContent, "Follow: off");
+});
+
+test("single-point follow preserves zoom and reduced motion disables camera animation", () => {
+  const battle = battleFixture();
+  battle.actors = [battle.actors[0]];
+  battle.historical_events[0].target_actor_ids = [];
+  battle.historical_events[1].target_actor_ids = [];
+  battle.movements = battle.movements.filter(({ actor_id }) => actor_id === "alpha");
+  battle.movements[0].path.coordinates = [[0, 0], [8, 0]];
+  battle.engagements = [];
+  const clock = new FrameClock(true);
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(battle, document);
+  clock.now = 500;
+  controller.seek(900);
+
+  assert.equal(maps[0].flyCalls.length, 0);
+  assert.equal(maps[0].pointFlyCalls.length, 1);
+  assert.equal(maps[0].pointFlyCalls[0].zoom, maps[0].getZoom());
+  assert.equal(maps[0].pointFlyCalls[0].options.animate, false);
+  assert.equal(maps[0].pointFlyCalls[0].options.duration, 0);
+  const firstTimelineButton = document.querySelectorAll("#timeline button")[0];
+  assert.equal(firstTimelineButton.scrollOptions.behavior, "auto");
 });
 
 test("zoom hierarchy exposes near, middle, and far SVG classes", () => {
@@ -607,6 +672,53 @@ test("destroy is idempotent and cancels frames and listeners exactly once", () =
   assert.equal(document.listeners.get("keydown")?.size ?? 0, 0);
   assert.equal(maps[0].offCount, 1);
   assert.equal(maps[0].removeCount, 1);
+});
+
+test("destroy tears down owned controls and timeline handlers and blocks public re-entry", () => {
+  const { clock, controller, document, maps } = setup();
+  wirePlaybackControls(controller, document);
+  const timelineButton = document.querySelectorAll("#timeline button")[1];
+  const eventCard = document.getElementById("event-card-stack").children[0];
+  controller.destroy();
+  const flyCount = maps[0].flyCalls.length + maps[0].pointFlyCalls.length;
+
+  document.getElementById("play-button").dispatch("click");
+  timelineButton.dispatch("click");
+  controller.play();
+  controller.seek(900);
+  assert.equal(clock.callbacks.size, 0);
+  assert.equal(maps[0].flyCalls.length + maps[0].pointFlyCalls.length, flyCount);
+  assert.equal(timelineButton.listeners.get("click")?.size ?? 0, 0);
+  assert.equal(eventCard.listeners.get("keydown")?.size ?? 0, 0);
+});
+
+test("control teardown clears only handlers it owns", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const controller = {
+    followEnabled: true, toggle() {}, pause() {}, seek() {}, prev() {}, next() {}, setSpeed() {}, setFollowEnabled() {},
+  };
+  const teardown = wirePlaybackControls(controller, document);
+  const foreignHandler = () => {};
+  document.getElementById("play-button").onclick = foreignHandler;
+  teardown();
+  assert.equal(document.getElementById("play-button").onclick, foreignHandler);
+});
+
+test("empty timelines reset progress and use a sentinel current index", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battleFixture(), document);
+  const empty = battleFixture();
+  empty.historical_events = [];
+  empty.movements = [];
+  empty.engagements = [];
+  empty.animation_hints.timeline.ordered_event_ids = [];
+  const controller = renderBattle(empty, document);
+
+  assert.equal(controller.currentIndex, -1);
+  assert.equal(document.getElementById("event-progress").textContent, "0 / 0");
 });
 
 test("render replacement cannot be damaged by a stale controller destroy", () => {

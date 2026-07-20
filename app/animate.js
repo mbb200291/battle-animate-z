@@ -75,34 +75,51 @@ export async function loadBattle(url) {
 }
 
 export function wirePlaybackControls(controller, documentRef = document) {
+  documentRef._battlePlaybackTeardown?.();
   const $ = (id) => documentRef.getElementById(id);
+  const bindings = [];
+  const own = (element, property, handler) => {
+    if (!element) return;
+    element[property] = handler;
+    bindings.push({ element, property, handler });
+  };
   const play = $("play-button");
-  if (play) play.onclick = () => controller.toggle();
+  own(play, "onclick", () => controller.toggle());
   const reset = $("reset-button");
-  if (reset) reset.onclick = () => {
+  own(reset, "onclick", () => {
     controller.pause();
     controller.seek(0);
-  };
+  });
   const previous = $("prev-button");
-  if (previous) previous.onclick = () => {
+  own(previous, "onclick", () => {
     controller.pause();
     controller.prev();
-  };
+  });
   const next = $("next-button");
-  if (next) next.onclick = () => {
+  own(next, "onclick", () => {
     controller.pause();
     controller.next();
-  };
+  });
   const scrubber = $("event-scrubber");
-  if (scrubber) scrubber.oninput = (event) => {
+  own(scrubber, "oninput", (event) => {
     controller.pause();
     controller.seek(Number(event.target.value));
-  };
+  });
   for (const button of documentRef.querySelectorAll("#speed-controls [data-speed]")) {
-    button.onclick = () => controller.setSpeed(Number(button.dataset.speed));
+    own(button, "onclick", () => controller.setSpeed(Number(button.dataset.speed)));
   }
   const follow = $("follow-button");
-  if (follow) follow.onclick = () => controller.setFollowEnabled(!controller.followEnabled);
+  own(follow, "onclick", () => controller.setFollowEnabled(!controller.followEnabled));
+  const teardown = () => {
+    for (const { element, property, handler } of bindings) {
+      if (element[property] === handler) element[property] = null;
+    }
+    if (documentRef._battlePlaybackTeardown === teardown) delete documentRef._battlePlaybackTeardown;
+    if (controller._controlsTeardown === teardown) controller._controlsTeardown = null;
+  };
+  documentRef._battlePlaybackTeardown = teardown;
+  controller._controlsTeardown = teardown;
+  return teardown;
 }
 
 // Browser-side validation mirroring battle_animation/validator.py: required
@@ -408,19 +425,20 @@ export function renderBattle(battle, documentRef = document) {
     redrawEngagementEndpoints();
   }
 
+  const windowRef = documentRef.defaultView || globalThis;
+  const reducedMotion = Boolean(windowRef.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   buildLegend(battle, documentRef, colorOf);
   bindStaticText(battle, documentRef);
-  buildTimeline(orderedEvents, documentRef, (index) => {
+  const teardownTimeline = buildTimeline(orderedEvents, documentRef, (index) => {
     controller.pause();
     controller.showEvent(index);
   });
 
   const duration = compiled.presentationDurationMs;
-  const windowRef = documentRef.defaultView || globalThis;
   const requestFrame = windowRef.requestAnimationFrame.bind(windowRef);
   const cancelFrame = windowRef.cancelAnimationFrame.bind(windowRef);
   let renderedEventIndex = -1;
-  let passageEventId = null;
+  let previousActiveEventIds = new Set();
   const visibleCards = [];
 
   function nowMs() {
@@ -436,11 +454,13 @@ export function renderBattle(battle, documentRef = document) {
   }
 
   function appendEventCard(selected) {
-    if (!cardStack || passageEventId === selected.id) return;
-    passageEventId = selected.id;
+    if (!cardStack) return;
     const event = selected.event;
     const card = documentRef.createElement("article");
     card.setAttribute("class", "event-card");
+    card.setAttribute("role", "button");
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("aria-label", `${event.title}. Pause playback`);
     card.dataset.eventId = selected.id;
     appendTextElement(card, "p", "event-card-meta", `${event.time?.label || "Time unknown"} · ${event.type}`);
     appendTextElement(card, "h2", "event-card-title", event.title);
@@ -453,11 +473,35 @@ export function renderBattle(battle, documentRef = document) {
       appendTextElement(card, "p", "event-card-engagement", `${attacker} → ${target}${engagement.result && engagement.result !== "none" ? ` · ${engagement.result}` : ""}`);
     }
     const pause = () => controller.pause();
+    const pauseFromKey = (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.key === " ") event.preventDefault();
+      pause();
+    };
     card.addEventListener("pointerenter", pause);
     card.addEventListener("click", pause);
+    card.addEventListener("keydown", pauseFromKey);
     cardStack.append(card);
-    visibleCards.push({ element: card, id: selected.id, shownAt: nowMs() });
-    while (visibleCards.length > 3) visibleCards.shift().element.remove();
+    visibleCards.push({
+      element: card,
+      id: selected.id,
+      shownAt: nowMs(),
+      dispose() {
+        card.removeEventListener("pointerenter", pause);
+        card.removeEventListener("click", pause);
+        card.removeEventListener("keydown", pauseFromKey);
+        card.remove();
+      },
+    });
+    while (visibleCards.length > 3) visibleCards.shift().dispose();
+  }
+
+  function appendNewActiveEventCards(sampled) {
+    const newlyActive = compiled.eventWindows
+      .filter((window) => sampled.activeEventIds.has(window.id) && !previousActiveEventIds.has(window.id))
+      .sort((a, b) => a.startMs - b.startMs || (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0));
+    for (const window of newlyActive) appendEventCard(window);
+    previousActiveEventIds = new Set(sampled.activeEventIds);
   }
 
   function pruneEventCards(currentId) {
@@ -465,19 +509,28 @@ export function renderBattle(battle, documentRef = document) {
     for (let index = visibleCards.length - 1; index >= 0; index -= 1) {
       const item = visibleCards[index];
       if (item.id !== currentId && now - item.shownAt >= 3000) {
-        item.element.remove();
+        item.dispose();
         visibleCards.splice(index, 1);
       }
     }
   }
 
   function selectedEventWindow(sampled) {
-    const active = compiled.eventWindows.find(({ id }) => sampled.activeEventIds.has(id));
+    const active = compiled.eventWindows
+      .filter(({ id }) => sampled.activeEventIds.has(id))
+      .reduce((latest, window) => {
+        if (!latest || window.startMs > latest.startMs) return window;
+        if (window.startMs === latest.startMs
+            && (orderIndex.get(window.id) ?? 0) > (orderIndex.get(latest.id) ?? 0)) return window;
+        return latest;
+      }, null);
     if (active) return active;
     let latest = null;
     for (const window of compiled.eventWindows) {
       if (window.startMs <= sampled.historicalMs
-          && (!latest || window.startMs >= latest.startMs)) latest = window;
+          && (!latest || window.startMs > latest.startMs
+            || (window.startMs === latest.startMs
+              && (orderIndex.get(window.id) ?? 0) > (orderIndex.get(latest.id) ?? 0)))) latest = window;
     }
     return latest || compiled.eventWindows[0] || null;
   }
@@ -487,10 +540,9 @@ export function renderBattle(battle, documentRef = document) {
     const selectedIndex = orderIndex.get(selected.id) ?? 0;
     owner.currentIndex = selectedIndex;
     if (selectedIndex === renderedEventIndex) return;
-    updateTimeline(documentRef, selectedIndex);
+    updateTimeline(documentRef, selectedIndex, reducedMotion);
     const progress = $("event-progress");
     if (progress) progress.textContent = `${selectedIndex + 1} / ${orderedEvents.length}`;
-    appendEventCard(selected);
     renderedEventIndex = selectedIndex;
   }
 
@@ -545,12 +597,13 @@ export function renderBattle(battle, documentRef = document) {
     const wallTime = nowMs();
     if (wallTime - owner._lastFollowCheck < 500) return;
     owner._lastFollowCheck = wallTime;
-    const points = activeGeographicPoints(sampled);
-    if (!points.length) return;
+    const uniquePoints = [...new Map(activeGeographicPoints(sampled)
+      .map((point) => [point.join("\u0000"), point])).values()];
+    if (!uniquePoints.length) return;
     const size = map.getSize ? map.getSize() : { x: mapEl.clientWidth, y: mapEl.clientHeight };
     const insetX = size.x * 0.22;
     const insetY = size.y * 0.22;
-    const projected = points.map(project);
+    const projected = uniquePoints.map(project);
     const outside = projected.some(({ x, y }) =>
       x < insetX || x > size.x - insetX || y < insetY || y > size.y - insetY);
     if (!outside) return;
@@ -559,10 +612,18 @@ export function renderBattle(battle, documentRef = document) {
     center.y /= projected.length;
     const distance = Math.hypot(center.x - size.x / 2, center.y - size.y / 2);
     const flyDuration = Math.min(2.4, Math.max(0.8, 0.8 + distance / 500));
-    const bounds = L.latLngBounds(points.map(([lon, lat]) => [lat, lon])).pad(0.35);
+    const cameraOptions = reducedMotion
+      ? { duration: 0, animate: false }
+      : { duration: flyDuration, animate: true };
     owner._programmaticMove = true;
     try {
-      map.flyToBounds(bounds, { duration: flyDuration, animate: true });
+      if (uniquePoints.length === 1) {
+        const [lon, lat] = uniquePoints[0];
+        map.flyTo([lat, lon], map.getZoom(), cameraOptions);
+      } else {
+        const bounds = L.latLngBounds(uniquePoints.map(([lon, lat]) => [lat, lon])).pad(0.35);
+        map.flyToBounds(bounds, { ...cameraOptions, maxZoom: map.getZoom() });
+      }
     } catch (error) {
       owner._programmaticMove = false;
       throw error;
@@ -574,7 +635,7 @@ export function renderBattle(battle, documentRef = document) {
     compiled,
     orderedEvents,
     map,
-    currentIndex: 0,
+    currentIndex: orderedEvents.length ? 0 : -1,
     currentPresentationMs: 0,
     sampledState: null,
     playbackRate: 1,
@@ -587,6 +648,7 @@ export function renderBattle(battle, documentRef = document) {
     _destroyed: false,
 
     renderAt(presentationMs) {
+      if (this._destroyed) return this.sampledState;
       const bounded = Math.min(duration, Math.max(0, Number.isFinite(presentationMs) ? presentationMs : 0));
       this.currentPresentationMs = bounded;
       const sampled = sampleTimeline(compiled, bounded);
@@ -630,6 +692,7 @@ export function renderBattle(battle, documentRef = document) {
         g.classList.toggle("is-active", sampled.activeEventIds.has(window.id));
       }
 
+      appendNewActiveEventCards(sampled);
       displaySelectedEvent(this, selectedEventWindow(sampled));
       const selected = selectedEventWindow(sampled);
       pruneEventCards(selected?.id);
@@ -638,10 +701,12 @@ export function renderBattle(battle, documentRef = document) {
     },
 
     seek(presentationMs) {
+      if (this._destroyed) return this.sampledState;
       return this.renderAt(presentationMs);
     },
 
     setSpeed(rate) {
+      if (this._destroyed) return this.playbackRate;
       if (!Number.isFinite(rate) || rate <= 0) {
         throw new RangeError("playback rate must be a positive finite number");
       }
@@ -654,6 +719,7 @@ export function renderBattle(battle, documentRef = document) {
     },
 
     setFollowEnabled(enabled) {
+      if (this._destroyed) return this.followEnabled;
       this.followEnabled = Boolean(enabled);
       if (this.followEnabled) this._lastFollowCheck = -Infinity;
       const button = $("follow-button");
@@ -665,6 +731,7 @@ export function renderBattle(battle, documentRef = document) {
     },
 
     showEvent(index) {
+      if (this._destroyed) return this.sampledState;
       const bounded = Math.max(0, Math.min(index, orderedEvents.length - 1));
       const window = compiled.eventWindows[bounded];
       if (!window) return this.seek(0);
@@ -674,13 +741,16 @@ export function renderBattle(battle, documentRef = document) {
     },
 
     next() {
+      if (this._destroyed) return;
       this.showEvent(this.currentIndex + 1);
     },
     prev() {
+      if (this._destroyed) return;
       this.showEvent(this.currentIndex - 1);
     },
 
     play() {
+      if (this._destroyed) return;
       if (this.isPlaying) return;
       if (this.currentPresentationMs >= duration) this.seek(0);
       this._setPlaying(true);
@@ -688,6 +758,7 @@ export function renderBattle(battle, documentRef = document) {
       this._frame = requestFrame((timestamp) => this._tick(timestamp));
     },
     pause() {
+      if (this._destroyed) return;
       if (this._frame !== null) {
         cancelFrame(this._frame);
         this._frame = null;
@@ -696,11 +767,12 @@ export function renderBattle(battle, documentRef = document) {
       this._setPlaying(false);
     },
     toggle() {
+      if (this._destroyed) return;
       if (this.isPlaying) this.pause();
       else this.play();
     },
     _tick(timestamp) {
-      if (!this.isPlaying) return;
+      if (this._destroyed || !this.isPlaying) return;
       if (this._lastFrameTime === null) this._lastFrameTime = timestamp;
       const elapsed = Math.max(0, timestamp - this._lastFrameTime);
       this._lastFrameTime = timestamp;
@@ -723,12 +795,15 @@ export function renderBattle(battle, documentRef = document) {
 
     destroy() {
       if (this._destroyed) return;
-      this._destroyed = true;
       this.pause();
+      this._destroyed = true;
+      this._controlsTeardown?.();
+      teardownTimeline();
       documentRef.removeEventListener("keydown", onKey);
       map.off();
       map.remove();
       svg.remove();
+      for (const card of visibleCards.splice(0)) card.dispose();
       if (cardStack) cardStack.replaceChildren();
       if (mapEl._battleController === this) delete mapEl._battleController;
     },
@@ -765,6 +840,8 @@ export function renderBattle(battle, documentRef = document) {
 
   const scrubber = $("event-scrubber");
   if (scrubber) scrubber.max = String(duration);
+  const progress = $("event-progress");
+  if (progress) progress.textContent = orderedEvents.length ? `1 / ${orderedEvents.length}` : "0 / 0";
   controller.setSpeed(1);
   controller.setFollowEnabled(true);
 
@@ -865,24 +942,30 @@ function bindStaticText(battle, documentRef) {
 function buildTimeline(events, documentRef, onSelect) {
   const timeline = documentRef.getElementById("timeline");
   timeline.replaceChildren();
+  const bindings = [];
   events.forEach((event, index) => {
     const item = documentRef.createElement("li");
     const button = documentRef.createElement("button");
     button.type = "button";
     button.dataset.index = String(index);
     button.innerHTML = `<strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.type)} / ${escapeHtml(event.time.label)}</span>`;
-    button.addEventListener("click", () => onSelect(index));
+    const handler = () => onSelect(index);
+    button.addEventListener("click", handler);
+    bindings.push({ button, handler });
     item.append(button);
     timeline.append(item);
   });
+  return () => {
+    for (const { button, handler } of bindings) button.removeEventListener("click", handler);
+  };
 }
 
-function updateTimeline(documentRef, index) {
+function updateTimeline(documentRef, index, reducedMotion = false) {
   const buttons = [...documentRef.querySelectorAll("#timeline button")];
   buttons.forEach((button, buttonIndex) => {
     button.setAttribute("aria-current", buttonIndex === index ? "true" : "false");
   });
-  buttons[index]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  buttons[index]?.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
 }
 
 function setText(documentRef, id, text) {
