@@ -130,9 +130,12 @@ def _validate_array(value: list[Any], schema: dict[str, Any], root_schema: dict[
 
 def _validate_number(value: int | float, schema: dict[str, Any], path: str, errors: list[ValidationError]) -> None:
     minimum = schema.get("minimum")
+    exclusive_minimum = schema.get("exclusiveMinimum")
     maximum = schema.get("maximum")
     if minimum is not None and value < minimum:
         errors.append(ValidationError(path, f"expected value >= {minimum}"))
+    if exclusive_minimum is not None and value <= exclusive_minimum:
+        errors.append(ValidationError(path, f"expected value > {exclusive_minimum}"))
     if maximum is not None and value > maximum:
         errors.append(ValidationError(path, f"expected value <= {maximum}"))
 

@@ -139,6 +139,8 @@ class Movement(TypedDict):
     confidence: Confidence
     from_place_id: NotRequired[Identifier]
     to_place_id: NotRequired[Identifier]
+    time: NotRequired[DateValue]
+    waypoint_times: NotRequired[list[str]]
 
 
 class Casualty(TypedDict):
@@ -199,6 +201,9 @@ class AnimationStyleHints(TypedDict, total=False):
 
 class AnimationTimelineHints(TypedDict, total=False):
     default_event_duration_ms: float
+    historical_seconds_per_playback_second: float
+    idle_compression_threshold_seconds: float
+    idle_compressed_duration_ms: float
     ordered_event_ids: list[Identifier]
 
 
@@ -216,7 +221,7 @@ class AnimationHints(TypedDict):
 
 
 class BattleAnimationDocument(TypedDict):
-    schema_version: Literal["0.1.0", "0.2.0"]
+    schema_version: Literal["0.1.0", "0.2.0", "0.3.0"]
     metadata: Metadata
     battle: Battle
     sides: list[Side]

@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schema_version": {
-      "enum": ["0.1.0", "0.2.0"]
+      "enum": ["0.1.0", "0.2.0", "0.3.0"]
     },
     "metadata": {
       "$ref": "#/$defs/Metadata"
@@ -500,6 +500,16 @@
         "to_place_id": {
           "$ref": "#/$defs/Identifier"
         },
+        "time": {
+          "$ref": "#/$defs/DateValue"
+        },
+        "waypoint_times": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string"
+          }
+        },
         "path": {
           "$ref": "#/$defs/LineString"
         },
@@ -688,6 +698,18 @@
           "properties": {
             "default_event_duration_ms": {
               "type": "number"
+            },
+            "historical_seconds_per_playback_second": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "idle_compression_threshold_seconds": {
+              "type": "number",
+              "minimum": 0
+            },
+            "idle_compressed_duration_ms": {
+              "type": "number",
+              "minimum": 0
             },
             "ordered_event_ids": {
               "type": "array",
