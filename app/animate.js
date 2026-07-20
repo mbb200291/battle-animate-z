@@ -431,6 +431,7 @@ export function renderBattle(battle, documentRef = document) {
     isPlaying: false,
     _frame: null,
     _lastFrameTime: null,
+    _destroyed: false,
 
     renderAt(presentationMs) {
       const bounded = Math.min(duration, Math.max(0, Number.isFinite(presentationMs) ? presentationMs : 0));
@@ -563,12 +564,14 @@ export function renderBattle(battle, documentRef = document) {
     },
 
     destroy() {
+      if (this._destroyed) return;
+      this._destroyed = true;
       this.pause();
       documentRef.removeEventListener("keydown", onKey);
       map.off();
       map.remove();
       svg.remove();
-      delete mapEl._battleController;
+      if (mapEl._battleController === this) delete mapEl._battleController;
     },
   };
 
