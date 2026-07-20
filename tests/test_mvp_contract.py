@@ -62,6 +62,35 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("valid", result.stdout)
 
+    def test_yalu_is_a_timed_v030_ship_demo(self):
+        battle = json.loads(YALU_EXAMPLE.read_text(encoding="utf-8"))
+        naval_icons = {
+            "warship_generic",
+            "warship_ironclad",
+            "warship_battleship",
+            "warship_armored_cruiser",
+            "warship_protected_cruiser",
+            "warship_destroyer",
+            "warship_torpedo_boat",
+        }
+
+        ships = [actor for actor in battle["actors"] if actor["kind"] == "ship"]
+        timed_ship_movements = [
+            movement
+            for movement in battle["movements"]
+            if "time" in movement
+            and any(actor["id"] == movement["actor_id"] for actor in ships)
+        ]
+        actor_icons = battle["animation_hints"]["style"]["actor_icons"]
+
+        self.assertEqual(battle["schema_version"], "0.3.0")
+        self.assertGreaterEqual(len(ships), 10)
+        self.assertGreaterEqual(len(timed_ship_movements), 10)
+        self.assertTrue(any("waypoint_times" in movement for movement in timed_ship_movements))
+        self.assertTrue(set(actor_icons.values()) <= naval_icons)
+        self.assertTrue(all(ord(character) <= 0xFFFF for icon in actor_icons.values() for character in icon))
+        self.assertTrue(all("time" in engagement for engagement in battle["engagements"]))
+
     def test_schema_contains_required_event_types(self):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
         event_type = schema["$defs"]["EventType"]["enum"]

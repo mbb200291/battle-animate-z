@@ -1,10 +1,10 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "metadata": {
     "id": "battle_yalu_1894",
     "title": "黃海海戰（大東溝海戰）",
     "created_at": "2026-06-22",
-    "updated_at": "2026-06-22",
+    "updated_at": "2026-07-20",
     "license": "CC BY-SA 4.0",
     "source_system": "ai_extraction_zhwiki"
   },
@@ -196,10 +196,11 @@
       "type": "other",
       "title": "艦隊遭遇",
       "time": {
-        "label": "1894-09-17 11:30",
+        "label": "1894-09-17 11:30–12:30（結束時間推定）",
         "start": "1894-09-17T11:30",
-        "precision": "hour",
-        "confidence": 0.9
+        "end": "1894-09-17T12:30",
+        "precision": "range",
+        "confidence": 0.6
       },
       "description": "北洋水師以夾縫雁行陣南下，日本聯合艦隊以單縱陣自西南接近，雙方於大東溝外海相互發現。",
       "actor_ids": [
@@ -220,10 +221,11 @@
       "type": "bombardment",
       "title": "定遠首先開火",
       "time": {
-        "label": "1894-09-17 12:50",
+        "label": "1894-09-17 12:50–12:58（結束時間推定）",
         "start": "1894-09-17T12:50",
-        "precision": "hour",
-        "confidence": 0.9
+        "end": "1894-09-17T12:58",
+        "precision": "range",
+        "confidence": 0.6
       },
       "description": "旗艦定遠在約5300米首先開砲，戰役爆發；不久定遠飛橋震塌，丁汝昌受傷。",
       "actor_ids": [
@@ -243,10 +245,11 @@
       "type": "attack",
       "title": "第一游擊隊包抄右翼",
       "time": {
-        "label": "1894-09-17 13:00",
+        "label": "1894-09-17 13:00–14:15（結束時間推定）",
         "start": "1894-09-17T13:00",
-        "precision": "hour",
-        "confidence": 0.85
+        "end": "1894-09-17T14:15",
+        "precision": "range",
+        "confidence": 0.6
       },
       "description": "日本第一游擊隊憑航速繞向北洋右翼，集火較弱的超勇、揚威，兩艦先後中彈起火。",
       "actor_ids": [
@@ -269,10 +272,11 @@
       "type": "attack",
       "title": "陣形被打亂的混戰",
       "time": {
-        "label": "1894-09-17 14:30",
+        "label": "1894-09-17 14:30–15:20（結束時間推定）",
         "start": "1894-09-17T14:30",
-        "precision": "hour",
-        "confidence": 0.75
+        "end": "1894-09-17T15:20",
+        "precision": "range",
+        "confidence": 0.6
       },
       "description": "兩隊交錯，北洋陣形被打亂進入混戰；松島等集火致遠，致遠多處中彈受創。",
       "actor_ids": [
@@ -294,10 +298,11 @@
       "type": "attack",
       "title": "致遠衝撞與沉沒",
       "time": {
-        "label": "1894-09-17 15:30",
+        "label": "1894-09-17 15:30–16:15（結束時間推定）",
         "start": "1894-09-17T15:30",
-        "precision": "hour",
-        "confidence": 0.8
+        "end": "1894-09-17T16:15",
+        "precision": "range",
+        "confidence": 0.6
       },
       "description": "致遠管帶鄧世昌在負傷彈盡下試圖衝撞吉野，中途中彈沉沒；經遠亦於其後被擊沉。",
       "actor_ids": [
@@ -319,10 +324,11 @@
       "type": "retreat",
       "title": "日艦撤離，北洋返航",
       "time": {
-        "label": "1894-09-17 17:30",
+        "label": "1894-09-17 17:30–19:00（結束時間推定）",
         "start": "1894-09-17T17:30",
-        "precision": "hour",
-        "confidence": 0.85
+        "end": "1894-09-17T19:00",
+        "precision": "range",
+        "confidence": 0.6
       },
       "description": "日艦恐夜間遭魚雷艇襲擊且彈藥將盡，主動停止追擊向外海撤退；北洋殘存艦隊集結返航威海衛。",
       "actor_ids": [
@@ -361,6 +367,18 @@
           ]
         ]
       },
+      "time": {
+        "label": "1894-09-17 13:00–13:40（推定）",
+        "start": "1894-09-17T13:00",
+        "end": "1894-09-17T13:40",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T13:00",
+        "1894-09-17T13:20",
+        "1894-09-17T13:40"
+      ],
       "precision": "inferred",
       "confidence": 0.5
     },
@@ -385,6 +403,18 @@
           ]
         ]
       },
+      "time": {
+        "label": "1894-09-17 13:05–13:45（推定）",
+        "start": "1894-09-17T13:05",
+        "end": "1894-09-17T13:45",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T13:05",
+        "1894-09-17T13:25",
+        "1894-09-17T13:45"
+      ],
       "precision": "inferred",
       "confidence": 0.5
     },
@@ -409,6 +439,18 @@
           ]
         ]
       },
+      "time": {
+        "label": "1894-09-17 14:30–15:15（推定）",
+        "start": "1894-09-17T14:30",
+        "end": "1894-09-17T15:15",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T14:30",
+        "1894-09-17T14:52",
+        "1894-09-17T15:15"
+      ],
       "precision": "inferred",
       "confidence": 0.5
     },
@@ -433,6 +475,18 @@
           ]
         ]
       },
+      "time": {
+        "label": "1894-09-17 15:30–15:50（推定）",
+        "start": "1894-09-17T15:30",
+        "end": "1894-09-17T15:50",
+        "precision": "range",
+        "confidence": 0.55
+      },
+      "waypoint_times": [
+        "1894-09-17T15:30",
+        "1894-09-17T15:40",
+        "1894-09-17T15:50"
+      ],
       "precision": "inferred",
       "confidence": 0.55
     },
@@ -457,6 +511,18 @@
           ]
         ]
       },
+      "time": {
+        "label": "1894-09-17 17:30–19:00（推定）",
+        "start": "1894-09-17T17:30",
+        "end": "1894-09-17T19:00",
+        "precision": "range",
+        "confidence": 0.6
+      },
+      "waypoint_times": [
+        "1894-09-17T17:30",
+        "1894-09-17T18:10",
+        "1894-09-17T19:00"
+      ],
       "precision": "inferred",
       "confidence": 0.6
     },
@@ -477,8 +543,199 @@
           ]
         ]
       },
+      "time": {
+        "label": "1894-09-17 17:30–18:10（推定）",
+        "start": "1894-09-17T17:30",
+        "end": "1894-09-17T18:10",
+        "precision": "range",
+        "confidence": 0.6
+      },
+      "waypoint_times": [
+        "1894-09-17T17:30",
+        "1894-09-17T18:10"
+      ],
       "precision": "inferred",
       "confidence": 0.6
+    },
+    {
+      "id": "mov_zhenyuan_encounter",
+      "event_id": "evt_encounter",
+      "actor_id": "ship_zhenyuan",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.69,
+            39.39
+          ],
+          [
+            123.65,
+            39.37
+          ],
+          [
+            123.61,
+            39.35
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 11:30–12:30（推定）",
+        "start": "1894-09-17T11:30",
+        "end": "1894-09-17T12:30",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T11:30",
+        "1894-09-17T12:00",
+        "1894-09-17T12:30"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_hiei_encounter",
+      "event_id": "evt_encounter",
+      "actor_id": "ship_hiei",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.45,
+            39.25
+          ],
+          [
+            123.5,
+            39.29
+          ],
+          [
+            123.55,
+            39.32
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 11:40–12:30（推定）",
+        "start": "1894-09-17T11:40",
+        "end": "1894-09-17T12:30",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T11:40",
+        "1894-09-17T12:05",
+        "1894-09-17T12:30"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_chaoyong_evasion",
+      "event_id": "evt_flying_flank",
+      "actor_id": "ship_chaoyong",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.6,
+            39.36
+          ],
+          [
+            123.58,
+            39.35
+          ],
+          [
+            123.56,
+            39.333
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 13:10–14:05（推定）",
+        "start": "1894-09-17T13:10",
+        "end": "1894-09-17T14:05",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T13:10",
+        "1894-09-17T13:37",
+        "1894-09-17T14:05"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_yangwei_evasion",
+      "event_id": "evt_flying_flank",
+      "actor_id": "ship_yangwei",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.61,
+            39.37
+          ],
+          [
+            123.59,
+            39.35
+          ],
+          [
+            123.565,
+            39.338
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 13:15–14:10（推定）",
+        "start": "1894-09-17T13:15",
+        "end": "1894-09-17T14:10",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T13:15",
+        "1894-09-17T13:42",
+        "1894-09-17T14:10"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_jingyuan_melee",
+      "event_id": "evt_melee",
+      "actor_id": "ship_jingyuan",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.62,
+            39.36
+          ],
+          [
+            123.61,
+            39.345
+          ],
+          [
+            123.6,
+            39.33
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 14:35–15:20（推定）",
+        "start": "1894-09-17T14:35",
+        "end": "1894-09-17T15:20",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T14:35",
+        "1894-09-17T14:57",
+        "1894-09-17T15:20"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
     }
   ],
   "outcome": {
@@ -531,16 +788,16 @@
         "side_japan": "#c0392b"
       },
       "actor_icons": {
-        "ship_dingyuan": "🚢",
-        "ship_zhenyuan": "🚢",
-        "ship_jingyuan": "🚢",
-        "ship_zhiyuan": "🚢",
-        "ship_chaoyong": "🚢",
-        "ship_yangwei": "🚢",
-        "ship_matsushima": "🚢",
-        "ship_yoshino": "🚢",
-        "ship_naniwa": "🚢",
-        "ship_hiei": "🚢"
+        "ship_dingyuan": "warship_ironclad",
+        "ship_zhenyuan": "warship_ironclad",
+        "ship_jingyuan": "warship_armored_cruiser",
+        "ship_zhiyuan": "warship_protected_cruiser",
+        "ship_chaoyong": "warship_protected_cruiser",
+        "ship_yangwei": "warship_protected_cruiser",
+        "ship_matsushima": "warship_protected_cruiser",
+        "ship_yoshino": "warship_protected_cruiser",
+        "ship_naniwa": "warship_protected_cruiser",
+        "ship_hiei": "warship_generic"
       },
       "event_icons": {
         "bombardment": "burst",
@@ -552,6 +809,9 @@
     },
     "timeline": {
       "default_event_duration_ms": 2000,
+      "historical_seconds_per_playback_second": 120,
+      "idle_compression_threshold_seconds": 900,
+      "idle_compressed_duration_ms": 1200,
       "ordered_event_ids": [
         "evt_encounter",
         "evt_open_fire",
@@ -587,6 +847,13 @@
       "attacker_actor_id": "ship_dingyuan",
       "target_actor_id": "ship_matsushima",
       "type": "bombardment",
+      "time": {
+        "label": "1894-09-17 12:50–12:55",
+        "start": "1894-09-17T12:50",
+        "end": "1894-09-17T12:55",
+        "precision": "range",
+        "confidence": 0.7
+      },
       "confidence": 0.7,
       "source_ids": [
         "src_zhwiki_yalu"
@@ -600,6 +867,13 @@
       "attacker_actor_id": "ship_yoshino",
       "target_actor_id": "ship_chaoyong",
       "type": "fire",
+      "time": {
+        "label": "1894-09-17 13:20–14:05（約）",
+        "start": "1894-09-17T13:20",
+        "end": "1894-09-17T14:05",
+        "precision": "range",
+        "confidence": 0.6
+      },
       "confidence": 0.8,
       "source_ids": [
         "src_zhwiki_yalu"
@@ -613,6 +887,13 @@
       "attacker_actor_id": "ship_naniwa",
       "target_actor_id": "ship_yangwei",
       "type": "fire",
+      "time": {
+        "label": "1894-09-17 13:25–14:10（約）",
+        "start": "1894-09-17T13:25",
+        "end": "1894-09-17T14:10",
+        "precision": "range",
+        "confidence": 0.6
+      },
       "confidence": 0.75,
       "source_ids": [
         "src_zhwiki_yalu"
@@ -626,6 +907,13 @@
       "attacker_actor_id": "ship_matsushima",
       "target_actor_id": "ship_zhiyuan",
       "type": "bombardment",
+      "time": {
+        "label": "1894-09-17 14:40–15:15（約）",
+        "start": "1894-09-17T14:40",
+        "end": "1894-09-17T15:15",
+        "precision": "range",
+        "confidence": 0.6
+      },
       "confidence": 0.7,
       "source_ids": [
         "src_zhwiki_yalu"
@@ -639,6 +927,13 @@
       "attacker_actor_id": "ship_zhiyuan",
       "target_actor_id": "ship_yoshino",
       "type": "ram",
+      "time": {
+        "label": "1894-09-17 15:35–15:50（約）",
+        "start": "1894-09-17T15:35",
+        "end": "1894-09-17T15:50",
+        "precision": "range",
+        "confidence": 0.6
+      },
       "confidence": 0.6,
       "source_ids": [
         "src_zhwiki_yalu"
@@ -652,6 +947,13 @@
       "attacker_actor_id": "ship_yoshino",
       "target_actor_id": "ship_jingyuan",
       "type": "fire",
+      "time": {
+        "label": "1894-09-17 15:50–16:15（約）",
+        "start": "1894-09-17T15:50",
+        "end": "1894-09-17T16:15",
+        "precision": "range",
+        "confidence": 0.6
+      },
       "confidence": 0.7,
       "source_ids": [
         "src_zhwiki_yalu"
