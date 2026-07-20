@@ -11,6 +11,16 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
+BATTLE_TIME_PATTERN = re.compile(
+    r"^(?:"
+    r"\d{4}|"
+    r"\d{4}-\d{2}|"
+    r"\d{4}-\d{2}-\d{2}|"
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}"
+    r"(?::\d{2}(?:\.\d+)?)?"
+    r"(?:Z|[+-]\d{2}:\d{2})?"
+    r")$"
+)
 
 ACTOR_ICON_TOKENS = {
     "warship_generic",
@@ -76,7 +86,7 @@ def validate_document_with_warnings(
 
 
 def _parse_battle_time(value: str) -> float:
-    if not isinstance(value, str):
+    if not isinstance(value, str) or BATTLE_TIME_PATTERN.fullmatch(value) is None:
         raise ValueError("battle time must be a string")
     normalized = f"{value[:-1]}+00:00" if value.endswith("Z") else value
     if re.fullmatch(r"\d{4}", normalized):
@@ -277,6 +287,7 @@ def _validate_timing(
 ) -> None:
     if not isinstance(document, dict):
         return
+    _validate_datetime_offset_styles(document, errors)
 
     for collection_name in ("historical_events", "engagements"):
         collection = document.get(collection_name, [])
@@ -319,6 +330,9 @@ def _validate_timing(
 
         waypoint_times: list[float | None] = []
         for waypoint_index, value in enumerate(waypoint_values):
+            if not isinstance(value, str):
+                waypoint_times.append(None)
+                continue
             try:
                 waypoint_times.append(_parse_battle_time(value))
             except ValueError:
@@ -353,6 +367,8 @@ def _validate_date_value_time(
     for field in parsed:
         if field not in value:
             continue
+        if not isinstance(value[field], str):
+            continue
         try:
             parsed[field] = _parse_battle_time(value[field])
         except ValueError:
@@ -361,6 +377,49 @@ def _validate_date_value_time(
     if start is not None and end is not None and end < start:
         errors.append(ValidationError(path, "end must not be before start"))
     return start, end
+
+
+def _validate_datetime_offset_styles(document: dict[str, Any], errors: list[ValidationError]) -> None:
+    expected_offset_style: bool | None = None
+    for path, value in _iter_timing_values(document):
+        if (
+            not isinstance(value, str)
+            or "T" not in value
+            or BATTLE_TIME_PATTERN.fullmatch(value) is None
+        ):
+            continue
+        try:
+            _parse_battle_time(value)
+        except ValueError:
+            continue
+        is_offset_bearing = value.endswith("Z") or re.search(r"[+-]\d{2}:\d{2}$", value) is not None
+        if expected_offset_style is None:
+            expected_offset_style = is_offset_bearing
+        elif is_offset_bearing != expected_offset_style:
+            errors.append(
+                ValidationError(
+                    path,
+                    "mixed offset-bearing and battle-local date-times are not allowed",
+                )
+            )
+
+
+def _iter_timing_values(document: dict[str, Any]):
+    for collection_name in ("historical_events", "movements", "engagements"):
+        collection = document.get(collection_name, [])
+        if not isinstance(collection, list):
+            continue
+        for index, item in enumerate(collection):
+            if not isinstance(item, dict):
+                continue
+            time_value = item.get("time")
+            if isinstance(time_value, dict):
+                for field in ("start", "end"):
+                    if field in time_value:
+                        yield f"$.{collection_name}[{index}].time.{field}", time_value[field]
+            if collection_name == "movements" and isinstance(item.get("waypoint_times"), list):
+                for waypoint_index, value in enumerate(item["waypoint_times"]):
+                    yield f"$.movements[{index}].waypoint_times[{waypoint_index}]", value
 
 
 def _validate_movement_overlaps(

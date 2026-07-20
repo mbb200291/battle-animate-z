@@ -159,12 +159,12 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         errors = validate_document(document)
 
-        self.assertTrue(
-            any(
-                error.path == "$.movements[0].waypoint_times[1]"
-                and error.message == "expected string, got int"
-                for error in errors
-            )
+        waypoint_errors = [
+            error for error in errors if error.path == "$.movements[0].waypoint_times[1]"
+        ]
+        self.assertEqual(
+            [(error.path, error.message) for error in waypoint_errors],
+            [("$.movements[0].waypoint_times[1]", "expected string, got int")],
         )
 
     def test_validator_rejects_malformed_movement_time(self):
@@ -198,27 +198,50 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertTrue(any("strictly increasing" in error.message for error in errors))
 
     def test_movement_time_must_be_valid_and_ordered(self):
-        for field, value in (("start", "not-a-date"), ("end", "1815-06-18T09:59:00Z")):
+        cases = (
+            ("start", "not-a-date", "$.movements[0].time.start", "invalid ISO battle time"),
+            ("end", "1815-06-18T09:59:00Z", "$.movements[0].time", "end must not be before start"),
+        )
+        for field, value, expected_path, expected_message in cases:
             with self.subTest(field=field):
                 document = self._minimal_timed_document()
                 document["movements"][0]["time"][field] = value
 
                 errors, _warnings = validate_document_with_warnings(document)
 
-                self.assertTrue(errors)
+                self.assertTrue(
+                    any(
+                        error.path == expected_path and error.message == expected_message
+                        for error in errors
+                    )
+                )
 
     def test_waypoint_times_must_fall_within_movement_range(self):
-        for index, value in ((0, "1815-06-18T09:59:00Z"), (1, "1815-06-18T10:11:00Z")):
+        cases = (
+            (0, "1815-06-18T09:59:00Z", "value is before movement start"),
+            (1, "1815-06-18T10:11:00Z", "value is after movement end"),
+        )
+        for index, value, expected_message in cases:
             with self.subTest(index=index):
                 document = self._minimal_timed_document()
                 document["movements"][0]["waypoint_times"][index] = value
 
                 errors, _warnings = validate_document_with_warnings(document)
 
-                self.assertTrue(errors)
+                self.assertTrue(
+                    any(
+                        error.path == f"$.movements[0].waypoint_times[{index}]"
+                        and error.message == expected_message
+                        for error in errors
+                    )
+                )
 
     def test_engagement_time_must_be_valid_and_ordered(self):
-        for start, end in (("not-a-date", "1815-06-18T10:05:00Z"), ("1815-06-18T10:10:00Z", "1815-06-18T10:05:00Z")):
+        cases = (
+            ("not-a-date", "1815-06-18T10:05:00Z", "$.engagements[0].time.start", "invalid ISO battle time"),
+            ("1815-06-18T10:10:00Z", "1815-06-18T10:05:00Z", "$.engagements[0].time", "end must not be before start"),
+        )
+        for start, end, expected_path, expected_message in cases:
             with self.subTest(start=start, end=end):
                 document = self._minimal_timed_document()
                 document["engagements"] = [{
@@ -239,7 +262,12 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
                 errors, _warnings = validate_document_with_warnings(document)
 
-                self.assertTrue(errors)
+                self.assertTrue(
+                    any(
+                        error.path == expected_path and error.message == expected_message
+                        for error in errors
+                    )
+                )
 
     def test_historical_event_time_must_be_valid_and_ordered(self):
         document = self._minimal_timed_document()
@@ -247,7 +275,84 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         errors, _warnings = validate_document_with_warnings(document)
 
-        self.assertTrue(errors)
+        self.assertTrue(
+            any(
+                error.path == "$.historical_events[0].time.start"
+                and error.message == "invalid ISO battle time"
+                for error in errors
+            )
+        )
+
+    def test_battle_time_rejects_non_iso_datetime_separators(self):
+        for value in ("1815-06-18X10:00:00Z", "1815-06-18🕙10:00:00Z"):
+            with self.subTest(value=value):
+                document = self._minimal_timed_document()
+                document["movements"][0]["time"]["start"] = value
+
+                errors, _warnings = validate_document_with_warnings(document)
+
+                self.assertTrue(
+                    any(
+                        error.path == "$.movements[0].time.start"
+                        and error.message == "invalid ISO battle time"
+                        for error in errors
+                    )
+                )
+
+    def test_battle_time_accepts_documented_lexical_forms(self):
+        values = (
+            "1815",
+            "1815-06",
+            "1815-06-18",
+            "1815-06-18T10:00",
+            "1815-06-18T10:00:30",
+            "1815-06-18T10:00:30.125",
+            "1815-06-18T10:00Z",
+            "1815-06-18T10:00:30+02:00",
+        )
+        for value in values:
+            with self.subTest(value=value):
+                document = self._minimal_timed_document()
+                document["historical_events"][0]["time"] = {
+                    "label": value,
+                    "start": value,
+                    "precision": "unknown",
+                    "confidence": 0.5,
+                }
+
+                errors, _warnings = validate_document_with_warnings(document)
+
+                self.assertFalse(
+                    any(error.path == "$.historical_events[0].time.start" for error in errors)
+                )
+
+    def test_offset_bearing_and_battle_local_datetimes_cannot_mix_across_collections(self):
+        document = self._minimal_timed_document()
+        document["historical_events"][0]["time"]["start"] = "1815-06-18T09:00"
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.movements[0].time.start"
+                and error.message == "mixed offset-bearing and battle-local date-times are not allowed"
+                for error in errors
+            )
+        )
+
+    def test_offset_bearing_and_battle_local_datetimes_cannot_mix_within_range(self):
+        document = self._minimal_timed_document()
+        document["movements"][0]["time"]["start"] = "1815-06-18T10:00:00"
+
+        errors, _warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.movements[0].time.end"
+                and error.message == "mixed offset-bearing and battle-local date-times are not allowed"
+                for error in errors
+            )
+        )
 
     def test_reduced_iso_month_is_valid_battle_time(self):
         document = self._minimal_timed_document()
