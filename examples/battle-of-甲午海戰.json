@@ -134,6 +134,13 @@
       "side_id": "side_japan",
       "kind": "ship",
       "confidence": 0.85
+    },
+    {
+      "id": "fleet_japan_first_flying",
+      "name": "日本第一游擊隊",
+      "side_id": "side_japan",
+      "kind": "fleet",
+      "confidence": 0.85
     }
   ],
   "places": [
@@ -253,6 +260,7 @@
       },
       "description": "日本第一游擊隊憑航速繞向北洋右翼，集火較弱的超勇、揚威，兩艦先後中彈起火。",
       "actor_ids": [
+        "fleet_japan_first_flying",
         "ship_yoshino",
         "ship_naniwa",
         "ship_chaoyong",
@@ -298,23 +306,47 @@
       "type": "attack",
       "title": "致遠衝撞與沉沒",
       "time": {
-        "label": "1894-09-17 15:30–16:15（結束時間推定）",
-        "start": "1894-09-17T15:30",
-        "end": "1894-09-17T16:15",
+        "label": "1894-09-17 15:15–15:20（約）",
+        "start": "1894-09-17T15:15",
+        "end": "1894-09-17T15:20",
         "precision": "range",
         "confidence": 0.6
       },
-      "description": "致遠管帶鄧世昌在負傷彈盡下試圖衝撞吉野，中途中彈沉沒；經遠亦於其後被擊沉。",
+      "description": "致遠管帶鄧世昌試圖衝撞日本第一游擊隊艦艇，遭集中炮火攻擊後於約15時20分沉沒。",
       "actor_ids": [
         "ship_zhiyuan",
-        "ship_yoshino",
-        "ship_jingyuan"
+        "fleet_japan_first_flying"
       ],
       "place_ids": [
         "place_right_wing"
       ],
       "precision": "approximate",
       "confidence": 0.8,
+      "source_ids": [
+        "src_zhwiki_yalu"
+      ]
+    },
+    {
+      "id": "evt_jingyuan_sinking",
+      "type": "attack",
+      "title": "第一游擊隊追堵經遠",
+      "time": {
+        "label": "1894-09-17 17:00–17:30（約）",
+        "start": "1894-09-17T17:00",
+        "end": "1894-09-17T17:30",
+        "precision": "range",
+        "confidence": 0.6
+      },
+      "description": "經遠遭日本第一游擊隊追堵圍攻，於約17時29分傾覆沉沒。",
+      "actor_ids": [
+        "ship_jingyuan",
+        "fleet_japan_first_flying"
+      ],
+      "place_ids": [
+        "place_melee"
+      ],
+      "precision": "inferred",
+      "confidence": 0.6,
       "source_ids": [
         "src_zhwiki_yalu"
       ]
@@ -476,16 +508,16 @@
         ]
       },
       "time": {
-        "label": "1894-09-17 15:30–15:50（推定）",
-        "start": "1894-09-17T15:30",
-        "end": "1894-09-17T15:50",
+        "label": "1894-09-17 15:15–15:20（推定）",
+        "start": "1894-09-17T15:15",
+        "end": "1894-09-17T15:20",
         "precision": "range",
         "confidence": 0.55
       },
       "waypoint_times": [
-        "1894-09-17T15:30",
-        "1894-09-17T15:40",
-        "1894-09-17T15:50"
+        "1894-09-17T15:15",
+        "1894-09-17T15:17",
+        "1894-09-17T15:20"
       ],
       "precision": "inferred",
       "confidence": 0.55
@@ -502,12 +534,12 @@
             39.362
           ],
           [
-            123.4,
-            39.2
+            123.56,
+            39.31
           ],
           [
-            123.0,
-            38.6
+            123.5,
+            39.25
           ]
         ]
       },
@@ -538,8 +570,8 @@
             39.33
           ],
           [
-            123.8,
-            39.18
+            123.68,
+            39.27
           ]
         ]
       },
@@ -736,6 +768,78 @@
       ],
       "precision": "inferred",
       "confidence": 0.5
+    },
+    {
+      "id": "mov_jingyuan_last_stand",
+      "event_id": "evt_jingyuan_sinking",
+      "actor_id": "ship_jingyuan",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.6,
+            39.33
+          ],
+          [
+            123.63,
+            39.35
+          ],
+          [
+            123.66,
+            39.37
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 17:00–17:29（推定）",
+        "start": "1894-09-17T17:00",
+        "end": "1894-09-17T17:29",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T17:00",
+        "1894-09-17T17:15",
+        "1894-09-17T17:29"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
+    },
+    {
+      "id": "mov_first_flying_pursuit",
+      "event_id": "evt_jingyuan_sinking",
+      "actor_id": "fleet_japan_first_flying",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.56,
+            39.333
+          ],
+          [
+            123.61,
+            39.35
+          ],
+          [
+            123.655,
+            39.368
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 17:00–17:29（推定）",
+        "start": "1894-09-17T17:00",
+        "end": "1894-09-17T17:29",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T17:00",
+        "1894-09-17T17:15",
+        "1894-09-17T17:29"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
     }
   ],
   "outcome": {
@@ -792,12 +896,13 @@
         "ship_zhenyuan": "warship_ironclad",
         "ship_jingyuan": "warship_armored_cruiser",
         "ship_zhiyuan": "warship_protected_cruiser",
-        "ship_chaoyong": "warship_protected_cruiser",
-        "ship_yangwei": "warship_protected_cruiser",
+        "ship_chaoyong": "warship_generic",
+        "ship_yangwei": "warship_generic",
         "ship_matsushima": "warship_protected_cruiser",
         "ship_yoshino": "warship_protected_cruiser",
         "ship_naniwa": "warship_protected_cruiser",
-        "ship_hiei": "warship_generic"
+        "ship_hiei": "warship_generic",
+        "fleet_japan_first_flying": "fleet_generic"
       },
       "event_icons": {
         "bombardment": "burst",
@@ -818,6 +923,7 @@
         "evt_flying_flank",
         "evt_melee",
         "evt_zhiyuan_charge",
+        "evt_jingyuan_sinking",
         "evt_withdraw"
       ]
     },
@@ -858,13 +964,12 @@
       "source_ids": [
         "src_zhwiki_yalu"
       ],
-      "result": "hit",
-      "result_actor_id": "ship_matsushima"
+      "result": "none"
     },
     {
-      "id": "eng_yoshino_chaoyong",
+      "id": "eng_flying_squadron_chaoyong",
       "event_id": "evt_flying_flank",
-      "attacker_actor_id": "ship_yoshino",
+      "attacker_actor_id": "fleet_japan_first_flying",
       "target_actor_id": "ship_chaoyong",
       "type": "fire",
       "time": {
@@ -874,11 +979,11 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "confidence": 0.8,
+      "confidence": 0.6,
       "source_ids": [
         "src_zhwiki_yalu"
       ],
-      "result": "sunk",
+      "result": "damaged",
       "result_actor_id": "ship_chaoyong"
     },
     {
@@ -894,11 +999,11 @@
         "precision": "range",
         "confidence": 0.6
       },
-      "confidence": 0.75,
+      "confidence": 0.6,
       "source_ids": [
         "src_zhwiki_yalu"
       ],
-      "result": "sunk",
+      "result": "damaged",
       "result_actor_id": "ship_yangwei"
     },
     {
@@ -922,15 +1027,15 @@
       "result_actor_id": "ship_zhiyuan"
     },
     {
-      "id": "eng_zhiyuan_ram",
+      "id": "eng_flying_squadron_zhiyuan",
       "event_id": "evt_zhiyuan_charge",
-      "attacker_actor_id": "ship_zhiyuan",
-      "target_actor_id": "ship_yoshino",
-      "type": "ram",
+      "attacker_actor_id": "fleet_japan_first_flying",
+      "target_actor_id": "ship_zhiyuan",
+      "type": "fire",
       "time": {
-        "label": "1894-09-17 15:35–15:50（約）",
-        "start": "1894-09-17T15:35",
-        "end": "1894-09-17T15:50",
+        "label": "1894-09-17 15:15–15:20（約）",
+        "start": "1894-09-17T15:15",
+        "end": "1894-09-17T15:20",
         "precision": "range",
         "confidence": 0.6
       },
@@ -942,19 +1047,19 @@
       "result_actor_id": "ship_zhiyuan"
     },
     {
-      "id": "eng_jingyuan_sunk",
-      "event_id": "evt_zhiyuan_charge",
-      "attacker_actor_id": "ship_yoshino",
+      "id": "eng_flying_squadron_jingyuan",
+      "event_id": "evt_jingyuan_sinking",
+      "attacker_actor_id": "fleet_japan_first_flying",
       "target_actor_id": "ship_jingyuan",
       "type": "fire",
       "time": {
-        "label": "1894-09-17 15:50–16:15（約）",
-        "start": "1894-09-17T15:50",
-        "end": "1894-09-17T16:15",
+        "label": "1894-09-17 17:00–17:29（約）",
+        "start": "1894-09-17T17:00",
+        "end": "1894-09-17T17:29",
         "precision": "range",
         "confidence": 0.6
       },
-      "confidence": 0.7,
+      "confidence": 0.6,
       "source_ids": [
         "src_zhwiki_yalu"
       ],

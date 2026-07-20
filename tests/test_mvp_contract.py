@@ -1,4 +1,5 @@
 import json
+import math
 import subprocess
 import sys
 import tempfile
@@ -70,12 +71,25 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "ship_zhenyuan": "warship_ironclad",
             "ship_jingyuan": "warship_armored_cruiser",
             "ship_zhiyuan": "warship_protected_cruiser",
-            "ship_chaoyong": "warship_protected_cruiser",
-            "ship_yangwei": "warship_protected_cruiser",
+            "ship_chaoyong": "warship_generic",
+            "ship_yangwei": "warship_generic",
             "ship_matsushima": "warship_protected_cruiser",
             "ship_yoshino": "warship_protected_cruiser",
             "ship_naniwa": "warship_protected_cruiser",
             "ship_hiei": "warship_generic",
+            "fleet_japan_first_flying": "fleet_generic",
+        }
+        expected_ship_ids = {
+            "ship_dingyuan",
+            "ship_zhenyuan",
+            "ship_jingyuan",
+            "ship_zhiyuan",
+            "ship_chaoyong",
+            "ship_yangwei",
+            "ship_matsushima",
+            "ship_yoshino",
+            "ship_naniwa",
+            "ship_hiei",
         }
 
         ships = [actor for actor in battle["actors"] if actor["kind"] == "ship"]
@@ -93,14 +107,9 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertEqual(battle["metadata"]["updated_at"], "2026-07-20")
         self.assertGreaterEqual(len(ships), 10)
         self.assertGreaterEqual(len(ship_movements), 10)
+        self.assertEqual(ship_ids, expected_ship_ids)
+        self.assertEqual({movement["actor_id"] for movement in ship_movements}, expected_ship_ids)
         self.assertEqual(actor_icons, expected_icons)
-        self.assertTrue(
-            all(
-                ord(character) <= 0xFFFF
-                for icon in actor_icons.values()
-                for character in icon
-            )
-        )
         self.assertEqual(
             {
                 key: timeline[key]
@@ -155,6 +164,73 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 self.assertLessEqual(event_start, engagement_start)
                 self.assertLessEqual(engagement_start, engagement_end)
                 self.assertLessEqual(engagement_end, event_end)
+
+    def test_yalu_chronology_results_and_withdrawal_speeds_are_plausible(self):
+        battle = json.loads(YALU_EXAMPLE.read_text(encoding="utf-8"))
+        events = {event["id"]: event for event in battle["historical_events"]}
+        engagements = {engagement["id"]: engagement for engagement in battle["engagements"]}
+        movements = {movement["id"]: movement for movement in battle["movements"]}
+
+        self.assertEqual(events["evt_zhiyuan_charge"]["time"]["end"], "1894-09-17T15:20")
+        self.assertNotIn("ship_jingyuan", events["evt_zhiyuan_charge"]["actor_ids"])
+        self.assertEqual(events["evt_jingyuan_sinking"]["time"]["end"], "1894-09-17T17:30")
+        self.assertIn("ship_jingyuan", events["evt_jingyuan_sinking"]["actor_ids"])
+
+        self.assertEqual(engagements["eng_dingyuan_open"]["result"], "none")
+        self.assertNotIn("result_actor_id", engagements["eng_dingyuan_open"])
+        self.assertEqual(
+            engagements["eng_naniwa_yangwei"]["result"],
+            "damaged",
+        )
+        self.assertEqual(
+            engagements["eng_naniwa_yangwei"]["attacker_actor_id"],
+            "ship_naniwa",
+        )
+        self.assertEqual(
+            engagements["eng_flying_squadron_chaoyong"]["attacker_actor_id"],
+            "fleet_japan_first_flying",
+        )
+        self.assertEqual(
+            engagements["eng_flying_squadron_chaoyong"]["result"],
+            "damaged",
+        )
+        self.assertEqual(
+            engagements["eng_flying_squadron_zhiyuan"]["time"]["end"],
+            "1894-09-17T15:20",
+        )
+        self.assertEqual(
+            engagements["eng_flying_squadron_jingyuan"]["event_id"],
+            "evt_jingyuan_sinking",
+        )
+        self.assertEqual(
+            engagements["eng_flying_squadron_jingyuan"]["time"]["end"],
+            "1894-09-17T17:29",
+        )
+
+        for movement_id in ("mov_qing_retreat", "mov_japan_withdraw"):
+            with self.subTest(movement=movement_id):
+                movement = movements[movement_id]
+                coordinates = movement["path"]["coordinates"]
+                distance_km = sum(
+                    self._haversine_km(start, end)
+                    for start, end in zip(coordinates, coordinates[1:])
+                )
+                start = datetime.fromisoformat(movement["time"]["start"])
+                end = datetime.fromisoformat(movement["time"]["end"])
+                hours = (end - start).total_seconds() / 3600
+                self.assertLessEqual(distance_km / hours, 18)
+
+    @staticmethod
+    def _haversine_km(start, end):
+        start_lon, start_lat = map(math.radians, start)
+        end_lon, end_lat = map(math.radians, end)
+        delta_lon = end_lon - start_lon
+        delta_lat = end_lat - start_lat
+        value = (
+            math.sin(delta_lat / 2) ** 2
+            + math.cos(start_lat) * math.cos(end_lat) * math.sin(delta_lon / 2) ** 2
+        )
+        return 6371 * 2 * math.asin(math.sqrt(value))
 
     def test_yalu_preserves_source_and_geographic_confidence_baseline(self):
         battle = json.loads(YALU_EXAMPLE.read_text(encoding="utf-8"))
