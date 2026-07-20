@@ -251,6 +251,24 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 self.assertIn("視覺代表", events[event_id]["description"])
                 self.assertIn("不表示單艦歸功", events[event_id]["description"])
 
+        yoshino_flank = movements["mov_yoshino_flank"]
+        yoshino_pursuit = movements["mov_yoshino_jingyuan_pursuit"]
+        jingyuan_last_stand = movements["mov_jingyuan_last_stand"]
+        pursuit_coordinates = yoshino_pursuit["path"]["coordinates"]
+        jingyuan_endpoint = jingyuan_last_stand["path"]["coordinates"][-1]
+        self.assertEqual(yoshino_pursuit["event_id"], "evt_jingyuan_sinking")
+        self.assertEqual(
+            pursuit_coordinates[0],
+            yoshino_flank["path"]["coordinates"][-1],
+        )
+        self.assertEqual(yoshino_pursuit["time"]["start"], "1894-09-17T17:00")
+        self.assertEqual(yoshino_pursuit["time"]["end"], "1894-09-17T17:29")
+        self.assertLessEqual(yoshino_pursuit["time"]["confidence"], 0.6)
+        self.assertGreater(
+            self._haversine_km(pursuit_coordinates[0], jingyuan_endpoint),
+            self._haversine_km(pursuit_coordinates[-1], jingyuan_endpoint),
+        )
+
         for movement_id in ("mov_qing_retreat", "mov_japan_withdraw"):
             with self.subTest(movement=movement_id):
                 movement = movements[movement_id]

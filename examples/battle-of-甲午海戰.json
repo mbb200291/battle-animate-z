@@ -821,6 +821,42 @@
       ],
       "precision": "inferred",
       "confidence": 0.5
+    },
+    {
+      "id": "mov_yoshino_jingyuan_pursuit",
+      "event_id": "evt_jingyuan_sinking",
+      "actor_id": "ship_yoshino",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            123.572,
+            39.342
+          ],
+          [
+            123.615,
+            39.351
+          ],
+          [
+            123.655,
+            39.368
+          ]
+        ]
+      },
+      "time": {
+        "label": "1894-09-17 17:00–17:29（推定）",
+        "start": "1894-09-17T17:00",
+        "end": "1894-09-17T17:29",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": [
+        "1894-09-17T17:00",
+        "1894-09-17T17:15",
+        "1894-09-17T17:29"
+      ],
+      "precision": "inferred",
+      "confidence": 0.5
     }
   ],
   "outcome": {
