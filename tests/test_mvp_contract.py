@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from copy import deepcopy
+from datetime import datetime
 from pathlib import Path
 
 from battle_animation.validator import validate_document, validate_document_with_warnings
@@ -64,32 +65,168 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
     def test_yalu_is_a_timed_v030_ship_demo(self):
         battle = json.loads(YALU_EXAMPLE.read_text(encoding="utf-8"))
-        naval_icons = {
-            "warship_generic",
-            "warship_ironclad",
-            "warship_battleship",
-            "warship_armored_cruiser",
-            "warship_protected_cruiser",
-            "warship_destroyer",
-            "warship_torpedo_boat",
+        expected_icons = {
+            "ship_dingyuan": "warship_ironclad",
+            "ship_zhenyuan": "warship_ironclad",
+            "ship_jingyuan": "warship_armored_cruiser",
+            "ship_zhiyuan": "warship_protected_cruiser",
+            "ship_chaoyong": "warship_protected_cruiser",
+            "ship_yangwei": "warship_protected_cruiser",
+            "ship_matsushima": "warship_protected_cruiser",
+            "ship_yoshino": "warship_protected_cruiser",
+            "ship_naniwa": "warship_protected_cruiser",
+            "ship_hiei": "warship_generic",
         }
 
         ships = [actor for actor in battle["actors"] if actor["kind"] == "ship"]
-        timed_ship_movements = [
+        ship_ids = {actor["id"] for actor in ships}
+        ship_movements = [
             movement
             for movement in battle["movements"]
-            if "time" in movement
-            and any(actor["id"] == movement["actor_id"] for actor in ships)
+            if movement["actor_id"] in ship_ids
         ]
         actor_icons = battle["animation_hints"]["style"]["actor_icons"]
+        timeline = battle["animation_hints"]["timeline"]
+        events_by_id = {event["id"]: event for event in battle["historical_events"]}
 
         self.assertEqual(battle["schema_version"], "0.3.0")
+        self.assertEqual(battle["metadata"]["updated_at"], "2026-07-20")
         self.assertGreaterEqual(len(ships), 10)
-        self.assertGreaterEqual(len(timed_ship_movements), 10)
-        self.assertTrue(any("waypoint_times" in movement for movement in timed_ship_movements))
-        self.assertTrue(set(actor_icons.values()) <= naval_icons)
-        self.assertTrue(all(ord(character) <= 0xFFFF for icon in actor_icons.values() for character in icon))
-        self.assertTrue(all("time" in engagement for engagement in battle["engagements"]))
+        self.assertGreaterEqual(len(ship_movements), 10)
+        self.assertEqual(actor_icons, expected_icons)
+        self.assertTrue(
+            all(
+                ord(character) <= 0xFFFF
+                for icon in actor_icons.values()
+                for character in icon
+            )
+        )
+        self.assertEqual(
+            {
+                key: timeline[key]
+                for key in (
+                    "historical_seconds_per_playback_second",
+                    "idle_compression_threshold_seconds",
+                    "idle_compressed_duration_ms",
+                )
+            },
+            {
+                "historical_seconds_per_playback_second": 120,
+                "idle_compression_threshold_seconds": 900,
+                "idle_compressed_duration_ms": 1200,
+            },
+        )
+
+        for movement in ship_movements:
+            with self.subTest(movement=movement["id"]):
+                event_time = events_by_id[movement["event_id"]]["time"]
+                movement_time = movement["time"]
+                waypoint_times = movement["waypoint_times"]
+                coordinates = movement["path"]["coordinates"]
+
+                self.assertEqual(movement["precision"], "inferred")
+                self.assertEqual(movement_time["precision"], "range")
+                self.assertLessEqual(movement_time["confidence"], 0.6)
+                self.assertEqual(len(waypoint_times), len(coordinates))
+                parsed_waypoints = [datetime.fromisoformat(value) for value in waypoint_times]
+                event_start = datetime.fromisoformat(event_time["start"])
+                event_end = datetime.fromisoformat(event_time["end"])
+                movement_start = datetime.fromisoformat(movement_time["start"])
+                movement_end = datetime.fromisoformat(movement_time["end"])
+                self.assertTrue(
+                    all(
+                        earlier < later
+                        for earlier, later in zip(parsed_waypoints, parsed_waypoints[1:])
+                    )
+                )
+                self.assertLessEqual(movement_start, parsed_waypoints[0])
+                self.assertLessEqual(parsed_waypoints[-1], movement_end)
+                self.assertLessEqual(event_start, movement_start)
+                self.assertLessEqual(movement_end, event_end)
+
+        for engagement in battle["engagements"]:
+            with self.subTest(engagement=engagement["id"]):
+                event_time = events_by_id[engagement["event_id"]]["time"]
+                engagement_time = engagement["time"]
+                event_start = datetime.fromisoformat(event_time["start"])
+                event_end = datetime.fromisoformat(event_time["end"])
+                engagement_start = datetime.fromisoformat(engagement_time["start"])
+                engagement_end = datetime.fromisoformat(engagement_time["end"])
+                self.assertLessEqual(event_start, engagement_start)
+                self.assertLessEqual(engagement_start, engagement_end)
+                self.assertLessEqual(engagement_end, event_end)
+
+    def test_yalu_preserves_source_and_geographic_confidence_baseline(self):
+        battle = json.loads(YALU_EXAMPLE.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            {
+                place["id"]: {
+                    "coordinates": place["geometry"]["coordinates"],
+                    "precision": place["precision"],
+                    "confidence": place["confidence"],
+                }
+                for place in battle["places"]
+            },
+            {
+                "place_dadonggou": {
+                    "coordinates": [123.62, 39.35],
+                    "precision": "approximate",
+                    "confidence": 0.7,
+                },
+                "place_right_wing": {
+                    "coordinates": [123.56, 39.333],
+                    "precision": "inferred",
+                    "confidence": 0.5,
+                },
+                "place_melee": {
+                    "coordinates": [123.6, 39.33],
+                    "precision": "inferred",
+                    "confidence": 0.5,
+                },
+                "place_weihaiwei": {
+                    "coordinates": [122.1, 37.5],
+                    "precision": "approximate",
+                    "confidence": 0.8,
+                },
+            },
+        )
+        self.assertEqual(
+            battle["sources"],
+            [
+                {
+                    "id": "src_zhwiki_yalu",
+                    "title": "黃海海戰 - 維基百科",
+                    "url": "https://zh.wikipedia.org/wiki/黃海海戰_(1894年)",
+                    "retrieved_at": "2026-06-22",
+                    "license": "CC BY-SA 4.0",
+                }
+            ],
+        )
+
+    def test_yalu_has_zero_python_and_browser_validation_diagnostics(self):
+        battle = json.loads(YALU_EXAMPLE.read_text(encoding="utf-8"))
+
+        errors, warnings = validate_document_with_warnings(battle)
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+        script = """
+            import fs from "node:fs";
+            import { validateBattle } from "./app/animate.js";
+            const battle = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            console.log(JSON.stringify(validateBattle(battle)));
+        """
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script, str(YALU_EXAMPLE)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"errors": [], "warnings": []})
 
     def test_schema_contains_required_event_types(self):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
