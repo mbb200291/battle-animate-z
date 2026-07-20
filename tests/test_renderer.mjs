@@ -50,6 +50,8 @@ class FakeElement {
     this.hidden = false;
     this.value = "";
     this.max = "";
+    this.clientWidth = id === "battle-map" ? 800 : 0;
+    this.clientHeight = id === "battle-map" ? 600 : 0;
     this.removed = false;
   }
 
@@ -92,7 +94,16 @@ class FakeElement {
 
   addEventListener(type, listener) {
     this.listeners ??= new Map();
-    this.listeners.set(type, listener);
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type).add(listener);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners?.get(type)?.delete(listener);
+  }
+
+  dispatch(type, event = {}) {
+    for (const listener of this.listeners?.get(type) || []) listener({ target: this, ...event });
   }
 
   scrollIntoView() {}
@@ -111,9 +122,17 @@ class FakeDocument {
       "battle-map", "legend", "battle-name", "battle-date", "battle-summary",
       "timeline", "event-type", "event-title", "event-description", "event-precision",
       "event-confidence", "confidence-bar", "engagements", "event-scrubber",
-      "event-progress", "play-button",
+      "event-progress", "historical-time", "compression-notice", "play-button",
+      "follow-button", "event-card-stack", "speed-controls",
     ]) {
       this.elements.set(id, new FakeElement(id === "battle-map" ? "div" : "span", id));
+    }
+    const speeds = this.elements.get("speed-controls");
+    for (const rate of [0.5, 1, 2, 4]) {
+      const button = new FakeElement("button");
+      button.dataset.speed = String(rate);
+      button.setAttribute("aria-pressed", String(rate === 1));
+      speeds.append(button);
     }
   }
 
@@ -130,8 +149,13 @@ class FakeDocument {
   }
 
   querySelectorAll(selector) {
-    if (selector !== "#timeline button") return [];
-    return descendants(this.getElementById("timeline")).filter((element) => element.tagName === "BUTTON");
+    if (selector === "#timeline button") {
+      return descendants(this.getElementById("timeline")).filter((element) => element.tagName === "BUTTON");
+    }
+    if (selector === "#speed-controls [data-speed]") {
+      return descendants(this.getElementById("speed-controls")).filter((element) => element.dataset.speed);
+    }
+    return [];
   }
 
   addEventListener(type, listener) {
@@ -180,6 +204,7 @@ class FakeMap {
     this.removeCount = 0;
     this.offCount = 0;
     this.zoom = 8;
+    this.flyCalls = [];
   }
 
   getContainer() { return this.container; }
@@ -187,11 +212,17 @@ class FakeMap {
   fitBounds() { return this; }
   invalidateSize() {}
   getZoom() { return this.zoom; }
+  getSize() { return { x: this.container.clientWidth, y: this.container.clientHeight }; }
   latLngToContainerPoint([lat, lon]) { return { x: lon * 100 + 400, y: 300 - lat * 100 }; }
   on(events, listener) {
-    events.split(/\s+/).forEach((event) => this.listeners.set(event, listener));
+    events.split(/\s+/).forEach((event) => {
+      if (!this.listeners.has(event)) this.listeners.set(event, new Set());
+      this.listeners.get(event).add(listener);
+    });
     return this;
   }
+  fire(event) { for (const listener of this.listeners.get(event) || []) listener(); }
+  flyToBounds(bounds, options) { this.flyCalls.push({ bounds, options }); return this; }
   off() { this.offCount += 1; this.listeners.clear(); return this; }
   remove() { this.removeCount += 1; }
 }
@@ -205,7 +236,13 @@ function installLeaflet() {
       return map;
     },
     tileLayer() { return { addTo() {} }; },
-    latLngBounds() { return { pad() { return this; } }; },
+    latLngBounds(points) {
+      return {
+        points,
+        padRatio: null,
+        pad(ratio) { this.padRatio = ratio; return this; },
+      };
+    },
   };
   return maps;
 }
@@ -337,6 +374,109 @@ test("seek deterministically applies movement, engagement, sunk, and visibility 
   assert.equal(bravo.classList.contains("is-hit"), true);
   assert.equal(bravo.classList.contains("is-sunk"), false);
   assert.equal(paths[1].classList.contains("is-visible"), false);
+});
+
+test("continuous scrubber and historical clock follow every sampled seek", () => {
+  const { controller, document } = setup();
+  const scrubber = document.getElementById("event-scrubber");
+
+  assert.equal(scrubber.max, String(controller.compiled.presentationDurationMs));
+  controller.seek(1250);
+  assert.equal(scrubber.value, "1250");
+  assert.equal(document.getElementById("historical-time").textContent, "2020-01-01 00:00:01");
+  assert.equal(document.getElementById("event-progress").textContent, "2 / 2");
+});
+
+test("setSpeed updates exactly one selected control without jumping time", () => {
+  const { controller, document } = setup();
+  controller.seek(400);
+  controller.setSpeed(2);
+
+  assert.equal(controller.currentPresentationMs, 400);
+  assert.equal(controller.playbackRate, 2);
+  const buttons = document.querySelectorAll("#speed-controls [data-speed]");
+  assert.deepEqual(buttons.map((button) => button.getAttribute("aria-pressed")), ["false", "false", "true", "false"]);
+});
+
+test("event cards appear once per forward passage, pause on interaction, and can recur after rewinding", () => {
+  const { controller, document } = setup();
+  const stack = document.getElementById("event-card-stack");
+  assert.equal(stack.children.length, 1);
+
+  controller.seek(200);
+  assert.equal(stack.children.length, 1);
+  controller.seek(1200);
+  assert.equal(stack.children.length, 2);
+  controller.play();
+  stack.children.at(-1).dispatch("pointerenter");
+  assert.equal(controller.isPlaying, false);
+
+  controller.seek(200);
+  assert.equal(stack.children.length, 3);
+  assert.equal(stack.children.at(-1).children.some((child) => child.textContent === "Opening"), true);
+});
+
+test("compression notice is deterministic and synthetic clocks never fabricate epoch dates", () => {
+  const battle = battleFixture();
+  battle.historical_events[1].time = {
+    label: "later", start: "2020-01-01T01:00:00Z", end: "2020-01-01T01:00:01Z", precision: "exact", confidence: 1,
+  };
+  battle.movements[1].time = battle.historical_events[1].time;
+  battle.movements[1].waypoint_times = ["2020-01-01T01:00:00Z", "2020-01-01T01:00:01Z"];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const gap = controller.compiled.compressedGaps[0];
+  controller.seek(gap.presentationStartMs + 100);
+  assert.equal(document.getElementById("compression-notice").hidden, false);
+  assert.match(document.getElementById("compression-notice").textContent, /^Compressed \d+ min inactive interval$/);
+  controller.seek(0);
+  assert.equal(document.getElementById("compression-notice").hidden, true);
+
+  const syntheticBattle = battleFixture();
+  for (const event of syntheticBattle.historical_events) event.time = { label: "unknown", precision: "unknown", confidence: 0.5 };
+  for (const movement of syntheticBattle.movements) delete movement.time;
+  const syntheticDocument = new FakeDocument(clock.window);
+  const syntheticController = renderBattle(syntheticBattle, syntheticDocument);
+  syntheticController.seek(1000);
+  assert.equal(syntheticDocument.getElementById("historical-time").textContent, "Animation time 00:01");
+});
+
+test("follow flies only outside its safe zone and manual map interaction suspends it", () => {
+  const battle = battleFixture();
+  battle.movements[0].path.coordinates = [[0, 0], [8, 0]];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(battle, document);
+  const map = maps[0];
+
+  controller.seek(900);
+  assert.equal(map.flyCalls.length, 1);
+  assert.equal(map.flyCalls[0].bounds.padRatio, 0.35);
+  assert.ok(map.flyCalls[0].options.duration >= 0.8 && map.flyCalls[0].options.duration <= 2.4);
+  assert.equal(controller._programmaticMove, true);
+  map.fire("moveend");
+  assert.equal(controller._programmaticMove, false);
+  map.fire("dragstart");
+  assert.equal(controller.followEnabled, false);
+  assert.equal(document.getElementById("follow-button").textContent, "Follow: off");
+});
+
+test("zoom hierarchy exposes near, middle, and far SVG classes", () => {
+  const { controller, svg, maps } = setup();
+  const map = maps[0];
+  map.zoom = 11;
+  map.fire("zoomend");
+  assert.equal(svg.classList.contains("labels-near"), true);
+  map.zoom = 9;
+  map.fire("zoomend");
+  assert.equal(svg.classList.contains("labels-middle"), true);
+  map.zoom = 7;
+  map.fire("zoomend");
+  assert.equal(svg.classList.contains("labels-far"), true);
+  controller.destroy();
 });
 
 test("destroy is idempotent and cancels frames and listeners exactly once", () => {

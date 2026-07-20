@@ -144,6 +144,63 @@ textarea {
   font-size: 13px;
 }
 
+.event-card-stack {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 710;
+  display: grid;
+  gap: 8px;
+  width: min(340px, calc(100% - 150px));
+  pointer-events: none;
+}
+
+.event-card {
+  padding: 12px 14px;
+  background: rgba(255, 250, 240, 0.94);
+  border-left: 3px solid var(--accent);
+  box-shadow: 0 7px 22px rgba(25, 32, 42, 0.14);
+  pointer-events: auto;
+  animation: event-card-enter 180ms ease-out both;
+}
+
+.event-card + .event-card {
+  border-top: 1px solid rgba(25, 32, 42, 0.1);
+}
+
+.event-card p,
+.event-card h2 {
+  margin: 0;
+}
+
+.event-card-meta,
+.event-card-evidence {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.event-card-title {
+  margin-top: 4px !important;
+  font-size: 17px;
+}
+
+.event-card-description,
+.event-card-engagement {
+  margin-top: 6px !important;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.event-card-evidence {
+  margin-top: 8px !important;
+}
+
+@keyframes event-card-enter {
+  from { opacity: 0; transform: translateY(-5px); }
+}
+
 /* --- Inspector --- */
 .inspector {
   display: flex;
@@ -214,12 +271,24 @@ button.ghost,
   border-color: var(--ink);
 }
 
-.error-banner {
+.error-banner,
+.warning-banner,
+.compression-notice {
   padding: 12px 14px;
+  font-size: 13px;
+}
+
+.error-banner {
   background: #fdecea;
   border: 1px solid var(--accent);
   color: #7a261d;
-  font-size: 13px;
+}
+
+.warning-banner,
+.compression-notice {
+  color: #62583e;
+  background: #eee8d8;
+  border-left: 3px solid #8c8166;
 }
 
 .error-banner ul {
@@ -229,13 +298,42 @@ button.ghost,
 
 .controls {
   display: grid;
-  grid-template-columns: 1fr 1fr auto auto;
   gap: 10px;
+  padding-block: 12px;
+  border-block: 1px solid var(--line);
+}
+
+.transport-row,
+.playback-options,
+.speed-controls {
+  display: flex;
+  gap: 6px;
   align-items: center;
 }
 
+.transport-row #play-button {
+  flex: 1;
+}
+
+.playback-options {
+  justify-content: space-between;
+}
+
+.speed-controls button,
+#follow-button {
+  min-height: 40px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
+
+.speed-controls button[aria-pressed="true"],
+#follow-button[aria-pressed="true"] {
+  color: var(--panel);
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
 .scrubber {
-  grid-column: 1 / -1;
   display: grid;
   gap: 6px;
   color: var(--muted);
@@ -249,64 +347,12 @@ button.ghost,
 
 #event-scrubber {
   width: 100%;
+  accent-color: var(--accent);
 }
 
-.current-event {
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-
-#event-type {
+.compression-notice {
   margin: 0;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 750;
-  text-transform: uppercase;
-}
-
-dl {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin: 16px 0 0;
-}
-
-dt {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-dd {
-  margin: 3px 0 0;
-  font-weight: 750;
-}
-
-.confidence-track {
-  margin-top: 12px;
-  height: 6px;
-  background: var(--line);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.confidence-bar {
-  height: 100%;
-  width: 0;
-  background: var(--accent);
-  transition: width 320ms ease;
-}
-
-.engagements {
-  display: grid;
-  gap: 6px;
-  margin-top: 14px;
-}
-
-.engagement-row {
-  padding: 8px 10px;
-  background: var(--panel);
-  border-left: 3px solid var(--accent);
-  font-size: 13px;
+  padding-block: 8px;
 }
 
 .timeline {
@@ -434,6 +480,19 @@ dd {
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* Leaflet zoom hierarchy: near >= 11, middle 8–10, far < 8. */
+.battle-overlay.labels-middle .unit-sub-label,
+.battle-overlay.labels-far .unit-label,
+.battle-overlay.labels-far .unit-sub-label,
+.battle-overlay.labels-far .unit-echelon,
+.battle-overlay.labels-far .place-label {
+  display: none;
+}
+
+.battle-overlay.labels-far .unit-symbol {
+  transform: scale(0.46);
 }
 
 .unit-echelon {
@@ -591,7 +650,40 @@ dd {
     min-height: 420px;
   }
 
+  .event-card-stack {
+    top: 12px;
+    left: 12px;
+    width: min(300px, calc(100% - 116px));
+  }
+
+  .event-card {
+    padding: 10px 11px;
+  }
+
   .inspector {
     max-height: none;
+  }
+
+  .transport-row,
+  .playback-options {
+    flex-wrap: wrap;
+  }
+
+  .transport-row button,
+  #follow-button {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-card,
+  .movement-path,
+  .event-marker,
+  .event-marker-inner,
+  .unit,
+  .engagement-line,
+  .confidence-bar {
+    animation: none !important;
+    transition: none !important;
   }
 }

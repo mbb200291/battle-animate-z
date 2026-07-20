@@ -26,6 +26,8 @@
             <span id="battle-date">Loading examples/battle-of-waterloo.json</span>
           </div>
 
+          <section id="event-card-stack" class="event-card-stack" aria-live="polite" aria-label="Recent battle events"></section>
+
           <div class="drop-hint">Drop battle JSON here</div>
         </div>
 
@@ -45,40 +47,33 @@
           </div>
 
           <div id="error-banner" class="error-banner" role="alert" hidden></div>
+          <div id="validation-warnings" class="warning-banner" role="status" hidden></div>
 
           <div class="controls" aria-label="Playback controls">
-            <button id="play-button" type="button" aria-pressed="false">Play</button>
-            <button id="reset-button" type="button" class="ghost">Reset</button>
-            <button id="prev-button" type="button" class="ghost" aria-label="Previous event">◀</button>
-            <button id="next-button" type="button" class="ghost" aria-label="Next event">▶</button>
+            <div class="transport-row">
+              <button id="play-button" type="button" aria-pressed="false">Play</button>
+              <button id="reset-button" type="button" class="ghost">Reset</button>
+              <button id="prev-button" type="button" class="ghost" aria-label="Previous event">Prev</button>
+              <button id="next-button" type="button" class="ghost" aria-label="Next event">Next</button>
+            </div>
+            <div class="playback-options">
+              <div id="speed-controls" class="speed-controls" aria-label="Playback speed">
+                <button type="button" class="ghost" data-speed="0.5" aria-pressed="false">0.5×</button>
+                <button type="button" class="ghost" data-speed="1" aria-pressed="true">1×</button>
+                <button type="button" class="ghost" data-speed="2" aria-pressed="false">2×</button>
+                <button type="button" class="ghost" data-speed="4" aria-pressed="false">4×</button>
+              </div>
+              <button id="follow-button" type="button" class="ghost" aria-pressed="true">Follow: on</button>
+            </div>
             <label class="scrubber">
               <span class="scrubber-row">
-                <span>Timeline</span>
+                <span id="historical-time">Animation time 00:00</span>
                 <span id="event-progress">0 / 0</span>
               </span>
-              <input id="event-scrubber" type="range" min="0" max="0" value="0" step="1" />
+              <input id="event-scrubber" type="range" min="0" max="0" value="0" step="any" />
             </label>
+            <p id="compression-notice" class="compression-notice" hidden></p>
           </div>
-
-          <section class="current-event" aria-live="polite">
-            <p id="event-type">event</p>
-            <h2 id="event-title">Loading</h2>
-            <p id="event-description"></p>
-            <dl>
-              <div>
-                <dt>Precision</dt>
-                <dd id="event-precision">unknown</dd>
-              </div>
-              <div>
-                <dt>Confidence</dt>
-                <dd id="event-confidence">0%</dd>
-              </div>
-            </dl>
-            <div class="confidence-track" aria-hidden="true">
-              <div id="confidence-bar" class="confidence-bar"></div>
-            </div>
-            <div id="engagements" class="engagements" hidden></div>
-          </section>
 
           <ol id="timeline" class="timeline" aria-label="Timeline events"></ol>
         </aside>
@@ -123,7 +118,7 @@
         $("play-button").onclick = () => controller.toggle();
         $("reset-button").onclick = () => {
           controller.pause();
-          controller.showEvent(0);
+          controller.seek(0);
         };
         $("prev-button").onclick = () => {
           controller.pause();
@@ -135,12 +130,19 @@
         };
         $("event-scrubber").oninput = (event) => {
           controller.pause();
-          controller.showEvent(Number(event.target.value));
+          controller.seek(Number(event.target.value));
         };
+        document.querySelectorAll("#speed-controls [data-speed]").forEach((button) => {
+          button.onclick = () => controller.setSpeed(Number(button.dataset.speed));
+        });
+        $("follow-button").onclick = () => controller.setFollowEnabled(!controller.followEnabled);
       }
 
       function setBattle(battle) {
         const errors = validateBattle(battle);
+        const warnings = $("validation-warnings");
+        warnings.hidden = true;
+        warnings.textContent = "";
         showErrors(errors);
         if (errors.length) return;
         controller = renderBattle(battle, document);

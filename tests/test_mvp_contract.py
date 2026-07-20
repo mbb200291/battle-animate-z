@@ -476,6 +476,23 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn("renderBattle", animate)
         self.assertIn("playTimeline", animate)
 
+    def test_static_app_exposes_continuous_playback_controls(self):
+        index = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
+
+        for element_id in (
+            "historical-time",
+            "compression-notice",
+            "speed-controls",
+            "follow-button",
+            "event-card-stack",
+            "validation-warnings",
+        ):
+            self.assertIn(f'id="{element_id}"', index)
+        self.assertRegex(
+            index,
+            r'id="event-scrubber"[^>]*step="any"',
+        )
+
     def test_renderer_uses_timeline_and_symbol_modules(self):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
 
@@ -510,7 +527,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "redrawEngagementEndpoints",
         ):
             self.assertIn(contract, animate)
-        self.assertNotIn("flyTo", animate)
+        self.assertIn("flyToBounds", animate)
         self.assertNotIn("transform 700ms", styles)
         self.assertIn(".unit-symbol path", styles)
 

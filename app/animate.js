@@ -164,9 +164,11 @@ export function validateBattle(battle) {
 export function renderBattle(battle, documentRef = document) {
   const $ = (id) => documentRef.getElementById(id);
   const mapEl = $("battle-map");
+  const cardStack = $("event-card-stack");
 
   // Tear down a previous render so the same container can be reused.
   if (mapEl._battleController) mapEl._battleController.destroy();
+  if (cardStack) cardStack.replaceChildren();
 
   const sides = new Map(battle.sides.map((side) => [side.id, side]));
   const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
@@ -374,12 +376,6 @@ export function renderBattle(battle, documentRef = document) {
     redrawEngagementEndpoints();
   }
 
-  const onMapMoveStart = () => svg.classList.add("is-moving");
-  const onMapMoveEnd = () => svg.classList.remove("is-moving");
-  map.on("move zoom viewreset resize", reprojectMap);
-  map.on("movestart zoomstart", onMapMoveStart);
-  map.on("moveend zoomend", onMapMoveEnd);
-
   buildLegend(battle, documentRef, colorOf);
   bindStaticText(battle, documentRef);
   buildTimeline(orderedEvents, documentRef, (index) => {
@@ -392,7 +388,56 @@ export function renderBattle(battle, documentRef = document) {
   const requestFrame = windowRef.requestAnimationFrame.bind(windowRef);
   const cancelFrame = windowRef.cancelAnimationFrame.bind(windowRef);
   let renderedEventIndex = -1;
-  let renderedEngagementIds = null;
+  let passageEventId = null;
+  const visibleCards = [];
+
+  function nowMs() {
+    return windowRef.performance?.now ? windowRef.performance.now() : Date.now();
+  }
+
+  function appendTextElement(parent, tagName, className, text) {
+    const element = documentRef.createElement(tagName);
+    element.setAttribute("class", className);
+    element.textContent = text;
+    parent.append(element);
+    return element;
+  }
+
+  function appendEventCard(selected) {
+    if (!cardStack || passageEventId === selected.id) return;
+    passageEventId = selected.id;
+    const event = selected.event;
+    const card = documentRef.createElement("article");
+    card.setAttribute("class", "event-card");
+    card.dataset.eventId = selected.id;
+    appendTextElement(card, "p", "event-card-meta", `${event.time?.label || "Time unknown"} · ${event.type}`);
+    appendTextElement(card, "h2", "event-card-title", event.title);
+    if (event.description) appendTextElement(card, "p", "event-card-description", event.description);
+    const confidence = typeof event.confidence === "number" ? `${Math.round(event.confidence * 100)}% confidence` : "confidence unknown";
+    appendTextElement(card, "p", "event-card-evidence", `${event.precision || "unknown"} precision · ${confidence}`);
+    for (const engagement of engagements.filter(({ event_id }) => event_id === event.id)) {
+      const attacker = actors.get(engagement.attacker_actor_id)?.name || engagement.attacker_actor_id;
+      const target = actors.get(engagement.target_actor_id)?.name || engagement.target_actor_id;
+      appendTextElement(card, "p", "event-card-engagement", `${attacker} → ${target}${engagement.result && engagement.result !== "none" ? ` · ${engagement.result}` : ""}`);
+    }
+    const pause = () => controller.pause();
+    card.addEventListener("pointerenter", pause);
+    card.addEventListener("click", pause);
+    cardStack.append(card);
+    visibleCards.push({ element: card, id: selected.id, shownAt: nowMs() });
+    while (visibleCards.length > 3) visibleCards.shift().element.remove();
+  }
+
+  function pruneEventCards(currentId) {
+    const now = nowMs();
+    for (let index = visibleCards.length - 1; index >= 0; index -= 1) {
+      const item = visibleCards[index];
+      if (item.id !== currentId && now - item.shownAt >= 3000) {
+        item.element.remove();
+        visibleCards.splice(index, 1);
+      }
+    }
+  }
 
   function selectedEventWindow(sampled) {
     const active = compiled.eventWindows.find(({ id }) => sampled.activeEventIds.has(id));
@@ -410,13 +455,85 @@ export function renderBattle(battle, documentRef = document) {
     const selectedIndex = orderIndex.get(selected.id) ?? 0;
     owner.currentIndex = selectedIndex;
     if (selectedIndex === renderedEventIndex) return;
-    updateInspector(documentRef, selected.event);
     updateTimeline(documentRef, selectedIndex);
-    const scrubber = $("event-scrubber");
-    if (scrubber) scrubber.value = String(selectedIndex);
     const progress = $("event-progress");
     if (progress) progress.textContent = `${selectedIndex + 1} / ${orderedEvents.length}`;
+    appendEventCard(selected);
     renderedEventIndex = selectedIndex;
+  }
+
+  function updatePlaybackReadout(sampled, presentationMs) {
+    const scrubber = $("event-scrubber");
+    if (scrubber) scrubber.value = String(presentationMs);
+    const historicalTime = $("historical-time");
+    if (historicalTime) {
+      historicalTime.textContent = sampled.synthetic
+        ? `Animation time ${formatElapsedTime(presentationMs)}`
+        : formatHistoricalTime(sampled.historicalMs);
+    }
+    const notice = $("compression-notice");
+    if (notice) {
+      notice.hidden = !sampled.compressedGap;
+      notice.textContent = sampled.compressedGap
+        ? `Compressed ${Math.max(1, Math.round(sampled.compressedGap.historicalDurationMs / 60000))} min inactive interval`
+        : "";
+    }
+  }
+
+  function applyZoomLabelClass() {
+    const zoom = map.getZoom();
+    svg.classList.toggle("labels-near", zoom >= 11);
+    svg.classList.toggle("labels-middle", zoom >= 8 && zoom < 11);
+    svg.classList.toggle("labels-far", zoom < 8);
+  }
+
+  function activeGeographicPoints(sampled) {
+    const actorIds = new Set();
+    for (const window of compiled.eventWindows) {
+      if (!sampled.activeEventIds.has(window.id)) continue;
+      for (const actorId of [...(window.event.actor_ids || []), ...(window.event.target_actor_ids || [])]) {
+        actorIds.add(actorId);
+      }
+    }
+    for (const track of compiled.tracks) {
+      if (sampled.historicalMs >= track.startMs && sampled.historicalMs <= track.endMs) {
+        actorIds.add(track.actorId);
+      }
+    }
+    for (const engagement of engagements) {
+      if (!sampled.activeEngagementIds.has(engagement.id)) continue;
+      actorIds.add(engagement.attacker_actor_id);
+      actorIds.add(engagement.target_actor_id);
+    }
+    return [...actorIds].map((actorId) => sampled.actorPositions.get(actorId)).filter(Boolean);
+  }
+
+  function maybeFollow(owner, sampled, animationTime) {
+    if (!owner.followEnabled || owner._programmaticMove) return;
+    if (animationTime >= owner._lastFollowCheck && animationTime - owner._lastFollowCheck < 500) return;
+    owner._lastFollowCheck = animationTime;
+    const points = activeGeographicPoints(sampled);
+    if (!points.length) return;
+    const size = map.getSize ? map.getSize() : { x: mapEl.clientWidth, y: mapEl.clientHeight };
+    const insetX = size.x * 0.22;
+    const insetY = size.y * 0.22;
+    const projected = points.map(project);
+    const outside = projected.some(({ x, y }) =>
+      x < insetX || x > size.x - insetX || y < insetY || y > size.y - insetY);
+    if (!outside) return;
+    const center = projected.reduce((sum, point) => ({ x: sum.x + point.x, y: sum.y + point.y }), { x: 0, y: 0 });
+    center.x /= projected.length;
+    center.y /= projected.length;
+    const distance = Math.hypot(center.x - size.x / 2, center.y - size.y / 2);
+    const flyDuration = Math.min(2.4, Math.max(0.8, 0.8 + distance / 500));
+    const bounds = L.latLngBounds(points.map(([lon, lat]) => [lat, lon])).pad(0.35);
+    owner._programmaticMove = true;
+    try {
+      map.flyToBounds(bounds, { duration: flyDuration, animate: true });
+    } catch (error) {
+      owner._programmaticMove = false;
+      throw error;
+    }
   }
 
   const controller = {
@@ -428,9 +545,12 @@ export function renderBattle(battle, documentRef = document) {
     currentPresentationMs: 0,
     sampledState: null,
     playbackRate: 1,
+    followEnabled: true,
     isPlaying: false,
     _frame: null,
     _lastFrameTime: null,
+    _lastFollowCheck: -Infinity,
+    _programmaticMove: false,
     _destroyed: false,
 
     renderAt(presentationMs) {
@@ -439,6 +559,7 @@ export function renderBattle(battle, documentRef = document) {
       const sampled = sampleTimeline(compiled, bounded);
       this.sampledState = sampled;
       actorPositions = sampled.actorPositions;
+      updatePlaybackReadout(sampled, bounded);
 
       for (const [actorId, { g, heading, symbol }] of unitEls) {
         const radians = sampled.headings.get(actorId) || 0;
@@ -476,15 +597,10 @@ export function renderBattle(battle, documentRef = document) {
         g.classList.toggle("is-active", sampled.activeEventIds.has(window.id));
       }
 
-      const activeEngagements = engagements
-        .filter((engagement) => sampled.activeEngagementIds.has(engagement.id));
-      const engagementIds = activeEngagements.map(({ id }) => id).join("\u0000");
-      if (engagementIds !== renderedEngagementIds) {
-        renderEngagements(documentRef, activeEngagements, actors);
-        renderedEngagementIds = engagementIds;
-      }
-
       displaySelectedEvent(this, selectedEventWindow(sampled));
+      const selected = selectedEventWindow(sampled);
+      pruneEventCards(selected?.id);
+      maybeFollow(this, sampled, bounded);
       return sampled;
     },
 
@@ -496,14 +612,23 @@ export function renderBattle(battle, documentRef = document) {
       if (!Number.isFinite(rate) || rate <= 0) {
         throw new RangeError("playback rate must be a positive finite number");
       }
-      if (this.isPlaying && this._lastFrameTime !== null && windowRef.performance?.now) {
-        const now = windowRef.performance.now();
-        this.renderAt(this.currentPresentationMs + (now - this._lastFrameTime) * this.playbackRate);
-        this._lastFrameTime = now;
-        if (this.currentPresentationMs >= duration) this.pause();
-      }
       this.playbackRate = rate;
+      if (this.isPlaying && windowRef.performance?.now) this._lastFrameTime = windowRef.performance.now();
+      for (const button of documentRef.querySelectorAll("#speed-controls [data-speed]")) {
+        button.setAttribute("aria-pressed", String(Number(button.dataset.speed) === rate));
+      }
       return rate;
+    },
+
+    setFollowEnabled(enabled) {
+      this.followEnabled = Boolean(enabled);
+      if (this.followEnabled) this._lastFollowCheck = -Infinity;
+      const button = $("follow-button");
+      if (button) {
+        button.setAttribute("aria-pressed", String(this.followEnabled));
+        button.textContent = `Follow: ${this.followEnabled ? "on" : "off"}`;
+      }
+      return this.followEnabled;
     },
 
     showEvent(index) {
@@ -571,6 +696,7 @@ export function renderBattle(battle, documentRef = document) {
       map.off();
       map.remove();
       svg.remove();
+      if (cardStack) cardStack.replaceChildren();
       if (mapEl._battleController === this) delete mapEl._battleController;
     },
   };
@@ -590,17 +716,46 @@ export function renderBattle(battle, documentRef = document) {
   }
   documentRef.addEventListener("keydown", onKey);
 
+  const onMapMoveStart = () => svg.classList.add("is-moving");
+  const onMapMoveEnd = () => {
+    svg.classList.remove("is-moving");
+    applyZoomLabelClass();
+    controller._programmaticMove = false;
+  };
+  const onManualMapStart = () => {
+    if (!controller._programmaticMove) controller.setFollowEnabled(false);
+  };
+  map.on("move zoom viewreset resize", reprojectMap);
+  map.on("movestart zoomstart", onMapMoveStart);
+  map.on("dragstart zoomstart", onManualMapStart);
+  map.on("moveend zoomend", onMapMoveEnd);
+
   const scrubber = $("event-scrubber");
-  if (scrubber) scrubber.max = String(orderedEvents.length - 1);
+  if (scrubber) scrubber.max = String(duration);
+  controller.setSpeed(1);
+  controller.setFollowEnabled(true);
 
   mapEl._battleController = controller;
   redrawStaticGeometry();
+  applyZoomLabelClass();
   controller.seek(0);
   return controller;
 }
 
 export function playTimeline(controller) {
   controller.play();
+}
+
+function formatElapsedTime(milliseconds) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatHistoricalTime(milliseconds) {
+  const iso = new Date(milliseconds).toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)}`;
 }
 
 function eventCoord(event, places) {
@@ -665,51 +820,6 @@ function buildTimeline(events, documentRef, onSelect) {
     item.append(button);
     timeline.append(item);
   });
-}
-
-const ENGAGEMENT_SYMBOLS = {
-  fire: "💥",
-  bombardment: "💥",
-  ram: "⊕",
-  torpedo: "≈",
-  charge: "»",
-  melee: "⚔",
-  other: "•",
-};
-
-function renderEngagements(documentRef, list, actors) {
-  const box = documentRef.getElementById("engagements");
-  if (!box) return;
-  box.replaceChildren();
-  if (!list.length) {
-    box.hidden = true;
-    return;
-  }
-  box.hidden = false;
-  for (const eng of list) {
-    const attacker = actors.get(eng.attacker_actor_id)?.name || eng.attacker_actor_id;
-    const target = actors.get(eng.target_actor_id)?.name || eng.target_actor_id;
-    const row = documentRef.createElement("div");
-    row.className = "engagement-row";
-    let text = `${ENGAGEMENT_SYMBOLS[eng.type] || "•"} ${attacker} → ${target}`;
-    if (eng.result && eng.result !== "none") {
-      const victim = actors.get(eng.result_actor_id || eng.target_actor_id)?.name || target;
-      text += ` — ${victim}: ${eng.result}`;
-    }
-    row.textContent = text;
-    box.append(row);
-  }
-}
-
-function updateInspector(documentRef, event) {
-  setText(documentRef, "event-type", event.type);
-  setText(documentRef, "event-title", event.title);
-  setText(documentRef, "event-description", event.description || "");
-  setText(documentRef, "event-precision", event.precision || "unknown");
-  const confidence = typeof event.confidence === "number" ? event.confidence : 0;
-  setText(documentRef, "event-confidence", `${Math.round(confidence * 100)}%`);
-  const bar = documentRef.getElementById("confidence-bar");
-  if (bar) bar.style.width = `${Math.round(confidence * 100)}%`;
 }
 
 function updateTimeline(documentRef, index) {
