@@ -25,7 +25,6 @@ export function parseBattleTime(value) {
   const minute = Number(match[5] ?? 0);
   const second = Number(match[6] ?? 0);
   const microseconds = match[7] ? Number(match[7].slice(0, 6).padEnd(6, "0")) : 0;
-  const fractionMs = microseconds / 1000;
   const offsetHour = Number(match[10] ?? 0);
   const offsetMinute = Number(match[11] ?? 0);
   if (
@@ -39,11 +38,13 @@ export function parseBattleTime(value) {
   const date = new Date(0);
   date.setUTCFullYear(year, month - 1, day);
   date.setUTCHours(hour, minute, second, 0);
-  let milliseconds = date.getTime() + fractionMs;
+  let epochSeconds = date.getTime() / 1000;
   if (match[9]) {
-    const offsetMs = (offsetHour * 60 + offsetMinute) * 60_000;
-    milliseconds += match[9] === "+" ? -offsetMs : offsetMs;
+    const offsetSeconds = (offsetHour * 60 + offsetMinute) * 60;
+    epochSeconds += match[9] === "+" ? -offsetSeconds : offsetSeconds;
   }
+  epochSeconds += microseconds / 1_000_000;
+  const milliseconds = epochSeconds * 1000;
   return Number.isFinite(milliseconds) ? milliseconds : null;
 }
 

@@ -72,7 +72,26 @@ test("parseBattleTime truncates one through nine fractional digits to Python mic
   for (let length = 1; length <= digits.length; length += 1) {
     const fraction = digits.slice(0, length);
     const microseconds = Number(fraction.slice(0, 6).padEnd(6, "0"));
-    assert.equal(parseBattleTime(`2000-01-01T00:00:00.${fraction}Z`), base + microseconds / 1000);
+    const expected = (base / 1000 + microseconds / 1_000_000) * 1000;
+    assert.equal(parseBattleTime(`2000-01-01T00:00:00.${fraction}Z`), expected);
+  }
+});
+
+test("parseBattleTime matches Python float arithmetic for historical fractional timestamps", () => {
+  const pythonExpected = [
+    ["1894-09-17T12:34:56.1", -2375868303900.0],
+    ["1894-09-17T12:34:56.12Z", -2375868303880.0],
+    ["1894-09-17T12:34:56.123+08:30", -2375898903877.0],
+    ["1894-09-17T12:34:56.1234", -2375868303876.5996],
+    ["1894-09-17T12:34:56.12345+08:30", -2375898903876.5503],
+    ["1894-09-17T12:34:56.123456Z", -2375868303876.544],
+    ["1894-09-17T12:34:56.1234567-02:30", -2375859303876.544],
+    ["1894-09-17T12:34:56.12345678", -2375868303876.544],
+    ["1894-09-17T12:34:56.123456789+05:45", -2375889003876.544],
+  ];
+
+  for (const [value, expected] of pythonExpected) {
+    assert.equal(parseBattleTime(value), expected, value);
   }
 });
 
