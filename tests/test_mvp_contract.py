@@ -2,7 +2,10 @@ import json
 import subprocess
 import sys
 import unittest
+from copy import deepcopy
 from pathlib import Path
+
+from battle_animation.validator import validate_document
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +15,24 @@ SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
 
 
 class BattleAnimationMvpContractTest(unittest.TestCase):
+    def _valid_v030_document(self):
+        document = deepcopy(json.loads(EXAMPLE.read_text(encoding="utf-8")))
+        document["schema_version"] = "0.3.0"
+        movement = document["movements"][0]
+        movement["path"]["coordinates"] = movement["path"]["coordinates"][:2]
+        movement["time"] = {
+            "label": "18 June 1815, noon",
+            "start": "1815-06-18T12:00:00Z",
+            "precision": "hour",
+            "confidence": 0.8,
+        }
+        movement["waypoint_times"] = ["1815-06-18T12:00:00Z", "1815-06-18T12:10:00Z"]
+        timeline = document["animation_hints"]["timeline"]
+        timeline["historical_seconds_per_playback_second"] = 60
+        timeline["idle_compression_threshold_seconds"] = 0
+        timeline["idle_compressed_duration_ms"] = 0
+        return document
+
     def test_waterloo_example_validates_with_cli(self):
         result = subprocess.run(
             [sys.executable, "-m", "battle_animation.validator", str(EXAMPLE)],
@@ -67,6 +88,81 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn("historical_seconds_per_playback_second: float", source)
         self.assertIn("idle_compression_threshold_seconds: float", source)
         self.assertIn("idle_compressed_duration_ms: float", source)
+
+    def test_validator_accepts_v030_movement_and_timeline_timing(self):
+        self.assertEqual(validate_document(self._valid_v030_document()), [])
+
+    def test_validator_rejects_zero_historical_seconds_per_playback_second(self):
+        document = self._valid_v030_document()
+        document["animation_hints"]["timeline"]["historical_seconds_per_playback_second"] = 0
+
+        errors = validate_document(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.animation_hints.timeline.historical_seconds_per_playback_second"
+                and error.message == "expected value > 0"
+                for error in errors
+            )
+        )
+
+    def test_validator_rejects_negative_idle_timing_fields(self):
+        for field in ("idle_compression_threshold_seconds", "idle_compressed_duration_ms"):
+            with self.subTest(field=field):
+                document = self._valid_v030_document()
+                document["animation_hints"]["timeline"][field] = -1
+
+                errors = validate_document(document)
+
+                self.assertTrue(
+                    any(
+                        error.path == f"$.animation_hints.timeline.{field}"
+                        and error.message == "expected value >= 0"
+                        for error in errors
+                    )
+                )
+
+    def test_validator_rejects_too_few_waypoint_times(self):
+        document = self._valid_v030_document()
+        document["movements"][0]["waypoint_times"] = ["1815-06-18T12:00:00Z"]
+
+        errors = validate_document(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.movements[0].waypoint_times"
+                and error.message == "expected at least 2 items"
+                for error in errors
+            )
+        )
+
+    def test_validator_rejects_non_string_waypoint_time(self):
+        document = self._valid_v030_document()
+        document["movements"][0]["waypoint_times"][1] = 1815
+
+        errors = validate_document(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.movements[0].waypoint_times[1]"
+                and error.message == "expected string, got int"
+                for error in errors
+            )
+        )
+
+    def test_validator_rejects_malformed_movement_time(self):
+        document = self._valid_v030_document()
+        del document["movements"][0]["time"]["label"]
+
+        errors = validate_document(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.movements[0].time"
+                and error.message == "missing required property 'label'"
+                for error in errors
+            )
+        )
 
     def test_example_separates_history_from_animation_hints(self):
         battle = json.loads(EXAMPLE.read_text(encoding="utf-8"))
