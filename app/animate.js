@@ -1,4 +1,7 @@
 /* global L */
+import { compileTimeline, sampleTimeline } from "./timeline.js";
+import { resolveSymbol } from "./symbols.js";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const DEFAULT_ICONS = {
@@ -44,55 +47,6 @@ function resolveIcon(type, eventIcons) {
     if ([...value].length <= 2) return value; // already a glyph
   }
   return DEFAULT_ICONS[type] || "•";
-}
-
-// Default unit glyphs by actor kind. animation_hints.style.actor_icons can
-// override per actor with a named icon or any emoji (e.g. "🚢", "🐎").
-const DEFAULT_ACTOR_ICONS = {
-  army: "🪖",
-  corps: "🪖",
-  division: "🎖️",
-  brigade: "🎖️",
-  regiment: "🎖️",
-  fleet: "🚢",
-  unit: "🔹",
-  person: "🎖️",
-  other: "🔹",
-};
-
-const NAMED_ACTOR_ICONS = {
-  ship: "🚢",
-  warship: "🚢",
-  navy: "🚢",
-  naval: "🚢",
-  fleet: "🚢",
-  boat: "⛵",
-  infantry: "🪖",
-  soldier: "🪖",
-  army: "🪖",
-  cavalry: "🐎",
-  horse: "🐎",
-  artillery: "💥",
-  cannon: "💥",
-  tank: "🛡️",
-  armor: "🛡️",
-  armored: "🛡️",
-  plane: "✈️",
-  aircraft: "✈️",
-  air: "✈️",
-  commander: "🎖️",
-  hq: "🚩",
-  fort: "🏰",
-  fortress: "🏰",
-};
-
-function resolveActorIcon(actor, actorIcons) {
-  const value = actorIcons[actor.id];
-  if (value) {
-    if (NAMED_ACTOR_ICONS[value]) return NAMED_ACTOR_ICONS[value];
-    if ([...value].length <= 4) return value; // emoji or short glyph
-  }
-  return DEFAULT_ACTOR_ICONS[actor.kind] || "🔹";
 }
 
 // Distinct fallback palette so opposing sides are always visually separable
@@ -217,6 +171,7 @@ export function renderBattle(battle, documentRef = document) {
   const sides = new Map(battle.sides.map((side) => [side.id, side]));
   const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
   const places = new Map(battle.places.map((place) => [place.id, place]));
+  const compiled = compileTimeline(battle);
 
   const style = battle.animation_hints?.style || {};
   const sideColors = style.side_colors || {};
@@ -226,11 +181,8 @@ export function renderBattle(battle, documentRef = document) {
   const colorOf = (sideId) =>
     sideColors[sideId] || sides.get(sideId)?.color || SIDE_PALETTE[(sideIndex.get(sideId) ?? 0) % SIDE_PALETTE.length];
   const iconOf = (type) => resolveIcon(type, eventIcons);
-  const actorIconOf = (actor) => resolveActorIcon(actor, actorIcons);
-
-  const orderedEvents = orderEvents(battle);
+  const orderedEvents = compiled.eventWindows.map(({ event }) => event);
   const orderIndex = new Map(orderedEvents.map((event, index) => [event.id, index]));
-  const cameraByEvent = new Map((battle.animation_hints?.camera || []).map((cam) => [cam.event_id, cam]));
 
   // --- Leaflet map + OSM tiles ---
   const map = L.map(mapEl, { zoomControl: true });
@@ -284,7 +236,7 @@ export function renderBattle(battle, documentRef = document) {
   }
 
   const movementEls = new Map();
-  for (const movement of battle.movements) {
+  for (const [sourceIndex, movement] of battle.movements.entries()) {
     const actor = actors.get(movement.actor_id);
     const path = svgEl(documentRef, "path", {
       class: "movement-path",
@@ -296,7 +248,9 @@ export function renderBattle(battle, documentRef = document) {
       path.classList.add("is-inferred");
     }
     svg.append(path);
-    movementEls.set(movement.id, { coords: movement.path.coordinates, path });
+    const track = compiled.tracks.find((candidate) =>
+      candidate.id === movement.id || candidate.sourceIndex === sourceIndex);
+    movementEls.set(movement.id, { coords: movement.path.coordinates, path, track });
   }
 
   // Engagement tracers are drawn between the attacker and target units, under
@@ -315,18 +269,39 @@ export function renderBattle(battle, documentRef = document) {
 
   const unitEls = new Map();
   for (const actor of battle.actors) {
-    const unit = svgEl(documentRef, "g", { class: "unit" });
+    const symbol = resolveSymbol(actor, actorIcons[actor.id]);
+    const unit = svgEl(documentRef, "g", { class: "unit", "data-actor-id": actor.id });
+    const heading = svgEl(documentRef, "g", { class: "unit-heading" });
+    const symbolGroup = svgEl(documentRef, "g", {
+      class: `unit-symbol token-${symbol.token}`,
+      transform: "scale(0.55)",
+    });
+    for (const pathData of symbol.paths) {
+      symbolGroup.append(svgEl(documentRef, "path", {
+        d: pathData,
+        fill: colorOf(actor.side_id),
+      }));
+    }
+    heading.append(symbolGroup);
+    unit.append(heading);
+    if (symbol.echelon) {
+      unit.append(svgEl(documentRef, "text", {
+        class: "unit-echelon",
+        "text-anchor": "middle",
+        y: -15,
+      }, symbol.echelon));
+    }
     unit.append(
-      svgEl(documentRef, "circle", { class: "unit-disc", r: 14, fill: colorOf(actor.side_id) }),
-      svgEl(documentRef, "text", { class: "unit-icon", "text-anchor": "middle", y: 6 }, actorIconOf(actor)),
-      svgEl(documentRef, "text", { class: "unit-label", x: 20, y: 5 }, actor.name)
+      svgEl(documentRef, "text", { class: "unit-label", x: 20, y: 1 }, actor.name),
+      svgEl(documentRef, "text", { class: "unit-sub-label", x: 20, y: 14 }, symbol.token.replaceAll("_", " ")),
     );
     svg.append(unit);
-    unitEls.set(actor.id, { g: unit });
+    unitEls.set(actor.id, { g: unit, heading, symbol });
   }
 
   const markerEls = new Map();
-  for (const event of orderedEvents) {
+  for (const window of compiled.eventWindows) {
+    const event = window.event;
     const marker = svgEl(documentRef, "g", { class: "event-marker" });
     if (typeof event.confidence === "number" && event.confidence < 0.5) {
       marker.classList.add("is-low-confidence");
@@ -340,25 +315,12 @@ export function renderBattle(battle, documentRef = document) {
     );
     marker.append(inner);
     svg.append(marker);
-    markerEls.set(event.id, { coord: eventCoord(event, places), g: marker });
+    markerEls.set(event.id, { coord: eventCoord(event, places), g: marker, window });
   }
 
-  const snapshots = buildSnapshots(battle, orderedEvents);
-  let actorPositions = snapshots[0];
+  let actorPositions = new Map();
 
-  // Once an engagement reports a destructive result, the victim stays marked
-  // for every later event in the timeline.
-  const SUNK_RESULTS = new Set(["sunk", "disabled", "captured"]);
-  const sunkByIndex = orderedEvents.map(() => new Set());
-  for (const eng of engagements) {
-    if (!SUNK_RESULTS.has(eng.result)) continue;
-    const order = orderIndex.get(eng.event_id);
-    if (order === undefined) continue;
-    const victim = eng.result_actor_id || eng.target_actor_id;
-    for (let i = order; i < orderedEvents.length; i++) sunkByIndex[i].add(victim);
-  }
-
-  function redraw() {
+  function redrawStaticGeometry() {
     for (const place of placeEls) {
       if (place.kind === "point") {
         const point = project(place.coord);
@@ -375,9 +337,27 @@ export function renderBattle(battle, documentRef = document) {
     for (const { coords, path } of movementEls.values()) {
       path.setAttribute("d", toPath(coords));
     }
+    for (const { coord, g } of markerEls.values()) {
+      const point = project(coord);
+      g.setAttribute("transform", `translate(${point.x} ${point.y})`);
+    }
+  }
+
+  function updateActorPositions() {
+    for (const [actorId, { g }] of unitEls) {
+      const coord = actorPositions.get(actorId);
+      g.classList.toggle("is-hidden", !coord);
+      if (!coord) continue;
+      const point = project(coord);
+      g.setAttribute("transform", `translate(${point.x} ${point.y})`);
+    }
+  }
+
+  function redrawEngagementEndpoints() {
     for (const { eng, line } of engagementEls.values()) {
       const a = actorPositions.get(eng.attacker_actor_id);
       const b = actorPositions.get(eng.target_actor_id);
+      line.classList.toggle("is-hidden", !a || !b);
       if (!a || !b) continue;
       const pa = project(a);
       const pb = project(b);
@@ -386,21 +366,19 @@ export function renderBattle(battle, documentRef = document) {
       line.setAttribute("x2", pb.x);
       line.setAttribute("y2", pb.y);
     }
-    for (const { coord, g } of markerEls.values()) {
-      const point = project(coord);
-      g.setAttribute("transform", `translate(${point.x} ${point.y})`);
-    }
-    for (const [actorId, { g }] of unitEls) {
-      const coord = actorPositions.get(actorId);
-      if (!coord) continue;
-      const point = project(coord);
-      g.setAttribute("transform", `translate(${point.x} ${point.y})`);
-    }
   }
 
-  map.on("move zoom viewreset resize", redraw);
-  map.on("movestart zoomstart", () => svg.classList.add("is-moving"));
-  map.on("moveend zoomend", () => svg.classList.remove("is-moving"));
+  function reprojectMap() {
+    redrawStaticGeometry();
+    updateActorPositions();
+    redrawEngagementEndpoints();
+  }
+
+  const onMapMoveStart = () => svg.classList.add("is-moving");
+  const onMapMoveEnd = () => svg.classList.remove("is-moving");
+  map.on("move zoom viewreset resize", reprojectMap);
+  map.on("movestart zoomstart", onMapMoveStart);
+  map.on("moveend zoomend", onMapMoveEnd);
 
   buildLegend(battle, documentRef, colorOf);
   bindStaticText(battle, documentRef);
@@ -409,60 +387,131 @@ export function renderBattle(battle, documentRef = document) {
     controller.showEvent(index);
   });
 
-  const duration = battle.animation_hints?.timeline?.default_event_duration_ms || 1800;
+  const duration = compiled.presentationDurationMs;
+  const windowRef = documentRef.defaultView || globalThis;
+  const requestFrame = windowRef.requestAnimationFrame.bind(windowRef);
+  const cancelFrame = windowRef.cancelAnimationFrame.bind(windowRef);
+  let renderedEventIndex = -1;
+  let renderedEngagementIds = null;
+
+  function selectedEventWindow(sampled) {
+    const active = compiled.eventWindows.find(({ id }) => sampled.activeEventIds.has(id));
+    if (active) return active;
+    let latest = null;
+    for (const window of compiled.eventWindows) {
+      if (window.startMs <= sampled.historicalMs
+          && (!latest || window.startMs >= latest.startMs)) latest = window;
+    }
+    return latest || compiled.eventWindows[0] || null;
+  }
+
+  function displaySelectedEvent(owner, selected) {
+    if (!selected) return;
+    const selectedIndex = orderIndex.get(selected.id) ?? 0;
+    owner.currentIndex = selectedIndex;
+    if (selectedIndex === renderedEventIndex) return;
+    updateInspector(documentRef, selected.event);
+    updateTimeline(documentRef, selectedIndex);
+    const scrubber = $("event-scrubber");
+    if (scrubber) scrubber.value = String(selectedIndex);
+    const progress = $("event-progress");
+    if (progress) progress.textContent = `${selectedIndex + 1} / ${orderedEvents.length}`;
+    renderedEventIndex = selectedIndex;
+  }
 
   const controller = {
     battle,
+    compiled,
     orderedEvents,
     map,
     currentIndex: 0,
+    currentPresentationMs: 0,
+    sampledState: null,
+    playbackRate: 1,
     isPlaying: false,
-    _timer: null,
+    _frame: null,
+    _lastFrameTime: null,
 
-    showEvent(index) {
-      const bounded = Math.max(0, Math.min(index, orderedEvents.length - 1));
-      this.currentIndex = bounded;
-      const event = orderedEvents[bounded];
-      actorPositions = snapshots[bounded];
+    renderAt(presentationMs) {
+      const bounded = Math.min(duration, Math.max(0, Number.isFinite(presentationMs) ? presentationMs : 0));
+      this.currentPresentationMs = bounded;
+      const sampled = sampleTimeline(compiled, bounded);
+      this.sampledState = sampled;
+      actorPositions = sampled.actorPositions;
 
-      for (const [eventId, { g }] of markerEls) {
-        const order = orderIndex.get(eventId);
-        g.classList.toggle("is-visible", order <= bounded);
-        g.classList.toggle("is-active", eventId === event.id);
+      for (const [actorId, { g, heading, symbol }] of unitEls) {
+        const radians = sampled.headings.get(actorId) || 0;
+        const degrees = symbol.rotatesWithHeading
+          ? radians * 180 / Math.PI + symbol.baseHeadingDegrees
+          : symbol.baseHeadingDegrees;
+        heading.setAttribute("transform", `rotate(${degrees})`);
+        g.classList.toggle("is-sunk", sampled.persistentOutcomeActorIds.has(actorId));
       }
-      for (const movement of battle.movements) {
-        const el = movementEls.get(movement.id);
-        const order = orderIndex.get(movement.event_id);
-        el.path.classList.toggle("is-visible", order !== undefined && order <= bounded);
-        el.path.classList.toggle("is-active", movement.event_id === event.id);
-      }
+      updateActorPositions();
 
       const activeTargets = new Set();
-      for (const { eng, line } of engagementEls.values()) {
-        const active = eng.event_id === event.id;
+      for (const [engagementId, { eng, line }] of engagementEls) {
+        const active = sampled.activeEngagementIds.has(engagementId);
         line.classList.toggle("is-active", active);
         if (active) activeTargets.add(eng.target_actor_id);
       }
-      const sunk = sunkByIndex[bounded] || new Set();
       for (const [actorId, { g }] of unitEls) {
-        g.classList.toggle("is-sunk", sunk.has(actorId));
-        g.classList.toggle("is-hit", activeTargets.has(actorId) && !sunk.has(actorId));
+        g.classList.toggle("is-hit", activeTargets.has(actorId)
+          && !sampled.persistentOutcomeActorIds.has(actorId));
+      }
+      redrawEngagementEndpoints();
+
+      for (const { path, track } of movementEls.values()) {
+        const visible = Boolean(track) && sampled.historicalMs >= track.startMs;
+        const completed = Boolean(track) && sampled.historicalMs > track.endMs;
+        const active = Boolean(track) && sampled.historicalMs >= track.startMs
+          && sampled.historicalMs <= track.endMs;
+        path.classList.toggle("is-visible", visible);
+        path.classList.toggle("is-completed", completed);
+        path.classList.toggle("is-active", active);
+      }
+      for (const { g, window } of markerEls.values()) {
+        g.classList.toggle("is-visible", sampled.historicalMs >= window.startMs);
+        g.classList.toggle("is-active", sampled.activeEventIds.has(window.id));
       }
 
-      redraw();
-      updateInspector(documentRef, event);
-      renderEngagements(documentRef, engagements.filter((e) => e.event_id === event.id), actors);
-      updateTimeline(documentRef, bounded);
-
-      const scrubber = $("event-scrubber");
-      if (scrubber) scrubber.value = String(bounded);
-      const progress = $("event-progress");
-      if (progress) progress.textContent = `${bounded + 1} / ${orderedEvents.length}`;
-
-      const cam = cameraByEvent.get(event.id);
-      if (cam && Array.isArray(cam.center)) {
-        map.flyTo([cam.center[1], cam.center[0]], cam.zoom ?? map.getZoom(), { duration: 0.8 });
+      const activeEngagements = engagements
+        .filter((engagement) => sampled.activeEngagementIds.has(engagement.id));
+      const engagementIds = activeEngagements.map(({ id }) => id).join("\u0000");
+      if (engagementIds !== renderedEngagementIds) {
+        renderEngagements(documentRef, activeEngagements, actors);
+        renderedEngagementIds = engagementIds;
       }
+
+      displaySelectedEvent(this, selectedEventWindow(sampled));
+      return sampled;
+    },
+
+    seek(presentationMs) {
+      return this.renderAt(presentationMs);
+    },
+
+    setSpeed(rate) {
+      if (!Number.isFinite(rate) || rate <= 0) {
+        throw new RangeError("playback rate must be a positive finite number");
+      }
+      if (this.isPlaying && this._lastFrameTime !== null && windowRef.performance?.now) {
+        const now = windowRef.performance.now();
+        this.renderAt(this.currentPresentationMs + (now - this._lastFrameTime) * this.playbackRate);
+        this._lastFrameTime = now;
+        if (this.currentPresentationMs >= duration) this.pause();
+      }
+      this.playbackRate = rate;
+      return rate;
+    },
+
+    showEvent(index) {
+      const bounded = Math.max(0, Math.min(index, orderedEvents.length - 1));
+      const window = compiled.eventWindows[bounded];
+      if (!window) return this.seek(0);
+      const sampled = this.seek(compiled.toPresentationTime(window.startMs));
+      displaySelectedEvent(this, window);
+      return sampled;
     },
 
     next() {
@@ -473,27 +522,36 @@ export function renderBattle(battle, documentRef = document) {
     },
 
     play() {
-      if (this._timer) return;
-      if (this.currentIndex >= orderedEvents.length - 1) this.showEvent(0);
-      this._timer = setInterval(() => {
-        if (this.currentIndex >= orderedEvents.length - 1) {
-          this.pause();
-          return;
-        }
-        this.showEvent(this.currentIndex + 1);
-      }, duration);
+      if (this.isPlaying) return;
+      if (this.currentPresentationMs >= duration) this.seek(0);
       this._setPlaying(true);
+      this._lastFrameTime = null;
+      this._frame = requestFrame((timestamp) => this._tick(timestamp));
     },
     pause() {
-      if (this._timer) {
-        clearInterval(this._timer);
-        this._timer = null;
+      if (this._frame !== null) {
+        cancelFrame(this._frame);
+        this._frame = null;
       }
+      this._lastFrameTime = null;
       this._setPlaying(false);
     },
     toggle() {
-      if (this._timer) this.pause();
+      if (this.isPlaying) this.pause();
       else this.play();
+    },
+    _tick(timestamp) {
+      if (!this.isPlaying) return;
+      if (this._lastFrameTime === null) this._lastFrameTime = timestamp;
+      const elapsed = Math.max(0, timestamp - this._lastFrameTime);
+      this._lastFrameTime = timestamp;
+      const nextTime = Math.min(duration, this.currentPresentationMs + elapsed * this.playbackRate);
+      this.renderAt(nextTime);
+      if (nextTime >= duration) {
+        this.pause();
+        return;
+      }
+      this._frame = requestFrame((nextTimestamp) => this._tick(nextTimestamp));
     },
     _setPlaying(playing) {
       this.isPlaying = playing;
@@ -533,56 +591,13 @@ export function renderBattle(battle, documentRef = document) {
   if (scrubber) scrubber.max = String(orderedEvents.length - 1);
 
   mapEl._battleController = controller;
-  // Suppress transitions for the very first placement so units/markers appear
-  // at their positions instead of flying in from the SVG origin.
-  svg.classList.add("is-moving");
-  controller.showEvent(0);
-  requestAnimationFrame(() => svg.classList.remove("is-moving"));
+  redrawStaticGeometry();
+  controller.seek(0);
   return controller;
 }
 
 export function playTimeline(controller) {
   controller.play();
-}
-
-function orderEvents(battle) {
-  const eventsById = new Map(battle.historical_events.map((event) => [event.id, event]));
-  const orderedIds = battle.animation_hints?.timeline?.ordered_event_ids || [];
-  const ordered = orderedIds.map((id) => eventsById.get(id)).filter(Boolean);
-  const missing = battle.historical_events.filter((event) => !orderedIds.includes(event.id));
-  return [...ordered, ...missing];
-}
-
-// Cumulative actor positions after each ordered event, so scrubbing backward
-// puts every unit where it actually was at that point in the timeline.
-function buildSnapshots(battle, orderedEvents) {
-  const current = new Map();
-  for (const actor of battle.actors) {
-    current.set(actor.id, firstActorCoord(actor.id, battle));
-  }
-  const snapshots = [];
-  orderedEvents.forEach((event, index) => {
-    for (const movement of battle.movements) {
-      if (movement.event_id === event.id) {
-        const coords = movement.path.coordinates;
-        current.set(movement.actor_id, coords[coords.length - 1]);
-      }
-    }
-    snapshots[index] = new Map(current);
-  });
-  if (snapshots.length === 0) snapshots[0] = new Map(current);
-  return snapshots;
-}
-
-function firstActorCoord(actorId, battle) {
-  const movement = battle.movements.find((item) => item.actor_id === actorId);
-  if (movement) return movement.path.coordinates[0];
-  const event = battle.historical_events.find((item) => (item.actor_ids || []).includes(actorId));
-  if (event) {
-    const place = battle.places.find((item) => item.id === (event.place_ids || [])[0]);
-    if (place) return geometryPoint(place.geometry);
-  }
-  return geometryPoint(battle.places[0].geometry);
 }
 
 function eventCoord(event, places) {

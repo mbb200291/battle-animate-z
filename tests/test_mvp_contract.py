@@ -476,6 +476,44 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn("renderBattle", animate)
         self.assertIn("playTimeline", animate)
 
+    def test_renderer_uses_timeline_and_symbol_modules(self):
+        animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
+
+        self.assertIn('from "./timeline.js"', animate)
+        self.assertIn('from "./symbols.js"', animate)
+        self.assertIn("compileTimeline", animate)
+        self.assertIn("sampleTimeline", animate)
+        self.assertIn("resolveSymbol", animate)
+        self.assertIn("requestAnimationFrame", animate)
+        self.assertIn("cancelAnimationFrame", animate)
+        self.assertNotIn("setInterval", animate)
+        self.assertNotIn("buildSnapshots", animate)
+        self.assertNotIn("DEFAULT_ACTOR_ICONS", animate)
+        self.assertNotIn("NAMED_ACTOR_ICONS", animate)
+        self.assertNotIn("resolveActorIcon", animate)
+
+    def test_renderer_exposes_continuous_controller_and_split_svg_transforms(self):
+        animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "styles.css").read_text(encoding="utf-8")
+
+        for contract in (
+            "compiled = compileTimeline(battle)",
+            "renderAt(presentationMs)",
+            "seek(presentationMs)",
+            "setSpeed(rate)",
+            "playbackRate",
+            "_lastFrameTime",
+            'class: "unit-heading"',
+            "unit-symbol token-",
+            "redrawStaticGeometry",
+            "updateActorPositions",
+            "redrawEngagementEndpoints",
+        ):
+            self.assertIn(contract, animate)
+        self.assertNotIn("flyTo", animate)
+        self.assertNotIn("transform 700ms", styles)
+        self.assertIn(".unit-symbol path", styles)
+
 
 if __name__ == "__main__":
     unittest.main()
