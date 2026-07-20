@@ -526,8 +526,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "return { errors, warnings }",
         ):
             self.assertIn(contract, animate)
-        self.assertIn("const { errors, warnings } = validateBattle(battle)", index)
-        self.assertIn("showWarnings(warnings)", index)
+        self.assertIn("setBattleDocument", index)
+        self.assertIn("previousController: controller", index)
 
     def test_renderer_exposes_continuous_controller_and_split_svg_transforms(self):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")

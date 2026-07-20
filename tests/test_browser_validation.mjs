@@ -71,6 +71,27 @@ test("non-object input returns structured errors", () => {
   assert.deepEqual(result.warnings, []);
 });
 
+test("renderer-required top-level containers reject malformed shapes", () => {
+  const arrayKeys = [
+    "sides", "commanders", "actors", "places", "historical_events", "movements", "sources", "engagements",
+  ];
+  for (const key of arrayKeys) {
+    const battle = fixture();
+    battle[key] = {};
+    const matching = validateBattle(battle).errors.filter((item) => item.includes(`$.${key}`));
+    assert.equal(matching.length, 1, key);
+    assert.match(matching[0], /expected array/i, key);
+  }
+
+  for (const key of ["metadata", "battle", "outcome", "animation_hints"]) {
+    const battle = fixture();
+    battle[key] = [];
+    const matching = validateBattle(battle).errors.filter((item) => item.includes(`$.${key}`));
+    assert.equal(matching.length, 1, key);
+    assert.match(matching[0], /expected object/i, key);
+  }
+});
+
 test("movement, event, and engagement times reject malformed and reversed ranges", () => {
   const battle = fixture();
   battle.movements[0].time.start = "bad";
@@ -267,4 +288,22 @@ test("warnings render safely without blocking and clear on replacement; fatal in
   assert.equal(rendered.length, 2);
   assert.equal(destroyed, 2);
   assert.equal(documentRef.elements.get("error-banner").hidden, false);
+});
+
+test("malformed renderer collection blocks rendering and destroys the previous controller", () => {
+  const documentRef = fakeDocument();
+  let renderCalls = 0;
+  let destroyCalls = 0;
+  const malformed = fixture();
+  malformed.sides = {};
+  const result = animate.setBattleDocument(malformed, {
+    documentRef,
+    render() { renderCalls += 1; },
+    wireControls() {},
+    previousController: { destroy() { destroyCalls += 1; } },
+  });
+  assert.equal(result, undefined);
+  assert.equal(renderCalls, 0);
+  assert.equal(destroyCalls, 1);
+  assert.match(documentRef.elements.get("error-banner").textContent, /\$\.sides.*expected array/i);
 });

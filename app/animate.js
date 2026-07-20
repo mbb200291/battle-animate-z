@@ -148,6 +148,7 @@ export function validateBattle(battle) {
   for (const key of required) {
     if (!(key in battle)) errors.push(`missing required property "${key}"`);
   }
+  validateTopLevelShapes(battle, errors);
 
   if ("schema_version" in battle && !["0.1.0", "0.2.0", "0.3.0"].includes(battle.schema_version)) {
     errors.push(`schema_version must be "0.1.0", "0.2.0", or "0.3.0", got ${JSON.stringify(battle.schema_version)}`);
@@ -218,6 +219,28 @@ export function validateBattle(battle) {
   validateMovementOverlaps(battle, errors, warnings);
   validateActorIconTokens(battle, warnings);
   return { errors, warnings };
+}
+
+function validateTopLevelShapes(battle, errors) {
+  const arrayKeys = [
+    "sides",
+    "commanders",
+    "actors",
+    "places",
+    "historical_events",
+    "movements",
+    "sources",
+    "engagements",
+  ];
+  for (const key of arrayKeys) {
+    if (key in battle && !Array.isArray(battle[key])) errors.push(`$.${key}: expected array`);
+  }
+  for (const key of ["metadata", "battle", "outcome", "animation_hints"]) {
+    if (key in battle
+        && (!battle[key] || typeof battle[key] !== "object" || Array.isArray(battle[key]))) {
+      errors.push(`$.${key}: expected object`);
+    }
+  }
 }
 
 function validateTimeRange(value, path, errors) {

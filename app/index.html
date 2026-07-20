@@ -94,10 +94,8 @@
     <script type="module">
       import {
         loadBattle,
-        validateBattle,
-        renderBattle,
+        setBattleDocument,
         showDiagnosticList,
-        wirePlaybackControls,
       } from "./animate.js";
 
       const $ = (id) => document.getElementById(id);
@@ -117,13 +115,10 @@
       }
 
       function setBattle(battle) {
-        destroyController();
-        const { errors, warnings } = validateBattle(battle);
-        showErrors(errors);
-        showWarnings(warnings);
-        if (errors.length) return;
-        controller = renderBattle(battle, document);
-        wirePlaybackControls(controller, document);
+        controller = setBattleDocument(battle, {
+          documentRef: document,
+          previousController: controller,
+        });
       }
 
       function loadFromText(text) {
