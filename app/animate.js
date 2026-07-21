@@ -559,6 +559,53 @@ export function showDiagnosticList(documentRef, elementId, heading, diagnostics)
   box.hidden = false;
 }
 
+function setTransportEnabled(documentRef, enabled) {
+  for (const id of ["play-button", "reset-button", "prev-button", "next-button", "follow-button", "event-scrubber"]) {
+    const element = documentRef.getElementById(id);
+    if (element) element.disabled = !enabled;
+  }
+  for (const button of documentRef.querySelectorAll?.("#speed-controls [data-speed]") || []) {
+    button.disabled = !enabled;
+  }
+}
+
+export function resetBattleUI(documentRef = document) {
+  documentRef._battlePlaybackTeardown?.();
+  documentRef.getElementById("battle-map")?._battleController?.destroy?.();
+  for (const id of [
+    "battle-name", "battle-date", "battle-summary", "event-type", "event-title", "event-description",
+    "event-precision", "event-confidence",
+  ]) setText(documentRef, id, "");
+  for (const id of ["legend", "timeline", "event-card-stack", "engagements"]) {
+    documentRef.getElementById(id)?.replaceChildren();
+  }
+  setText(documentRef, "event-progress", "0 / 0");
+  setText(documentRef, "historical-time", "Animation time 00:00");
+  const scrubber = documentRef.getElementById("event-scrubber");
+  if (scrubber) {
+    scrubber.value = "0";
+    scrubber.max = "0";
+  }
+  const notice = documentRef.getElementById("compression-notice");
+  if (notice) {
+    notice.textContent = "";
+    notice.hidden = true;
+  }
+  const confidenceBar = documentRef.getElementById("confidence-bar");
+  if (confidenceBar) confidenceBar.style.width = "";
+  const play = documentRef.getElementById("play-button");
+  if (play) {
+    play.textContent = "Play";
+    play.setAttribute("aria-pressed", "false");
+  }
+  const follow = documentRef.getElementById("follow-button");
+  if (follow) {
+    follow.textContent = "Follow: off";
+    follow.setAttribute("aria-pressed", "false");
+  }
+  setTransportEnabled(documentRef, false);
+}
+
 export function setBattleDocument(battle, {
   documentRef = document,
   render = renderBattle,
@@ -569,16 +616,37 @@ export function setBattleDocument(battle, {
   const { errors, warnings } = validateBattle(battle);
   showDiagnosticList(documentRef, "error-banner", "JSON validation failed", errors);
   showDiagnosticList(documentRef, "validation-warnings", "JSON validation warnings", warnings);
-  if (errors.length) return undefined;
+  if (errors.length) {
+    resetBattleUI(documentRef);
+    return undefined;
+  }
   const controller = render(battle, documentRef);
+  setTransportEnabled(documentRef, true);
   wireControls(controller, documentRef);
   return controller;
+}
+
+export function setBattleDocumentFromText(text, options = {}) {
+  let battle;
+  try {
+    battle = JSON.parse(text);
+  } catch (error) {
+    options.previousController?.destroy?.();
+    const documentRef = options.documentRef || document;
+    resetBattleUI(documentRef);
+    showDiagnosticList(documentRef, "validation-warnings", "JSON validation warnings", []);
+    showDiagnosticList(documentRef, "error-banner", "JSON validation failed", [`Invalid JSON: ${error.message}`]);
+    return undefined;
+  }
+  return setBattleDocument(battle, options);
 }
 
 export function renderBattle(battle, documentRef = document) {
   const $ = (id) => documentRef.getElementById(id);
   const mapEl = $("battle-map");
   const cardStack = $("event-card-stack");
+  const windowRef = documentRef.defaultView || globalThis;
+  const reducedMotion = Boolean(windowRef.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 
   // Tear down a previous render so the same container can be reused.
   if (mapEl._battleController) mapEl._battleController.destroy();
@@ -617,7 +685,12 @@ export function renderBattle(battle, documentRef = document) {
   } else {
     map.setView([0, 0], 2);
   }
-  setTimeout(() => map.invalidateSize(), 0);
+  const scheduleTimeout = windowRef.setTimeout?.bind(windowRef) || globalThis.setTimeout.bind(globalThis);
+  const cancelTimeout = windowRef.clearTimeout?.bind(windowRef) || globalThis.clearTimeout.bind(globalThis);
+  let invalidateTimer = scheduleTimeout(() => {
+    invalidateTimer = null;
+    map.invalidateSize();
+  }, 0);
 
   // --- SVG overlay drawn on top of the map, re-projected on every map move ---
   const svg = documentRef.createElementNS(SVG_NS, "svg");
@@ -708,12 +781,11 @@ export function renderBattle(battle, documentRef = document) {
         y: -15,
       }, symbol.echelon));
     }
-    unit.append(
-      svgEl(documentRef, "text", { class: "unit-label", x: 20, y: 1 }, actor.name),
-      svgEl(documentRef, "text", { class: "unit-sub-label", x: 20, y: 14 }, symbol.token.replaceAll("_", " ")),
-    );
+    const label = svgEl(documentRef, "text", { class: "unit-label", x: 20, y: 1 }, actor.name);
+    const subLabel = svgEl(documentRef, "text", { class: "unit-sub-label", x: 20, y: 14 }, symbol.token.replaceAll("_", " "));
+    unit.append(label, subLabel);
     svg.append(unit);
-    unitEls.set(actor.id, { g: unit, heading, symbol });
+    unitEls.set(actor.id, { g: unit, heading, symbol, label, subLabel });
   }
 
   const markerEls = new Map();
@@ -768,6 +840,24 @@ export function renderBattle(battle, documentRef = document) {
       const point = project(coord);
       g.setAttribute("transform", `translate(${point.x} ${point.y})`);
     }
+    suppressSecondaryLabelCollisions();
+  }
+
+  function suppressSecondaryLabelCollisions() {
+    const occupied = [];
+    const near = map.getZoom() >= 11;
+    for (const [actorId, { subLabel }] of unitEls) {
+      const coord = actorPositions.get(actorId);
+      if (!near || !coord) {
+        subLabel.classList.remove("is-collision-hidden");
+        continue;
+      }
+      const point = project(coord);
+      const collides = occupied.some((accepted) =>
+        Math.abs(point.x - accepted.x) < 80 && Math.abs(point.y - accepted.y) < 26);
+      subLabel.classList.toggle("is-collision-hidden", collides);
+      if (!collides) occupied.push(point);
+    }
   }
 
   function redrawEngagementEndpoints() {
@@ -791,8 +881,6 @@ export function renderBattle(battle, documentRef = document) {
     redrawEngagementEndpoints();
   }
 
-  const windowRef = documentRef.defaultView || globalThis;
-  const reducedMotion = Boolean(windowRef.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
   buildLegend(battle, documentRef, colorOf);
   bindStaticText(battle, documentRef);
   const teardownTimeline = buildTimeline(orderedEvents, documentRef, (index) => {
@@ -1166,6 +1254,10 @@ export function renderBattle(battle, documentRef = document) {
       this._destroyed = true;
       this._controlsTeardown?.();
       teardownTimeline();
+      if (invalidateTimer !== null) {
+        cancelTimeout(invalidateTimer);
+        invalidateTimer = null;
+      }
       documentRef.removeEventListener("keydown", onKey);
       map.off();
       map.remove();
@@ -1195,6 +1287,7 @@ export function renderBattle(battle, documentRef = document) {
   const onMapMoveEnd = () => {
     svg.classList.remove("is-moving");
     applyZoomLabelClass();
+    suppressSecondaryLabelCollisions();
     controller._programmaticMove = false;
   };
   const onManualMapStart = () => {

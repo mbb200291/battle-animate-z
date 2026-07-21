@@ -94,7 +94,9 @@
     <script type="module">
       import {
         loadBattle,
+        resetBattleUI,
         setBattleDocument,
+        setBattleDocumentFromText,
         showDiagnosticList,
       } from "./animate.js";
 
@@ -122,16 +124,10 @@
       }
 
       function loadFromText(text) {
-        let battle;
-        try {
-          battle = JSON.parse(text);
-        } catch (error) {
-          destroyController();
-          showWarnings([]);
-          showErrors([`Invalid JSON: ${error.message}`]);
-          return;
-        }
-        setBattle(battle);
+        controller = setBattleDocumentFromText(text, {
+          documentRef: document,
+          previousController: controller,
+        });
       }
 
       async function loadFromFile(file) {
@@ -173,6 +169,7 @@
         setBattle(battle);
       } catch (error) {
         destroyController();
+        resetBattleUI(document);
         showWarnings([]);
         showErrors([`Failed to load default example: ${error.message}`]);
       }

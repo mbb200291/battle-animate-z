@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { renderBattle, wirePlaybackControls } from "../app/animate.js";
@@ -180,6 +181,9 @@ class FrameClock {
     this.callbacks = new Map();
     this.cancelled = [];
     this.now = 0;
+    this.nextTimeoutId = 0;
+    this.timeouts = new Map();
+    this.clearedTimeouts = [];
     this.window = {
       performance: { now: () => this.now },
       matchMedia: () => ({ matches: reducedMotion }),
@@ -193,6 +197,16 @@ class FrameClock {
         this.cancelled.push(id);
         this.callbacks.delete(id);
       },
+      setTimeout: (callback) => {
+        const id = this.nextTimeoutId;
+        this.nextTimeoutId += 1;
+        this.timeouts.set(id, callback);
+        return id;
+      },
+      clearTimeout: (id) => {
+        this.clearedTimeouts.push(id);
+        this.timeouts.delete(id);
+      },
     };
   }
 
@@ -201,6 +215,12 @@ class FrameClock {
     const pending = [...this.callbacks.entries()];
     this.callbacks.clear();
     pending.forEach(([, callback]) => callback(timestamp));
+  }
+
+  flushTimeouts() {
+    const pending = [...this.timeouts.values()];
+    this.timeouts.clear();
+    pending.forEach((callback) => callback());
   }
 }
 
@@ -213,12 +233,13 @@ class FakeMap {
     this.zoom = 8;
     this.flyCalls = [];
     this.pointFlyCalls = [];
+    this.invalidateCount = 0;
   }
 
   getContainer() { return this.container; }
   setView(_center, zoom) { this.zoom = zoom; return this; }
   fitBounds() { return this; }
-  invalidateSize() {}
+  invalidateSize() { this.invalidateCount += 1; }
   getZoom() { return this.zoom; }
   getSize() { return { x: this.container.clientWidth, y: this.container.clientHeight }; }
   latLngToContainerPoint([lat, lon]) { return { x: lon * 100 + 400, y: 300 - lat * 100 }; }
@@ -709,6 +730,55 @@ test("zoom hierarchy exposes near, middle, and far SVG classes", () => {
   map.fire("zoomend");
   assert.equal(svg.classList.contains("labels-far"), true);
   controller.destroy();
+});
+
+test("near-zoom clustered units suppress secondary labels and restore them when separated or zoomed out", () => {
+  const battle = battleFixture();
+  battle.movements[2].path.coordinates = [[0.1, 0], [0.1, 0]];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const subLabels = descendants(svg).filter((element) => element.classList.contains("unit-sub-label"));
+  const map = maps[0];
+
+  map.zoom = 11;
+  map.fire("zoomend");
+  controller.seek(0);
+  assert.equal(subLabels.filter((label) => label.classList.contains("is-collision-hidden")).length, 1);
+
+  controller.seek(1_500);
+  assert.equal(subLabels.some((label) => label.classList.contains("is-collision-hidden")), false);
+
+  controller.seek(0);
+  map.zoom = 9;
+  map.fire("zoomend");
+  assert.equal(subLabels.some((label) => label.classList.contains("is-collision-hidden")), false);
+  controller.destroy();
+});
+
+test("rapid render replacement cancels stale invalidateSize timeouts", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const first = renderBattle(battleFixture(), document);
+  const second = renderBattle(battleFixture(), document);
+
+  assert.equal(first._destroyed, true);
+  assert.ok(clock.clearedTimeouts.includes(0));
+  clock.flushTimeouts();
+  assert.equal(maps[0].invalidateCount, 0);
+  assert.equal(maps[1].invalidateCount, 1);
+  second.destroy();
+});
+
+test("inferred path dashes use normalized pathLength fractions without overriding reveal offset", () => {
+  const css = readFileSync(new URL("../app/styles.css", import.meta.url), "utf8");
+  const rule = css.match(/\.movement-path\.is-inferred\s*\{(?<body>[^}]*)\}/)?.groups?.body || "";
+
+  assert.match(rule, /stroke-dasharray:\s*0\.04\s+0\.025/);
+  assert.doesNotMatch(rule, /stroke-dashoffset/);
 });
 
 test("destroy is idempotent and cancels frames and listeners exactly once", () => {

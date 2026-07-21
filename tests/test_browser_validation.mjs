@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import * as animate from "../app/animate.js";
@@ -276,25 +277,48 @@ test("existing cross-reference checks remain active", () => {
 });
 
 function fakeDocument() {
-  const elements = new Map(["error-banner", "validation-warnings", "battle-map"].map((id) => [id, {
+  const makeElement = (id = "") => ({
     id,
     hidden: true,
+    disabled: false,
     textContent: "",
+    value: "",
+    max: "",
+    children: [],
+    attributes: new Map(),
+    style: {},
     replaceChildren(...children) { this.children = children; this.textContent = children.map((child) => child.textContent).join(""); },
-    append(...children) { this.children = [...(this.children || []), ...children]; this.textContent += children.map((child) => child.textContent).join(""); },
-  }]));
-  return {
+    append(...children) { this.children.push(...children); this.textContent += children.map((child) => child.textContent).join(""); },
+    setAttribute(name, value) { this.attributes.set(name, String(value)); },
+    getAttribute(name) { return this.attributes.get(name) ?? null; },
+  });
+  const ids = [
+    "error-banner", "validation-warnings", "battle-map", "battle-name", "battle-date", "battle-summary",
+    "legend", "timeline", "event-card-stack", "event-type", "event-title", "event-description",
+    "event-precision", "event-confidence", "confidence-bar", "engagements", "event-scrubber",
+    "event-progress", "historical-time", "compression-notice", "play-button", "reset-button",
+    "prev-button", "next-button", "follow-button", "speed-controls", "file-input", "paste-button",
+  ];
+  const elements = new Map(ids.map((id) => [id, makeElement(id)]));
+  const speedButtons = [0.5, 1, 2, 4].map((speed) => {
+    const button = makeElement();
+    button.dataset = { speed: String(speed) };
+    return button;
+  });
+  elements.get("speed-controls").children = speedButtons;
+  const documentRef = {
     getElementById: (id) => elements.get(id),
     createElement(tag) {
-      return {
-        tag,
-        textContent: "",
-        children: [],
-        append(...children) { this.children.push(...children); this.textContent += children.map((child) => child.textContent).join(""); },
-      };
+      const element = makeElement();
+      element.tag = tag;
+      return element;
+    },
+    querySelectorAll(selector) {
+      return selector === "#speed-controls [data-speed]" ? speedButtons : [];
     },
     elements,
   };
+  return documentRef;
 }
 
 test("warnings render safely without blocking and clear on replacement; fatal input destroys prior map", () => {
@@ -370,4 +394,91 @@ test("malformed renderer members and nested shapes never render and tear down sa
     assert.equal(destroyCalls, 1);
     assert.equal(documentRef.elements.get("error-banner").hidden, false);
   }
+});
+
+test("fatal validation resets every derived battle field and transport then a valid load recovers", () => {
+  const documentRef = fakeDocument();
+  for (const id of [
+    "battle-name", "battle-date", "battle-summary", "event-type", "event-title", "event-description",
+    "event-precision", "event-confidence", "event-progress", "historical-time", "compression-notice",
+  ]) documentRef.elements.get(id).textContent = `stale-${id}`;
+  for (const id of ["legend", "timeline", "event-card-stack", "engagements"]) {
+    documentRef.elements.get(id).children = [{ textContent: "stale" }];
+  }
+  const scrubber = documentRef.elements.get("event-scrubber");
+  scrubber.value = "900";
+  scrubber.max = "1800";
+  let destroyed = 0;
+  const invalid = fixture();
+  invalid.movements[0].time.start = "bad";
+
+  const failed = animate.setBattleDocument(invalid, {
+    documentRef,
+    render() { throw new Error("must not render"); },
+    wireControls() {},
+    previousController: { destroy() { destroyed += 1; } },
+  });
+
+  assert.equal(failed, undefined);
+  assert.equal(destroyed, 1);
+  for (const id of [
+    "battle-name", "battle-date", "battle-summary", "event-type", "event-title", "event-description",
+    "event-precision", "event-confidence",
+  ]) assert.equal(documentRef.elements.get(id).textContent, "", id);
+  for (const id of ["legend", "timeline", "event-card-stack", "engagements"]) {
+    assert.equal(documentRef.elements.get(id).children.length, 0, id);
+  }
+  assert.equal(documentRef.elements.get("event-progress").textContent, "0 / 0");
+  assert.equal(documentRef.elements.get("historical-time").textContent, "Animation time 00:00");
+  assert.equal(scrubber.value, "0");
+  assert.equal(scrubber.max, "0");
+  for (const id of ["play-button", "reset-button", "prev-button", "next-button", "follow-button", "event-scrubber"]) {
+    assert.equal(documentRef.elements.get(id).disabled, true, id);
+  }
+  assert.equal(documentRef.elements.get("file-input").disabled, false);
+  assert.equal(documentRef.elements.get("paste-button").disabled, false);
+
+  const recovered = animate.setBattleDocument(fixture(), {
+    documentRef,
+    render() {
+      documentRef.elements.get("battle-name").textContent = "Recovered";
+      return { destroy() {} };
+    },
+    wireControls() {},
+  });
+  assert.ok(recovered);
+  assert.equal(documentRef.elements.get("battle-name").textContent, "Recovered");
+  assert.equal(documentRef.elements.get("play-button").disabled, false);
+  assert.equal(scrubber.disabled, false);
+});
+
+test("text parser resets stale UI on parse failure and safely recovers on the next valid document", () => {
+  const documentRef = fakeDocument();
+  let destroyed = 0;
+  const render = (battle) => {
+    documentRef.elements.get("battle-name").textContent = battle.battle.name;
+    return { destroy() { destroyed += 1; } };
+  };
+  const first = animate.setBattleDocumentFromText(JSON.stringify(fixture()), { documentRef, render, wireControls() {} });
+  assert.ok(first);
+  const failed = animate.setBattleDocumentFromText("{broken", {
+    documentRef,
+    render,
+    wireControls() {},
+    previousController: first,
+  });
+  assert.equal(failed, undefined);
+  assert.equal(destroyed, 1);
+  assert.equal(documentRef.elements.get("battle-name").textContent, "");
+  assert.match(documentRef.elements.get("error-banner").textContent, /Invalid JSON/i);
+  const recovered = animate.setBattleDocumentFromText(JSON.stringify(fixture()), { documentRef, render, wireControls() {} });
+  assert.ok(recovered);
+  assert.equal(documentRef.elements.get("battle-name").textContent, "Test");
+  assert.equal(documentRef.elements.get("play-button").disabled, false);
+});
+
+test("index delegates pasted text parsing to the production document parser", () => {
+  const source = readFileSync(new URL("../app/index.html", import.meta.url), "utf8");
+  assert.match(source, /setBattleDocumentFromText/);
+  assert.doesNotMatch(source, /JSON\.parse\(text\)/);
 });

@@ -394,6 +394,113 @@ test("movement and engagement own coarse timing uses synthetic ranges outside li
   );
 });
 
+test("same-day coarse movement fallbacks sequence per actor across distinct linked events", () => {
+  const anchor = parseBattleTime("1815-06-18");
+  const coarseTime = { label: "day", start: "1815-06-18", precision: "day", confidence: 0.5 };
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [
+      event("coarse-1", undefined, undefined, { time: coarseTime }),
+      event("coarse-2", undefined, undefined, { time: coarseTime }),
+    ],
+    movements: [
+      movement("first", "a", "coarse-1", [[0, 0], [10, 0]], undefined, undefined, { time: coarseTime }),
+      movement("second", "a", "coarse-2", [[10, 0], [20, 0]], undefined, undefined, { time: coarseTime }),
+    ],
+    animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+  }));
+
+  assert.deepEqual(timeline.tracks.map(({ startMs, endMs }) => [startMs, endMs]), [
+    [anchor, anchor + 60_000],
+    [anchor + 60_000, anchor + 120_000],
+  ]);
+  assert.deepEqual(sampleTimeline(timeline, 500).actorPositions.get("a"), [5, 0]);
+  assert.deepEqual(sampleTimeline(timeline, 1_000).actorPositions.get("a"), [10, 0]);
+  assert.deepEqual(sampleTimeline(timeline, 1_500).actorPositions.get("a"), [15, 0]);
+});
+
+test("bounded coarse movement keeps its own endpoints when linked event shares its anchor", () => {
+  const start = parseBattleTime("1815-06-18");
+  const end = parseBattleTime("1815-06-20");
+  const eventTime = { label: "day", start: "1815-06-18", precision: "day", confidence: 0.5 };
+  const movementTime = {
+    label: "multi-day route",
+    start: "1815-06-18",
+    end: "1815-06-20",
+    precision: "day",
+    confidence: 0.5,
+  };
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("coarse", undefined, undefined, { time: eventTime })],
+    movements: [movement("bounded", "a", "coarse", [[0, 0], [10, 0]], undefined, undefined, { time: movementTime })],
+    animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+  }));
+
+  assert.deepEqual(
+    [timeline.tracks[0].startMs, timeline.tracks[0].endMs],
+    [start, end],
+  );
+});
+
+test("connected unbounded coarse tracks under one event receive sequential fallback slots", () => {
+  const anchor = parseBattleTime("1815-06-18");
+  const coarseTime = { label: "day", start: "1815-06-18", precision: "day", confidence: 0.5 };
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("coarse", undefined, undefined, { time: coarseTime })],
+    movements: [
+      movement("first", "a", "coarse", [[0, 0], [10, 0]], undefined, undefined, { time: coarseTime }),
+      movement("second", "a", "coarse", [[10, 0], [20, 0]], undefined, undefined, { time: coarseTime }),
+    ],
+    animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+  }));
+
+  assert.deepEqual(timeline.tracks.map(({ startMs, endMs }) => [startMs, endMs]), [
+    [anchor, anchor + 60_000],
+    [anchor + 60_000, anchor + 120_000],
+  ]);
+  assert.deepEqual(sampleTimeline(timeline, 500).actorPositions.get("a"), [5, 0]);
+  assert.deepEqual(sampleTimeline(timeline, 1_500).actorPositions.get("a"), [15, 0]);
+});
+
+test("zero-duration precise windows are synthetic while routes and outcomes still complete", () => {
+  const instant = iso(5);
+  const instantMs = parseBattleTime(instant);
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }, { id: "b" }],
+    historical_events: [
+      event("instant", instant, instant),
+      event("later", iso(7), iso(8)),
+    ],
+    movements: [movement("instant-move", "a", "instant", [[0, 0], [10, 0]], instant, instant)],
+    engagements: [{
+      id: "instant-hit",
+      event_id: "instant",
+      attacker_actor_id: "a",
+      target_actor_id: "b",
+      result: "sunk",
+      time: { start: instant, end: instant },
+    }],
+    animation_hints: { timeline: { default_event_duration_ms: 1_000, historical_seconds_per_playback_second: 60 } },
+  }));
+
+  assert.deepEqual(
+    [timeline.eventWindows[0].startMs, timeline.eventWindows[0].endMs, timeline.eventWindows[0].synthetic],
+    [instantMs, instantMs + 60_000, true],
+  );
+  const track = timeline.tracks[0];
+  const engagement = timeline.engagementWindows[0];
+  assert.deepEqual([track.startMs, track.endMs, track.synthetic], [instantMs, instantMs + 60_000, true]);
+  assert.deepEqual([engagement.startMs, engagement.endMs, engagement.synthetic], [instantMs, instantMs + 60_000, true]);
+  const midpoint = sampleTimeline(timeline, toPresentationTime(timeline, instantMs + 30_000));
+  assert.equal(midpoint.synthetic, true);
+  assert.deepEqual(midpoint.actorPositions.get("a"), [5, 0]);
+  const completed = sampleTimeline(timeline, toPresentationTime(timeline, instantMs + 90_000));
+  assert.deepEqual(completed.actorPositions.get("a"), [10, 0]);
+  assert.equal(completed.persistentOutcomeActorIds.has("b"), true);
+});
+
 test("mixed coarse and explicit windows mark only the coarse fallback as synthetic", () => {
   const timeline = compileTimeline(battle({
     historical_events: [

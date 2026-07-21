@@ -488,6 +488,10 @@ button.ghost,
   text-transform: uppercase;
 }
 
+.unit-sub-label.is-collision-hidden {
+  display: none;
+}
+
 /* Leaflet zoom hierarchy: near >= 11, middle 8–10, far < 8. */
 .battle-overlay.labels-middle .unit-sub-label,
 .battle-overlay.labels-far .unit-label,
@@ -530,8 +534,7 @@ button.ghost,
 
 /* Inferred / low-confidence paths render dashed instead of solid. */
 .movement-path.is-inferred {
-  stroke-dasharray: 7 6 !important;
-  stroke-dashoffset: 0 !important;
+  stroke-dasharray: 0.04 0.025 !important;
 }
 
 .movement-path.is-inferred.is-visible {

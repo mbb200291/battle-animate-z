@@ -83,7 +83,7 @@ function classifiedRange(value) {
   return {
     ...range,
     coarse,
-    bounded: range.startMs !== null && range.endMs !== null && range.endMs >= range.startMs,
+    bounded: range.startMs !== null && range.endMs !== null && range.endMs > range.startMs,
   };
 }
 
@@ -109,10 +109,20 @@ function orderedEvents(battle) {
 
 function completeRange(range, fallbackDurationMs) {
   let { startMs, endMs } = range;
-  if (startMs !== null && endMs !== null && endMs < startMs) endMs = null;
-  if (startMs !== null && endMs === null) endMs = startMs + fallbackDurationMs;
-  if (startMs === null && endMs !== null) startMs = endMs - fallbackDurationMs;
-  return { startMs, endMs };
+  let fallback = false;
+  if (startMs !== null && endMs !== null && endMs <= startMs) {
+    endMs = null;
+    fallback = true;
+  }
+  if (startMs !== null && endMs === null) {
+    endMs = startMs + fallbackDurationMs;
+    fallback = true;
+  }
+  if (startMs === null && endMs !== null) {
+    startMs = endMs - fallbackDurationMs;
+    fallback = true;
+  }
+  return { startMs, endMs, fallback };
 }
 
 function compileEventWindows(battle, fallbackDurationMs) {
@@ -127,7 +137,7 @@ function compileEventWindows(battle, fallbackDurationMs) {
       event: item,
       sourceIndex,
       ...range,
-      synthetic: classified.coarse,
+      synthetic: classified.coarse || Boolean(range.fallback),
       needsFallback: classified.coarse && !classified.bounded,
     };
   });
@@ -166,31 +176,51 @@ function compileEventWindows(battle, fallbackDurationMs) {
       cursor = window.endMs;
     }
   }
-  return partial.map(({ needsFallback: _needsFallback, ...window }) => window);
+  return partial.map(({ needsFallback: _needsFallback, fallback: _fallback, ...window }) => window);
 }
 
 function movementRange(movement, eventWindow, fallbackDurationMs) {
   const own = classifiedRange(movement?.time);
   if (own.coarse) {
+    const linkedAnchor = classifiedRange(eventWindow?.event?.time).startMs;
+    if (!own.bounded && eventWindow?.synthetic && linkedAnchor === own.startMs) {
+      return {
+        startMs: eventWindow.startMs,
+        endMs: eventWindow.endMs,
+        synthetic: true,
+        fallback: true,
+      };
+    }
     return {
       startMs: own.startMs,
       endMs: own.bounded ? own.endMs : own.startMs + fallbackDurationMs,
       synthetic: true,
+      fallback: !own.bounded,
     };
   }
   let startMs = own.startMs ?? eventWindow?.startMs ?? null;
   let endMs = own.endMs ?? eventWindow?.endMs ?? null;
-  if (startMs !== null && endMs !== null && endMs < startMs) {
+  let fallback = false;
+  if (startMs !== null && endMs !== null && endMs <= startMs) {
     if (own.startMs !== null && own.endMs === null) endMs = startMs + fallbackDurationMs;
     else if (own.endMs !== null && own.startMs === null) startMs = endMs - fallbackDurationMs;
     else endMs = startMs + fallbackDurationMs;
+    fallback = true;
   }
-  if (startMs !== null && endMs === null) endMs = startMs + fallbackDurationMs;
-  if (startMs === null && endMs !== null) startMs = endMs - fallbackDurationMs;
+  if (startMs !== null && endMs === null) {
+    endMs = startMs + fallbackDurationMs;
+    fallback = true;
+  }
+  if (startMs === null && endMs !== null) {
+    startMs = endMs - fallbackDurationMs;
+    fallback = true;
+  }
+  const inheritedFallback = own.startMs === null && own.endMs === null && Boolean(eventWindow?.synthetic);
   return {
     startMs,
     endMs,
-    synthetic: own.startMs === null && own.endMs === null && Boolean(eventWindow?.synthetic),
+    synthetic: fallback || inheritedFallback,
+    fallback: fallback || inheritedFallback,
   };
 }
 
@@ -238,8 +268,24 @@ function compileTracks(battle, eventById, fallbackDurationMs) {
       cumulativeLengths: cumulativeLengths(coordinates),
       waypointTimes: waypointMilliseconds(movement, coordinates.length),
       sourceIndex,
+      eventOrder: eventWindow?.sourceIndex ?? Number.MAX_SAFE_INTEGER,
       ...range,
     });
+  }
+
+  const fallbackCursors = new Map();
+  const fallbackOrder = [...pending].sort((left, right) =>
+    left.eventOrder - right.eventOrder || left.sourceIndex - right.sourceIndex);
+  for (const track of fallbackOrder) {
+    if (!track.fallback || track.startMs === null || track.endMs === null) continue;
+    const key = track.actorId;
+    const cursor = fallbackCursors.get(key);
+    const durationMs = track.endMs - track.startMs;
+    if (cursor !== undefined && track.startMs < cursor) {
+      track.startMs = cursor;
+      track.endMs = cursor + durationMs;
+    }
+    fallbackCursors.set(key, track.endMs);
   }
 
   const knownEnds = pending.filter(({ endMs }) => endMs !== null).map(({ endMs }) => endMs);
@@ -251,7 +297,7 @@ function compileTracks(battle, eventById, fallbackDurationMs) {
     track.synthetic = true;
     cursor = track.endMs;
   }
-  return pending;
+  return pending.map(({ fallback: _fallback, eventOrder: _eventOrder, ...track }) => track);
 }
 
 function compileEngagementWindows(battle, eventById, fallbackDurationMs) {
@@ -268,8 +314,8 @@ function compileEngagementWindows(battle, eventById, fallbackDurationMs) {
     const linked = eventById.get(engagement?.event_id);
     let startMs = own.startMs ?? linked?.startMs ?? null;
     let endMs = own.endMs ?? linked?.endMs ?? null;
-    let synthetic = classified.coarse;
-    if (startMs !== null && endMs !== null && endMs < startMs) endMs = startMs + fallbackDurationMs;
+    let synthetic = classified.coarse || Boolean(own.fallback);
+    if (startMs !== null && endMs !== null && endMs <= startMs) endMs = startMs + fallbackDurationMs;
     if (startMs !== null && endMs === null) endMs = startMs + fallbackDurationMs;
     if (startMs === null && endMs !== null) startMs = endMs - fallbackDurationMs;
     if (startMs === null) {
@@ -278,7 +324,8 @@ function compileEngagementWindows(battle, eventById, fallbackDurationMs) {
       synthetic = true;
       cursor = endMs;
     } else if (!classified.coarse) {
-      synthetic = Boolean(linked?.synthetic) && own.startMs === null && own.endMs === null;
+      synthetic = Boolean(own.fallback)
+        || (Boolean(linked?.synthetic) && own.startMs === null && own.endMs === null);
     }
     windows.push({
       id: engagement?.id,
