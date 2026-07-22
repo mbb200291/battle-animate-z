@@ -372,9 +372,11 @@ test("enabled trails reveal progressively, fade once after playback crosses end,
   const reveal = byClass("movement-reveal-mask")[0];
   assert.equal(trail.classList.contains("is-trail-active"), true);
   assert.equal(reveal.getAttribute("stroke-dashoffset"), "0.5");
+  assert.equal(reveal.style.strokeDashoffset, "0.5");
   controller.renderAt(900, { mode: "playback" });
   controller.renderAt(1100, { mode: "playback" });
   assert.equal(trail.classList.contains("is-trail-fading"), true);
+  assert.equal(reveal.style.strokeDashoffset, "0");
   assert.equal(controller._trailFadeTimers.size, 1);
   controller.renderAt(1200, { mode: "playback" });
   assert.equal(controller._trailFadeTimers.size, 1);
@@ -425,6 +427,7 @@ test("every movement owns a reveal mask and inferred dashes survive reveal progr
   controller.seek(500);
   assert.equal(paths[0].classList.contains("is-inferred"), true);
   assert.equal(reveals[0].getAttribute("stroke-dashoffset"), "0.5");
+  assert.equal(reveals[0].style.strokeDashoffset, "0.5");
 });
 
 test("animation handles request id zero and timestamp zero, then advances continuously", () => {

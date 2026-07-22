@@ -754,6 +754,7 @@ export function renderBattle(battle, documentRef = document) {
       "stroke-dasharray": "1",
       "stroke-dashoffset": "1",
     });
+    reveal.style.strokeDashoffset = "1";
     mask.append(reveal);
     defs.append(mask);
     if (movement.precision === "inferred" || (typeof movement.confidence === "number" && movement.confidence <= 0.6)) {
@@ -1122,6 +1123,7 @@ export function renderBattle(battle, documentRef = document) {
     const prior = owner._trailFadeTimers.get(key);
     if (prior !== undefined) cancelTimeout(prior);
     movementEl.reveal.setAttribute("stroke-dashoffset", "0");
+    movementEl.reveal.style.strokeDashoffset = "0";
     movementEl.path.classList.remove("is-trail-active", "is-trail-hidden");
     movementEl.path.classList.add("is-trail-fading");
     const timer = scheduleTimeout(() => {
@@ -1146,7 +1148,9 @@ export function renderBattle(battle, documentRef = document) {
         const timer = owner._trailFadeTimers.get(key);
         if (timer !== undefined) cancelTimeout(timer);
         owner._trailFadeTimers.delete(key);
-        reveal.setAttribute("stroke-dashoffset", String(1 - trackProgressAt(track, historicalMs)));
+        const revealOffset = String(1 - trackProgressAt(track, historicalMs));
+        reveal.setAttribute("stroke-dashoffset", revealOffset);
+        reveal.style.strokeDashoffset = revealOffset;
         path.classList.remove("is-trail-hidden", "is-trail-fading");
         path.classList.add("is-trail-active");
       } else if (crossedEnd) {
