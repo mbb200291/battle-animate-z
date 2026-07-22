@@ -1167,6 +1167,7 @@ export function renderBattle(battle, documentRef = document) {
 
     for (const [key, node] of beaconEls) {
       if (activeKeys.has(key)) continue;
+      if (mode === "reproject" && beaconExitTimers.has(key)) continue;
       if (mode !== "playback") {
         removeBeacon(key);
       } else if (!beaconExitTimers.has(key)) {

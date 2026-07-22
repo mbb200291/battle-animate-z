@@ -420,6 +420,23 @@ test("reactivating a keyed beacon cancels its stale exit callback", () => {
   assert.equal(controller._beaconExitTimers.has("opening"), false);
 });
 
+test("map reprojection preserves a playback-owned beacon exit timer", () => {
+  const { clock, controller, maps, byClass } = setup();
+  const opening = byClass("event-beacon")[0];
+  controller.renderAt(1100, { mode: "playback" });
+  const timerId = controller._beaconExitTimers.get("opening");
+
+  maps[0].projectionOffset = 25;
+  maps[0].fire("move");
+
+  assert.equal(byClass("event-beacon").includes(opening), true);
+  assert.equal(opening.classList.contains("is-exiting"), true);
+  assert.equal(controller._beaconExitTimers.get("opening"), timerId);
+  assert.equal(controller._beaconExitTimers.size, 1);
+  clock.flushTimeouts();
+  assert.equal(byClass("event-beacon").includes(opening), false);
+});
+
 test("nearby simultaneous events cluster into one counted beacon", () => {
   const battle = battleFixture();
   battle.historical_events.push({
