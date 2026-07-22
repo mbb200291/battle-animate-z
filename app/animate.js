@@ -1141,8 +1141,8 @@ export function renderBattle(battle, documentRef = document) {
         && historicalMs >= track.startMs && historicalMs <= track.endMs;
       const crossedEnd = owner.trailsEnabled && mode === "playback" && Boolean(track)
         && owner._lastTrailHistoricalMs !== null
-        && owner._lastTrailHistoricalMs <= track.endMs && historicalMs > track.endMs;
-      if (active) {
+        && owner._lastTrailHistoricalMs < track.endMs && historicalMs >= track.endMs;
+      if (active && !crossedEnd) {
         const timer = owner._trailFadeTimers.get(key);
         if (timer !== undefined) cancelTimeout(timer);
         owner._trailFadeTimers.delete(key);

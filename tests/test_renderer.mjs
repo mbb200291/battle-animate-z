@@ -387,6 +387,27 @@ test("enabled trails reveal progressively, fade once after playback crosses end,
   assert.equal(byClass("movement-path").every((path) => path.classList.contains("is-trail-hidden")), true);
 });
 
+test("a trail ending at the timeline boundary fades when playback reaches equality", () => {
+  const battle = battleFixture();
+  battle.movements = [battle.movements[1]];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const byClass = (className) => descendants(svg).filter((element) => element.classList.contains(className));
+  controller.setTrailsEnabled(true);
+  controller.renderAt(controller.compiled.presentationDurationMs - 100, { mode: "playback" });
+  controller.renderAt(controller.compiled.presentationDurationMs, { mode: "playback" });
+  const terminalTrail = byClass("movement-path")[0];
+  assert.equal(terminalTrail.classList.contains("is-trail-active"), false);
+  assert.equal(terminalTrail.classList.contains("is-trail-fading"), true);
+  assert.equal(controller._trailFadeTimers.size, 1);
+  clock.flushTimeouts();
+  assert.equal(terminalTrail.classList.contains("is-trail-fading"), false);
+  assert.equal(terminalTrail.classList.contains("is-trail-hidden"), true);
+});
+
 test("every movement owns a reveal mask and inferred dashes survive reveal progress", () => {
   const battle = battleFixture();
   battle.movements[0].precision = "inferred";
