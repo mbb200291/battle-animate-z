@@ -6,6 +6,7 @@ const DEFAULT_IDLE_THRESHOLD_SECONDS = 900;
 const DEFAULT_COMPRESSED_DURATION_MS = 1200;
 const DESTRUCTIVE_RESULTS = Object.freeze(["sunk", "disabled", "captured"]);
 const COARSE_DATE_PRECISIONS = Object.freeze(["year", "month", "day"]);
+const TRUSTED_PROGRESS = Symbol("trustedProgress");
 
 function daysInMonth(year, month) {
   if (month === 2) {
@@ -253,6 +254,13 @@ function waypointMilliseconds(movement, coordinateCount) {
   return parsed;
 }
 
+function frozenProgressMetadata(lengths, waypointTimes) {
+  return Object.freeze({
+    cumulativeLengths: Object.freeze(lengths),
+    waypointTimes: waypointTimes ? Object.freeze(waypointTimes) : null,
+  });
+}
+
 function compileTracks(battle, eventById, fallbackDurationMs) {
   const pending = [];
   for (const [sourceIndex, movement] of array(battle?.movements).entries()) {
@@ -260,13 +268,22 @@ function compileTracks(battle, eventById, fallbackDurationMs) {
     if (!coordinates.length) continue;
     const eventWindow = eventById.get(movement?.event_id);
     const range = movementRange(movement, eventWindow, fallbackDurationMs);
+    const lengths = cumulativeLengths(coordinates);
+    const parsedWaypoints = waypointMilliseconds(movement, coordinates.length);
+    const waypointTimes = parsedWaypoints
+      && parsedWaypoints[0] >= range.startMs && parsedWaypoints.at(-1) <= range.endMs
+      ? parsedWaypoints
+      : null;
+    const progress = frozenProgressMetadata(lengths, waypointTimes);
     pending.push({
       id: movement?.id,
       actorId: movement?.actor_id,
       eventId: movement?.event_id,
       coordinates,
-      cumulativeLengths: cumulativeLengths(coordinates),
-      waypointTimes: waypointMilliseconds(movement, coordinates.length),
+      cumulativeLengths: progress.cumulativeLengths,
+      waypointTimes: progress.waypointTimes,
+      _progress: progress,
+      [TRUSTED_PROGRESS]: progress,
       sourceIndex,
       eventOrder: eventWindow?.sourceIndex ?? Number.MAX_SAFE_INTEGER,
       ...range,
@@ -542,42 +559,54 @@ function interpolateSegment(coordinates, index, ratio) {
   };
 }
 
-export function trackProgressAt(track, historicalMs) {
+function standaloneProgressMetadata(track) {
   if (
-    !track || !Number.isFinite(historicalMs)
-    || !Number.isFinite(track.startMs) || !Number.isFinite(track.endMs)
+    !track || !Number.isFinite(track.startMs) || !Number.isFinite(track.endMs)
     || !Array.isArray(track.coordinates) || track.coordinates.length === 0
     || !Array.isArray(track.cumulativeLengths)
     || track.cumulativeLengths.length !== track.coordinates.length
-  ) return 0;
+  ) return null;
   if (track.coordinates.some((point) =>
-    !Array.isArray(point) || point.length < 2 || !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return 0;
+    !Array.isArray(point) || point.length < 2 || !Number.isFinite(point[0]) || !Number.isFinite(point[1]))) return null;
   if (track.cumulativeLengths.some((value, index) =>
-    !Number.isFinite(value) || value < 0 || (index === 0 ? value !== 0 : value < track.cumulativeLengths[index - 1]))) return 0;
+    !Number.isFinite(value) || value < 0 || (index === 0 ? value !== 0 : value < track.cumulativeLengths[index - 1]))) return null;
   if (track.waypointTimes !== null && track.waypointTimes !== undefined) {
-    if (!Array.isArray(track.waypointTimes) || track.waypointTimes.length !== track.coordinates.length) return 0;
+    if (!Array.isArray(track.waypointTimes) || track.waypointTimes.length !== track.coordinates.length) return null;
     if (track.waypointTimes.some((value, index) =>
-      !Number.isFinite(value) || (index > 0 && value <= track.waypointTimes[index - 1]))) return 0;
+      !Number.isFinite(value) || (index > 0 && value <= track.waypointTimes[index - 1]))) return null;
+    if (track.waypointTimes[0] < track.startMs || track.waypointTimes.at(-1) > track.endMs) return null;
   }
+  return { cumulativeLengths: track.cumulativeLengths, waypointTimes: track.waypointTimes ?? null };
+}
+
+function waypointSegmentAt(waypointTimes, historicalMs) {
+  let index = 0;
+  while (index < waypointTimes.length - 2 && historicalMs >= waypointTimes[index + 1]) index += 1;
+  const start = waypointTimes[index];
+  const end = waypointTimes[index + 1];
+  return { index, ratio: Math.min(1, Math.max(0, (historicalMs - start) / (end - start))) };
+}
+
+export function trackProgressAt(track, historicalMs) {
+  if (!track || !Number.isFinite(historicalMs)) return 0;
+  const progress = track._progress && track[TRUSTED_PROGRESS] === track._progress
+    ? track._progress
+    : standaloneProgressMetadata(track);
+  if (!progress) return 0;
   if (historicalMs <= track.startMs) return 0;
   if (historicalMs >= track.endMs) return track.endMs > track.startMs ? 1 : 0;
 
   const duration = track.endMs - track.startMs;
   if (duration <= 0) return 0;
   const elapsedProgress = Math.min(1, Math.max(0, (historicalMs - track.startMs) / duration));
-  const totalLength = track.cumulativeLengths.at(-1);
+  const totalLength = progress.cumulativeLengths.at(-1);
   if (!Number.isFinite(totalLength) || totalLength <= 0) return elapsedProgress;
 
-  if (Array.isArray(track.waypointTimes) && track.waypointTimes.length === track.coordinates.length) {
-    let index = 0;
-    while (index < track.waypointTimes.length - 2 && historicalMs >= track.waypointTimes[index + 1]) index += 1;
-    const start = track.waypointTimes[index];
-    const end = track.waypointTimes[index + 1];
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return elapsedProgress;
-    const segmentRatio = Math.min(1, Math.max(0, (historicalMs - start) / (end - start)));
-    const segmentStart = track.cumulativeLengths[index];
-    const segmentEnd = track.cumulativeLengths[index + 1];
-    return Math.min(1, Math.max(0, (segmentStart + segmentRatio * (segmentEnd - segmentStart)) / totalLength));
+  if (progress.waypointTimes) {
+    const { index, ratio } = waypointSegmentAt(progress.waypointTimes, historicalMs);
+    const segmentStart = progress.cumulativeLengths[index];
+    const segmentEnd = progress.cumulativeLengths[index + 1];
+    return Math.min(1, Math.max(0, (segmentStart + ratio * (segmentEnd - segmentStart)) / totalLength));
   }
 
   return elapsedProgress;
@@ -592,11 +621,7 @@ function sampleTrack(track, historicalMs) {
   }
 
   if (track.waypointTimes) {
-    let index = 0;
-    while (index < track.waypointTimes.length - 2 && historicalMs >= track.waypointTimes[index + 1]) index += 1;
-    const start = track.waypointTimes[index];
-    const end = track.waypointTimes[index + 1];
-    const ratio = Math.min(1, Math.max(0, (historicalMs - start) / (end - start)));
+    const { index, ratio } = waypointSegmentAt(track.waypointTimes, historicalMs);
     return interpolateSegment(coordinates, index, ratio);
   }
 

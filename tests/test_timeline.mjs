@@ -189,9 +189,32 @@ test("track progress rejects malformed nonempty compiled tracks", () => {
     { ...valid, waypointTimes: [0, 5] },
     { ...valid, waypointTimes: [0, Number.NaN, 10] },
     { ...valid, waypointTimes: [0, 8, 7] },
+    { ...valid, waypointTimes: [-1, 5, 10] },
+    { ...valid, waypointTimes: [0, 5, 11] },
   ];
 
   for (const track of malformed) assert.equal(trackProgressAt(track, 5), 0);
+});
+
+test("compiled tracks use frozen prevalidated progress metadata without rescanning coordinates", () => {
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("e", iso(0), iso(10))],
+    movements: [movement("m", "a", "e", [[0, 0], [1, 0], [3, 0]], iso(0), iso(10), {
+      waypoint_times: [iso(0), iso(8), iso(10)],
+    })],
+  }));
+  const track = timeline.tracks[0];
+
+  assert.equal(Object.isFrozen(track._progress), true);
+  assert.equal(Object.isFrozen(track._progress.cumulativeLengths), true);
+  assert.equal(Object.isFrozen(track._progress.waypointTimes), true);
+  track.coordinates = new Proxy(track.coordinates, {
+    get() {
+      throw new Error("trackProgressAt rescanned compiled coordinates");
+    },
+  });
+  assert.ok(Math.abs(trackProgressAt(track, parseBattleTime(iso(4))) - 1 / 6) < 1e-12);
 });
 
 test("waypoint sampling retains the heading of a timed stationary segment", () => {
