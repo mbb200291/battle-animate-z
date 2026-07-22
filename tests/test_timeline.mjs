@@ -172,6 +172,41 @@ test("track progress is safe for invalid inputs and stationary paths", () => {
   assert.equal(trackProgressAt(stationary, 11), 1);
 });
 
+test("track progress rejects malformed nonempty compiled tracks", () => {
+  const valid = {
+    startMs: 0,
+    endMs: 10,
+    coordinates: [[0, 0], [1, 0], [3, 0]],
+    cumulativeLengths: [0, 1, 3],
+    waypointTimes: null,
+  };
+  const malformed = [
+    { ...valid, cumulativeLengths: [0, Number.NaN, 3] },
+    { ...valid, cumulativeLengths: [0, 1] },
+    { ...valid, cumulativeLengths: [0, 2, 1] },
+    { ...valid, startMs: Number.NaN },
+    { ...valid, endMs: Number.POSITIVE_INFINITY },
+    { ...valid, waypointTimes: [0, 5] },
+    { ...valid, waypointTimes: [0, Number.NaN, 10] },
+    { ...valid, waypointTimes: [0, 8, 7] },
+  ];
+
+  for (const track of malformed) assert.equal(trackProgressAt(track, 5), 0);
+});
+
+test("waypoint sampling retains the heading of a timed stationary segment", () => {
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("e", iso(0), iso(10))],
+    movements: [movement("m", "a", "e", [[0, 0], [1, 0], [1, 0], [1, 1]], iso(0), iso(10), {
+      waypoint_times: [iso(0), iso(4), iso(8), iso(10)],
+    })],
+  }));
+
+  const sample = sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(5))));
+  assert.equal(Math.abs(sample.headings.get("a")), 0);
+});
+
 test("ordered event ids come first and unlisted events retain source order", () => {
   const timeline = compileTimeline(battle({
     historical_events: [event("a"), event("b"), event("c")],
