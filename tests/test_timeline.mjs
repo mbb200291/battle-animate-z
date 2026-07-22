@@ -6,6 +6,7 @@ import {
   compileTimeline,
   parseBattleTime,
   sampleTimeline,
+  trackProgressAt,
   toHistoricalTime,
   toPresentationTime,
 } from "../app/timeline.js";
@@ -125,6 +126,50 @@ test("waypoint times control piecewise movement timing exactly", () => {
   }));
 
   assert.deepEqual(sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(8)))).actorPositions.get("a"), [10, 0]);
+});
+
+test("track progress follows uniform movement time across cumulative path length", () => {
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("e", iso(0), iso(10))],
+    movements: [movement("m", "a", "e", [[0, 0], [1, 0], [3, 0]], iso(0), iso(10))],
+  }));
+  const track = timeline.tracks[0];
+
+  assert.equal(trackProgressAt(track, parseBattleTime(iso(0))), 0);
+  assert.equal(trackProgressAt(track, parseBattleTime(iso(5))), 0.5);
+  assert.equal(trackProgressAt(track, parseBattleTime(iso(10))), 1);
+});
+
+test("track progress converts waypoint timing to cumulative-length progress", () => {
+  const timeline = compileTimeline(battle({
+    actors: [{ id: "a" }],
+    historical_events: [event("e", iso(0), iso(10))],
+    movements: [movement("m", "a", "e", [[0, 0], [1, 0], [3, 0]], iso(0), iso(10), {
+      waypoint_times: [iso(0), iso(8), iso(10)],
+    })],
+  }));
+  const track = timeline.tracks[0];
+
+  assert.ok(Math.abs(trackProgressAt(track, parseBattleTime(iso(4))) - 1 / 6) < 1e-12);
+  assert.ok(Math.abs(trackProgressAt(track, parseBattleTime(iso(9))) - 2 / 3) < 1e-12);
+});
+
+test("track progress is safe for invalid inputs and stationary paths", () => {
+  assert.equal(trackProgressAt(null, 0), 0);
+  assert.equal(trackProgressAt({}, 0), 0);
+  assert.equal(trackProgressAt({ startMs: 0, endMs: 10, coordinates: [[0, 0]], cumulativeLengths: [0] }, Number.NaN), 0);
+
+  const stationary = {
+    startMs: 0,
+    endMs: 10,
+    coordinates: [[0, 0], [0, 0]],
+    cumulativeLengths: [0, 0],
+    waypointTimes: null,
+  };
+  assert.equal(trackProgressAt(stationary, -1), 0);
+  assert.equal(trackProgressAt(stationary, 5), 0.5);
+  assert.equal(trackProgressAt(stationary, 11), 1);
 });
 
 test("ordered event ids come first and unlisted events retain source order", () => {

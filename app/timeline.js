@@ -542,6 +542,38 @@ function interpolateSegment(coordinates, index, ratio) {
   };
 }
 
+export function trackProgressAt(track, historicalMs) {
+  if (
+    !track || !Number.isFinite(historicalMs)
+    || !Number.isFinite(track.startMs) || !Number.isFinite(track.endMs)
+    || !Array.isArray(track.coordinates) || track.coordinates.length === 0
+    || !Array.isArray(track.cumulativeLengths)
+    || track.cumulativeLengths.length !== track.coordinates.length
+  ) return 0;
+  if (historicalMs <= track.startMs) return 0;
+  if (historicalMs >= track.endMs) return track.endMs > track.startMs ? 1 : 0;
+
+  const duration = track.endMs - track.startMs;
+  if (duration <= 0) return 0;
+  const elapsedProgress = Math.min(1, Math.max(0, (historicalMs - track.startMs) / duration));
+  const totalLength = track.cumulativeLengths.at(-1);
+  if (!Number.isFinite(totalLength) || totalLength <= 0) return elapsedProgress;
+
+  if (Array.isArray(track.waypointTimes) && track.waypointTimes.length === track.coordinates.length) {
+    let index = 0;
+    while (index < track.waypointTimes.length - 2 && historicalMs >= track.waypointTimes[index + 1]) index += 1;
+    const start = track.waypointTimes[index];
+    const end = track.waypointTimes[index + 1];
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return elapsedProgress;
+    const segmentRatio = Math.min(1, Math.max(0, (historicalMs - start) / (end - start)));
+    const segmentStart = track.cumulativeLengths[index];
+    const segmentEnd = track.cumulativeLengths[index + 1];
+    return Math.min(1, Math.max(0, (segmentStart + segmentRatio * (segmentEnd - segmentStart)) / totalLength));
+  }
+
+  return elapsedProgress;
+}
+
 function sampleTrack(track, historicalMs) {
   const coordinates = track.coordinates;
   if (coordinates.length === 1) return { position: [...coordinates[0]], heading: 0 };
@@ -550,19 +582,9 @@ function sampleTrack(track, historicalMs) {
     return { position: [...coordinates.at(-1)], heading: latestHeading(coordinates, coordinates.length - 2) };
   }
 
-  if (track.waypointTimes) {
-    let index = 0;
-    while (index < track.waypointTimes.length - 2 && historicalMs >= track.waypointTimes[index + 1]) index += 1;
-    const start = track.waypointTimes[index];
-    const end = track.waypointTimes[index + 1];
-    const ratio = Math.min(1, Math.max(0, (historicalMs - start) / (end - start)));
-    return interpolateSegment(coordinates, index, ratio);
-  }
-
-  const duration = track.endMs - track.startMs;
   const totalLength = track.cumulativeLengths.at(-1);
-  if (duration <= 0 || totalLength <= 0) return { position: [...coordinates[0]], heading: 0 };
-  const targetLength = ((historicalMs - track.startMs) / duration) * totalLength;
+  if (totalLength <= 0) return { position: [...coordinates[0]], heading: 0 };
+  const targetLength = trackProgressAt(track, historicalMs) * totalLength;
   let index = 0;
   while (index < track.cumulativeLengths.length - 2 && targetLength >= track.cumulativeLengths[index + 1]) index += 1;
   const segmentLength = track.cumulativeLengths[index + 1] - track.cumulativeLengths[index];
