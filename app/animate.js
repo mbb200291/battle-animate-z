@@ -1,6 +1,7 @@
 /* global L */
-import { compileTimeline, parseBattleTime, sampleTimeline } from "./timeline.js";
+import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } from "./timeline.js";
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
+import { TRAIL_FADE_MS } from "./overlay-effects.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -110,6 +111,8 @@ export function wirePlaybackControls(controller, documentRef = document) {
   }
   const follow = $("follow-button");
   own(follow, "onclick", () => controller.setFollowEnabled(!controller.followEnabled));
+  const trails = $("trails-button");
+  own(trails, "onclick", () => controller.setTrailsEnabled(!controller.trailsEnabled));
   const teardown = () => {
     for (const { element, property, handler } of bindings) {
       if (element[property] === handler) element[property] = null;
@@ -560,7 +563,7 @@ export function showDiagnosticList(documentRef, elementId, heading, diagnostics)
 }
 
 function setTransportEnabled(documentRef, enabled) {
-  for (const id of ["play-button", "reset-button", "prev-button", "next-button", "follow-button", "event-scrubber"]) {
+  for (const id of ["play-button", "reset-button", "prev-button", "next-button", "follow-button", "trails-button", "event-scrubber"]) {
     const element = documentRef.getElementById(id);
     if (element) element.disabled = !enabled;
   }
@@ -602,6 +605,11 @@ export function resetBattleUI(documentRef = document) {
   if (follow) {
     follow.textContent = "Follow: off";
     follow.setAttribute("aria-pressed", "false");
+  }
+  const trails = documentRef.getElementById("trails-button");
+  if (trails) {
+    trails.textContent = "Trails: off";
+    trails.setAttribute("aria-pressed", "false");
   }
   setTransportEnabled(documentRef, false);
 }
@@ -696,6 +704,8 @@ export function renderBattle(battle, documentRef = document) {
   const svg = documentRef.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "battle-overlay");
   map.getContainer().appendChild(svg);
+  const defs = svgEl(documentRef, "defs");
+  svg.append(defs);
 
   const project = ([lon, lat]) => map.latLngToContainerPoint([lat, lon]);
   const toPath = (coords) =>
@@ -733,14 +743,26 @@ export function renderBattle(battle, documentRef = document) {
       pathLength: "1",
       stroke: colorOf(actor?.side_id),
       "stroke-width": style.movement_line_width || 4,
+      mask: `url(#movement-reveal-${sourceIndex})`,
     });
+    const mask = svgEl(documentRef, "mask", { id: `movement-reveal-${sourceIndex}` });
+    const reveal = svgEl(documentRef, "path", {
+      class: "movement-reveal-mask",
+      pathLength: "1",
+      stroke: "white",
+      "stroke-width": (style.movement_line_width || 4) + 2,
+      "stroke-dasharray": "1",
+      "stroke-dashoffset": "1",
+    });
+    mask.append(reveal);
+    defs.append(mask);
     if (movement.precision === "inferred" || (typeof movement.confidence === "number" && movement.confidence <= 0.6)) {
       path.classList.add("is-inferred");
     }
     svg.append(path);
     const track = compiled.tracks.find((candidate) =>
       candidate.id === movement.id || candidate.sourceIndex === sourceIndex);
-    movementEls.set(movement.id, { coords: movement.path.coordinates, path, track });
+    movementEls.set(sourceIndex, { coords: movement.path.coordinates, path, reveal, track });
   }
 
   // Engagement tracers are drawn between the attacker and target units, under
@@ -823,8 +845,10 @@ export function renderBattle(battle, documentRef = document) {
         place.path.setAttribute("d", `${toPath(place.coords)} Z`);
       }
     }
-    for (const { coords, path } of movementEls.values()) {
-      path.setAttribute("d", toPath(coords));
+    for (const { coords, path, reveal } of movementEls.values()) {
+      const d = toPath(coords);
+      path.setAttribute("d", d);
+      reveal.setAttribute("d", d);
     }
     for (const { coord, g } of markerEls.values()) {
       const point = project(coord);
@@ -1085,6 +1109,56 @@ export function renderBattle(battle, documentRef = document) {
     }
   }
 
+  function clearTrailEffects(owner) {
+    for (const timer of owner._trailFadeTimers.values()) cancelTimeout(timer);
+    owner._trailFadeTimers.clear();
+    for (const { path } of movementEls.values()) {
+      path.classList.remove("is-trail-active", "is-trail-fading");
+      path.classList.add("is-trail-hidden");
+    }
+  }
+
+  function beginTrailFade(owner, key, movementEl) {
+    const prior = owner._trailFadeTimers.get(key);
+    if (prior !== undefined) cancelTimeout(prior);
+    movementEl.reveal.setAttribute("stroke-dashoffset", "0");
+    movementEl.path.classList.remove("is-trail-active", "is-trail-hidden");
+    movementEl.path.classList.add("is-trail-fading");
+    const timer = scheduleTimeout(() => {
+      if (owner._trailFadeTimers.get(key) !== timer) return;
+      owner._trailFadeTimers.delete(key);
+      movementEl.path.classList.remove("is-trail-fading");
+      movementEl.path.classList.add("is-trail-hidden");
+    }, TRAIL_FADE_MS);
+    owner._trailFadeTimers.set(key, timer);
+  }
+
+  function renderTrails(owner, historicalMs, mode) {
+    if (mode === "seek") clearTrailEffects(owner);
+    for (const [key, movementEl] of movementEls) {
+      const { path, reveal, track } = movementEl;
+      const active = owner.trailsEnabled && Boolean(track)
+        && historicalMs >= track.startMs && historicalMs <= track.endMs;
+      const crossedEnd = owner.trailsEnabled && mode === "playback" && Boolean(track)
+        && owner._lastTrailHistoricalMs !== null
+        && owner._lastTrailHistoricalMs <= track.endMs && historicalMs > track.endMs;
+      if (active) {
+        const timer = owner._trailFadeTimers.get(key);
+        if (timer !== undefined) cancelTimeout(timer);
+        owner._trailFadeTimers.delete(key);
+        reveal.setAttribute("stroke-dashoffset", String(1 - trackProgressAt(track, historicalMs)));
+        path.classList.remove("is-trail-hidden", "is-trail-fading");
+        path.classList.add("is-trail-active");
+      } else if (crossedEnd) {
+        beginTrailFade(owner, key, movementEl);
+      } else if (!path.classList.contains("is-trail-fading")) {
+        path.classList.remove("is-trail-active");
+        path.classList.add("is-trail-hidden");
+      }
+    }
+    owner._lastTrailHistoricalMs = historicalMs;
+  }
+
   const controller = {
     battle,
     compiled,
@@ -1095,14 +1169,17 @@ export function renderBattle(battle, documentRef = document) {
     sampledState: null,
     playbackRate: 1,
     followEnabled: true,
+    trailsEnabled: false,
     isPlaying: false,
     _frame: null,
     _lastFrameTime: null,
     _lastFollowCheck: -Infinity,
+    _trailFadeTimers: new Map(),
+    _lastTrailHistoricalMs: null,
     _programmaticMove: false,
     _destroyed: false,
 
-    renderAt(presentationMs) {
+    renderAt(presentationMs, { mode = "seek" } = {}) {
       if (this._destroyed) return this.sampledState;
       const bounded = Math.min(duration, Math.max(0, Number.isFinite(presentationMs) ? presentationMs : 0));
       this.currentPresentationMs = bounded;
@@ -1142,6 +1219,7 @@ export function renderBattle(battle, documentRef = document) {
         path.classList.toggle("is-completed", completed);
         path.classList.toggle("is-active", active);
       }
+      renderTrails(this, sampled.historicalMs, mode);
       for (const { g, window } of markerEls.values()) {
         g.classList.toggle("is-visible", sampled.historicalMs >= window.startMs);
         g.classList.toggle("is-active", sampled.activeEventIds.has(window.id));
@@ -1183,6 +1261,19 @@ export function renderBattle(battle, documentRef = document) {
         button.textContent = `Follow: ${this.followEnabled ? "on" : "off"}`;
       }
       return this.followEnabled;
+    },
+
+    setTrailsEnabled(enabled) {
+      if (this._destroyed) return this.trailsEnabled;
+      this.trailsEnabled = Boolean(enabled);
+      if (!this.trailsEnabled) clearTrailEffects(this);
+      const button = $("trails-button");
+      if (button) {
+        button.setAttribute("aria-pressed", String(this.trailsEnabled));
+        button.textContent = `Trails: ${this.trailsEnabled ? "on" : "off"}`;
+      }
+      this.renderAt(this.currentPresentationMs);
+      return this.trailsEnabled;
     },
 
     showEvent(index) {
@@ -1232,7 +1323,7 @@ export function renderBattle(battle, documentRef = document) {
       const elapsed = Math.max(0, timestamp - this._lastFrameTime);
       this._lastFrameTime = timestamp;
       const nextTime = Math.min(duration, this.currentPresentationMs + elapsed * this.playbackRate);
-      this.renderAt(nextTime);
+      this.renderAt(nextTime, { mode: "playback" });
       if (nextTime >= duration) {
         this.pause();
         return;
@@ -1251,6 +1342,7 @@ export function renderBattle(battle, documentRef = document) {
     destroy() {
       if (this._destroyed) return;
       this.pause();
+      clearTrailEffects(this);
       this._destroyed = true;
       this._controlsTeardown?.();
       teardownTimeline();
@@ -1304,6 +1396,7 @@ export function renderBattle(battle, documentRef = document) {
   if (progress) progress.textContent = orderedEvents.length ? `1 / ${orderedEvents.length}` : "0 / 0";
   controller.setSpeed(1);
   controller.setFollowEnabled(true);
+  controller.setTrailsEnabled(false);
 
   mapEl._battleController = controller;
   redrawStaticGeometry();

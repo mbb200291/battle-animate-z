@@ -864,10 +864,12 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "compression-notice",
             "speed-controls",
             "follow-button",
+            "trails-button",
             "event-card-stack",
             "validation-warnings",
         ):
             self.assertIn(f'id="{element_id}"', index)
+        self.assertIn('id="trails-button" type="button" class="ghost" aria-pressed="false">Trails: off</button>', index)
         self.assertRegex(
             index,
             r'id="event-scrubber"[^>]*step="any"',
@@ -915,7 +917,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         for contract in (
             "compiled = compileTimeline(battle)",
-            "renderAt(presentationMs)",
+            "renderAt(presentationMs, { mode = \"seek\" } = {})",
             "seek(presentationMs)",
             "setSpeed(rate)",
             "playbackRate",

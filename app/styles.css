@@ -515,21 +515,20 @@ button.ghost,
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  transition:
-    stroke-dashoffset 900ms ease,
-    opacity 300ms ease;
 }
 
-.movement-path.is-visible {
-  opacity: 0.45;
-  stroke-dashoffset: 0;
+.movement-path.is-trail-active {
+  opacity: 0.9;
 }
 
-.movement-path.is-active {
-  opacity: 1;
-  stroke-dashoffset: 0;
+.movement-path.is-trail-fading {
+  opacity: 0;
+  transition: opacity 2500ms linear;
+}
+
+.movement-path.is-trail-hidden {
+  opacity: 0;
+  transition: none;
 }
 
 /* Inferred / low-confidence paths render dashed instead of solid. */
@@ -537,12 +536,12 @@ button.ghost,
   stroke-dasharray: 0.04 0.025 !important;
 }
 
-.movement-path.is-inferred.is-visible {
-  opacity: 0.4;
-}
-
-.movement-path.is-inferred.is-active {
-  opacity: 0.85;
+.movement-reveal-mask {
+  fill: none;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .unit {

@@ -125,7 +125,7 @@ class FakeDocument {
       "timeline", "event-type", "event-title", "event-description", "event-precision",
       "event-confidence", "confidence-bar", "engagements", "event-scrubber",
       "event-progress", "historical-time", "compression-notice", "play-button",
-      "follow-button", "event-card-stack", "speed-controls",
+      "follow-button", "trails-button", "event-card-stack", "speed-controls",
       "reset-button", "prev-button", "next-button",
     ]) {
       this.elements.set(id, new FakeElement(id === "battle-map" ? "div" : "span", id));
@@ -343,6 +343,69 @@ test("renderBattle samples immediately and separates position, heading, and symb
   assert.ok(symbol.children.every((child) => child.tagName === "PATH"));
 });
 
+test("movement trails default off and toggle without changing playback position", () => {
+  const { controller, document, byClass } = setup();
+  const button = document.getElementById("trails-button");
+  assert.equal(controller.trailsEnabled, false);
+  assert.equal(byClass("is-trail-active").length, 0);
+  controller.seek(500);
+  wirePlaybackControls(controller, document);
+  button.dispatch("click");
+  assert.equal(controller.currentPresentationMs, 500);
+  assert.equal(controller.trailsEnabled, true);
+  assert.equal(button.getAttribute("aria-pressed"), "true");
+  assert.equal(button.textContent, "Trails: on");
+});
+
+test("enabled trails reveal progressively, fade once after playback crosses end, and clean up", () => {
+  const battle = battleFixture();
+  battle.movements = [battle.movements[0]];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const byClass = (className) => descendants(svg).filter((element) => element.classList.contains(className));
+  controller.setTrailsEnabled(true);
+  controller.seek(500);
+  const trail = byClass("movement-path")[0];
+  const reveal = byClass("movement-reveal-mask")[0];
+  assert.equal(trail.classList.contains("is-trail-active"), true);
+  assert.equal(reveal.getAttribute("stroke-dashoffset"), "0.5");
+  controller.renderAt(900, { mode: "playback" });
+  controller.renderAt(1100, { mode: "playback" });
+  assert.equal(trail.classList.contains("is-trail-fading"), true);
+  assert.equal(controller._trailFadeTimers.size, 1);
+  controller.renderAt(1200, { mode: "playback" });
+  assert.equal(controller._trailFadeTimers.size, 1);
+  clock.flushTimeouts();
+  assert.equal(trail.classList.contains("is-trail-fading"), false);
+  assert.equal(trail.classList.contains("is-trail-hidden"), true);
+  controller.seek(500);
+  assert.equal(trail.classList.contains("is-trail-fading"), false);
+  controller.setTrailsEnabled(false);
+  assert.equal(byClass("movement-path").every((path) => path.classList.contains("is-trail-hidden")), true);
+});
+
+test("every movement owns a reveal mask and inferred dashes survive reveal progress", () => {
+  const battle = battleFixture();
+  battle.movements[0].precision = "inferred";
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = descendants(svg);
+  const paths = all.filter((element) => element.classList.contains("movement-path"));
+  const reveals = all.filter((element) => element.classList.contains("movement-reveal-mask"));
+  assert.equal(reveals.length, battle.movements.length);
+  assert.equal(new Set(paths.map((path) => path.getAttribute("mask"))).size, battle.movements.length);
+  controller.setTrailsEnabled(true);
+  controller.seek(500);
+  assert.equal(paths[0].classList.contains("is-inferred"), true);
+  assert.equal(reveals[0].getAttribute("stroke-dashoffset"), "0.5");
+});
+
 test("animation handles request id zero and timestamp zero, then advances continuously", () => {
   const { clock, controller, unit } = setup();
   const initialTransform = unit("alpha").getAttribute("transform");
@@ -449,6 +512,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
   const calls = [];
   const controller = {
     followEnabled: true,
+    trailsEnabled: false,
     toggle: () => calls.push(["toggle"]),
     pause: () => calls.push(["pause"]),
     seek: (value) => calls.push(["seek", value]),
@@ -456,6 +520,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     next: () => calls.push(["next"]),
     setSpeed: (value) => calls.push(["speed", value]),
     setFollowEnabled(value) { calls.push(["follow", value]); this.followEnabled = value; },
+    setTrailsEnabled(value) { calls.push(["trails", value]); this.trailsEnabled = value; },
   };
   wirePlaybackControls(controller, document);
   wirePlaybackControls(controller, document);
@@ -469,6 +534,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
   scrubber.dispatch("input");
   document.querySelectorAll("#speed-controls [data-speed]")[2].dispatch("click");
   document.getElementById("follow-button").dispatch("click");
+  document.getElementById("trails-button").dispatch("click");
 
   assert.deepEqual(calls, [
     ["toggle"],
@@ -478,6 +544,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     ["pause"], ["seek", 375.5],
     ["speed", 2],
     ["follow", false],
+    ["trails", true],
   ]);
 });
 
