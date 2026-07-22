@@ -4,6 +4,7 @@
   --muted: #687386;
   --surface: #f6f2e9;
   --panel: #fffaf0;
+  --paper: #fffaf0;
   --line: #d7cbb5;
   --accent: #b23a2f;
 }
@@ -615,15 +616,15 @@ button.ghost,
 
 .event-beacon-diamond {
   fill: var(--accent);
-  stroke: var(--panel);
+  stroke: var(--paper);
   stroke-width: 2;
 }
 
 .event-beacon-icon,
 .event-beacon-count {
-  fill: var(--panel);
+  fill: var(--paper);
   font-size: 9px;
-  font-weight: 700;
+  font-weight: 800;
   pointer-events: none;
 }
 
@@ -631,6 +632,7 @@ button.ghost,
   fill: none;
   stroke: var(--accent);
   stroke-width: 2;
+  transform-box: fill-box;
   transform-origin: center;
   animation: event-beacon-pulse 600ms ease-out 2;
 }

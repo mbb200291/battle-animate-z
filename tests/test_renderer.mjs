@@ -234,6 +234,7 @@ class FakeMap {
     this.flyCalls = [];
     this.pointFlyCalls = [];
     this.invalidateCount = 0;
+    this.projectionOffset = 0;
   }
 
   getContainer() { return this.container; }
@@ -242,7 +243,9 @@ class FakeMap {
   invalidateSize() { this.invalidateCount += 1; }
   getZoom() { return this.zoom; }
   getSize() { return { x: this.container.clientWidth, y: this.container.clientHeight }; }
-  latLngToContainerPoint([lat, lon]) { return { x: lon * 100 + 400, y: 300 - lat * 100 }; }
+  latLngToContainerPoint([lat, lon]) {
+    return { x: lon * 100 + 400 + this.projectionOffset, y: 300 - lat * 100 };
+  }
   on(events, listener) {
     events.split(/\s+/).forEach((event) => {
       if (!this.listeners.has(event)) this.listeners.set(event, new Set());
@@ -346,9 +349,41 @@ test("renderBattle samples immediately and separates position, heading, and symb
 test("active events render as pulse beacons without legacy discs", () => {
   const { byClass } = setup();
 
+  const beacon = byClass("event-beacon")[0];
   assert.equal(byClass("event-beacon").length, 1);
-  assert.equal(byClass("event-beacon-diamond").length, 1);
+  assert.equal(beacon.getAttribute("data-event-ids"), "opening");
+  assert.deepEqual(beacon.children.map((child) => child.getAttribute("class")), [
+    "event-beacon-pulse", "event-beacon-diamond", "event-beacon-icon",
+  ]);
+  assert.equal(beacon.children[0].getAttribute("r"), "10");
+  assert.equal(beacon.children[1].getAttribute("d"), "M 0 -8 L 8 0 L 0 8 L -8 0 Z");
+  assert.equal(beacon.children[2].getAttribute("y"), "4");
+  assert.equal(beacon.children[2].getAttribute("text-anchor"), "middle");
   assert.equal(byClass("event-disc").length, 0);
+});
+
+test("active events without a resolvable place render no beacon", () => {
+  const battle = battleFixture();
+  battle.historical_events[0].place_ids = [];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  assert.equal(descendants(svg).some((element) => element.classList.contains("event-beacon")), false);
+});
+
+test("zoomend reprojects a beacon without replacing its keyed node", () => {
+  const { maps, byClass } = setup();
+  const beacon = byClass("event-beacon")[0];
+  const before = beacon.getAttribute("transform");
+
+  maps[0].projectionOffset = 25;
+  maps[0].fire("zoomend");
+
+  assert.equal(byClass("event-beacon")[0], beacon);
+  assert.notEqual(beacon.getAttribute("transform"), before);
 });
 
 test("beacons exit after playback but disappear immediately on seek", () => {
@@ -368,6 +403,21 @@ test("beacons exit after playback but disappear immediately on seek", () => {
   assert.equal(byClass("event-beacon").length, 1);
   assert.equal(finish.parentNode, null);
   assert.equal(finish.classList.contains("is-exiting"), false);
+});
+
+test("reactivating a keyed beacon cancels its stale exit callback", () => {
+  const { clock, controller, byClass } = setup();
+  const opening = byClass("event-beacon")[0];
+  controller.renderAt(1100, { mode: "playback" });
+  const timerId = controller._beaconExitTimers.get("opening");
+  const staleRemoval = clock.timeouts.get(timerId);
+
+  controller.renderAt(500, { mode: "playback" });
+  staleRemoval();
+
+  assert.equal(byClass("event-beacon").includes(opening), true);
+  assert.equal(opening.classList.contains("is-exiting"), false);
+  assert.equal(controller._beaconExitTimers.has("opening"), false);
 });
 
 test("nearby simultaneous events cluster into one counted beacon", () => {
@@ -902,9 +952,13 @@ test("rapid render replacement cancels stale invalidateSize timeouts", () => {
   const document = new FakeDocument(clock.window);
   const maps = installLeaflet();
   const first = renderBattle(battleFixture(), document);
+  first.renderAt(1100, { mode: "playback" });
+  assert.equal(first._beaconExitTimers.size, 1);
   const second = renderBattle(battleFixture(), document);
 
   assert.equal(first._destroyed, true);
+  assert.equal(first._beaconEls.size, 0);
+  assert.equal(first._beaconExitTimers.size, 0);
   assert.ok(clock.clearedTimeouts.includes(0));
   clock.flushTimeouts();
   assert.equal(maps[0].invalidateCount, 0);
@@ -918,6 +972,19 @@ test("inferred path dashes use normalized pathLength fractions without overridin
 
   assert.match(rule, /stroke-dasharray:\s*0\.04\s+0\.025/);
   assert.doesNotMatch(rule, /stroke-dashoffset/);
+});
+
+test("pulse beacon CSS uses the paper token and exact pulse geometry", () => {
+  const css = readFileSync(new URL("../app/styles.css", import.meta.url), "utf8");
+  const diamond = css.match(/\.event-beacon-diamond\s*\{(?<body>[^}]*)\}/)?.groups?.body || "";
+  const labels = css.match(/\.event-beacon-icon,\s*\.event-beacon-count\s*\{(?<body>[^}]*)\}/)?.groups?.body || "";
+  const pulse = css.match(/\.event-beacon-pulse\s*\{(?<body>[^}]*)\}/)?.groups?.body || "";
+
+  assert.match(diamond, /fill:\s*var\(--accent\)/);
+  assert.match(diamond, /stroke:\s*var\(--paper\)/);
+  assert.match(labels, /fill:\s*var\(--paper\)/);
+  assert.match(labels, /font-weight:\s*800/);
+  assert.match(pulse, /transform-box:\s*fill-box/);
 });
 
 test("destroy is idempotent and cancels frames and listeners exactly once", () => {

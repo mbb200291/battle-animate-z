@@ -1432,13 +1432,18 @@ export function renderBattle(battle, documentRef = document) {
     suppressSecondaryLabelCollisions();
     controller._programmaticMove = false;
   };
+  const onMapZoomEnd = () => {
+    reprojectMap();
+    onMapMoveEnd();
+  };
   const onManualMapStart = () => {
     if (!controller._programmaticMove) controller.setFollowEnabled(false);
   };
   map.on("move zoom viewreset resize", reprojectMap);
   map.on("movestart zoomstart", onMapMoveStart);
   map.on("dragstart zoomstart", onManualMapStart);
-  map.on("moveend zoomend", onMapMoveEnd);
+  map.on("moveend", onMapMoveEnd);
+  map.on("zoomend", onMapZoomEnd);
 
   const scrubber = $("event-scrubber");
   if (scrubber) scrubber.max = String(duration);
@@ -1496,7 +1501,7 @@ function formatHistoricalTime(milliseconds, displayOffsetMinutes) {
 function eventCoord(event, places) {
   const place = places.get((event.place_ids || [])[0]);
   if (place) return geometryPoint(place.geometry);
-  return [0, 0];
+  return null;
 }
 
 function geometryPoint(geometry) {
