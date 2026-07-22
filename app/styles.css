@@ -69,8 +69,7 @@ textarea {
 }
 
 .battle-overlay.is-moving .movement-path,
-.battle-overlay.is-moving .event-marker,
-.battle-overlay.is-moving .event-marker-inner {
+.battle-overlay.is-moving .event-beacon {
   transition: none !important;
 }
 
@@ -605,43 +604,47 @@ button.ghost,
   transition: none !important;
 }
 
-.event-disc {
-  fill: rgba(255, 250, 240, 0.92);
-  stroke: var(--ink);
+.event-beacon {
+  opacity: 1;
+  transition: opacity 400ms ease;
+}
+
+.event-beacon.is-exiting {
+  opacity: 0;
+}
+
+.event-beacon-diamond {
+  fill: var(--accent);
+  stroke: var(--panel);
   stroke-width: 2;
 }
 
-.event-icon {
-  text-anchor: middle;
-  font-size: 14px;
-  fill: var(--ink);
+.event-beacon-icon,
+.event-beacon-count {
+  fill: var(--panel);
+  font-size: 9px;
+  font-weight: 700;
+  pointer-events: none;
 }
 
-.event-marker {
-  opacity: 0;
-  transition: opacity 220ms ease;
-}
-
-.event-marker.is-visible {
-  opacity: 0.5;
-}
-
-.event-marker.is-active {
-  opacity: 1;
-}
-
-.event-marker-inner {
-  transform-box: fill-box;
+.event-beacon-pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
   transform-origin: center;
-  transition: transform 320ms ease;
+  animation: event-beacon-pulse 600ms ease-out 2;
 }
 
-.event-marker.is-active .event-marker-inner {
-  transform: scale(1.15);
-}
+@keyframes event-beacon-pulse {
+  from {
+    transform: scale(0.7);
+    opacity: 0.75;
+  }
 
-.event-marker.is-low-confidence .event-disc {
-  stroke-dasharray: 3 3;
+  to {
+    transform: scale(2.2);
+    opacity: 0;
+  }
 }
 
 @media (max-width: 880px) {
@@ -686,8 +689,8 @@ button.ghost,
 @media (prefers-reduced-motion: reduce) {
   .event-card,
   .movement-path,
-  .event-marker,
-  .event-marker-inner,
+  .event-beacon,
+  .event-beacon-pulse,
   .unit,
   .engagement-line,
   .confidence-bar {

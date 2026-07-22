@@ -1,7 +1,7 @@
 /* global L */
 import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } from "./timeline.js";
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
-import { TRAIL_FADE_MS } from "./overlay-effects.js";
+import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -811,24 +811,10 @@ export function renderBattle(battle, documentRef = document) {
     unitEls.set(actor.id, { g: unit, heading, symbol, label, subLabel });
   }
 
-  const markerEls = new Map();
-  for (const window of compiled.eventWindows) {
-    const event = window.event;
-    const marker = svgEl(documentRef, "g", { class: "event-marker" });
-    if (typeof event.confidence === "number" && event.confidence < 0.5) {
-      marker.classList.add("is-low-confidence");
-    }
-    // Inner group carries the active-state scale so it never overrides the
-    // outer group's positioning transform attribute.
-    const inner = svgEl(documentRef, "g", { class: "event-marker-inner" });
-    inner.append(
-      svgEl(documentRef, "circle", { class: "event-disc", r: 16 }),
-      svgEl(documentRef, "text", { class: "event-icon", y: 5 }, iconOf(event.type))
-    );
-    marker.append(inner);
-    svg.append(marker);
-    markerEls.set(event.id, { coord: eventCoord(event, places), g: marker, window });
-  }
+  const beaconLayer = svgEl(documentRef, "g", { class: "event-beacon-layer" });
+  svg.append(beaconLayer);
+  const beaconEls = new Map();
+  const beaconExitTimers = new Map();
 
   let actorPositions = new Map();
 
@@ -850,10 +836,6 @@ export function renderBattle(battle, documentRef = document) {
       const d = toPath(coords);
       path.setAttribute("d", d);
       reveal.setAttribute("d", d);
-    }
-    for (const { coord, g } of markerEls.values()) {
-      const point = project(coord);
-      g.setAttribute("transform", `translate(${point.x} ${point.y})`);
     }
   }
 
@@ -904,6 +886,7 @@ export function renderBattle(battle, documentRef = document) {
     redrawStaticGeometry();
     updateActorPositions();
     redrawEngagementEndpoints();
+    if (controller.sampledState) renderBeacons(controller.sampledState, "reproject");
   }
 
   buildLegend(battle, documentRef, colorOf);
@@ -1163,6 +1146,69 @@ export function renderBattle(battle, documentRef = document) {
     owner._lastTrailHistoricalMs = historicalMs;
   }
 
+  function removeBeacon(key) {
+    const timer = beaconExitTimers.get(key);
+    if (timer !== undefined) cancelTimeout(timer);
+    beaconExitTimers.delete(key);
+    beaconEls.get(key)?.remove();
+    beaconEls.delete(key);
+  }
+
+  function renderBeacons(sampled, mode) {
+    const points = compiled.eventWindows.flatMap(({ id, event }) => {
+      if (!sampled.activeEventIds.has(id)) return [];
+      const coord = eventCoord(event, places);
+      if (!Array.isArray(coord)) return [];
+      const { x, y } = project(coord);
+      return [{ id, x, y, type: event.type }];
+    });
+    const clusters = clusterProjectedEvents(points);
+    const activeKeys = new Set(clusters.map(({ key }) => key));
+
+    for (const [key, node] of beaconEls) {
+      if (activeKeys.has(key)) continue;
+      if (mode !== "playback") {
+        removeBeacon(key);
+      } else if (!beaconExitTimers.has(key)) {
+        node.classList.add("is-exiting");
+        const timer = scheduleTimeout(() => {
+          if (beaconExitTimers.get(key) !== timer) return;
+          removeBeacon(key);
+        }, BEACON_EXIT_MS);
+        beaconExitTimers.set(key, timer);
+      }
+    }
+
+    for (const cluster of clusters) {
+      let node = beaconEls.get(cluster.key);
+      if (!node) {
+        node = svgEl(documentRef, "g", {
+          class: "event-beacon is-entering",
+          "data-event-ids": cluster.ids.join(" "),
+        });
+        node.append(
+          svgEl(documentRef, "circle", { class: "event-beacon-pulse", r: 10 }),
+          svgEl(documentRef, "path", {
+            class: "event-beacon-diamond",
+            d: "M 0 -8 L 8 0 L 0 8 L -8 0 Z",
+          }),
+          svgEl(documentRef, "text", {
+            class: cluster.count > 1 ? "event-beacon-count" : "event-beacon-icon",
+            y: 4,
+            "text-anchor": "middle",
+          }, cluster.count > 1 ? String(cluster.count) : iconOf(cluster.type)),
+        );
+        beaconLayer.append(node);
+        beaconEls.set(cluster.key, node);
+      }
+      const timer = beaconExitTimers.get(cluster.key);
+      if (timer !== undefined) cancelTimeout(timer);
+      beaconExitTimers.delete(cluster.key);
+      node.classList.remove("is-exiting");
+      node.setAttribute("transform", `translate(${cluster.x} ${cluster.y})`);
+    }
+  }
+
   const controller = {
     battle,
     compiled,
@@ -1179,6 +1225,8 @@ export function renderBattle(battle, documentRef = document) {
     _lastFrameTime: null,
     _lastFollowCheck: -Infinity,
     _trailFadeTimers: new Map(),
+    _beaconEls: beaconEls,
+    _beaconExitTimers: beaconExitTimers,
     _lastTrailHistoricalMs: null,
     _programmaticMove: false,
     _destroyed: false,
@@ -1224,10 +1272,7 @@ export function renderBattle(battle, documentRef = document) {
         path.classList.toggle("is-active", active);
       }
       renderTrails(this, sampled.historicalMs, mode);
-      for (const { g, window } of markerEls.values()) {
-        g.classList.toggle("is-visible", sampled.historicalMs >= window.startMs);
-        g.classList.toggle("is-active", sampled.activeEventIds.has(window.id));
-      }
+      renderBeacons(sampled, mode);
 
       appendNewActiveEventCards(sampled);
       displaySelectedEvent(this, selectedEventWindow(sampled));
@@ -1347,6 +1392,7 @@ export function renderBattle(battle, documentRef = document) {
       if (this._destroyed) return;
       this.pause();
       clearTrailEffects(this);
+      for (const key of [...beaconEls.keys()]) removeBeacon(key);
       this._destroyed = true;
       this._controlsTeardown?.();
       teardownTimeline();

@@ -343,6 +343,54 @@ test("renderBattle samples immediately and separates position, heading, and symb
   assert.ok(symbol.children.every((child) => child.tagName === "PATH"));
 });
 
+test("active events render as pulse beacons without legacy discs", () => {
+  const { byClass } = setup();
+
+  assert.equal(byClass("event-beacon").length, 1);
+  assert.equal(byClass("event-beacon-diamond").length, 1);
+  assert.equal(byClass("event-disc").length, 0);
+});
+
+test("beacons exit after playback but disappear immediately on seek", () => {
+  const { clock, controller, byClass } = setup();
+  const opening = byClass("event-beacon")[0];
+
+  controller.renderAt(1100, { mode: "playback" });
+  assert.equal(opening.classList.contains("is-exiting"), true);
+  assert.equal(byClass("event-beacon").length, 2);
+  assert.equal(controller._beaconExitTimers.size, 1);
+  clock.flushTimeouts();
+  assert.equal(byClass("event-beacon").length, 1);
+  assert.equal(controller._beaconExitTimers.size, 0);
+
+  const finish = byClass("event-beacon")[0];
+  controller.seek(500);
+  assert.equal(byClass("event-beacon").length, 1);
+  assert.equal(finish.parentNode, null);
+  assert.equal(finish.classList.contains("is-exiting"), false);
+});
+
+test("nearby simultaneous events cluster into one counted beacon", () => {
+  const battle = battleFixture();
+  battle.historical_events.push({
+    ...battle.historical_events[0],
+    id: "opening_support",
+    title: "Opening support",
+    type: "reinforcement",
+  });
+  battle.animation_hints.timeline.ordered_event_ids.push("opening_support");
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = descendants(svg);
+
+  assert.equal(all.filter((element) => element.classList.contains("event-beacon")).length, 1);
+  const count = all.find((element) => element.classList.contains("event-beacon-count"));
+  assert.equal(count.textContent, "2");
+});
+
 test("movement trails default off and toggle without changing playback position", () => {
   const { controller, document, byClass } = setup();
   const button = document.getElementById("trails-button");
