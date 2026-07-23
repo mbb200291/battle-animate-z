@@ -1023,17 +1023,20 @@ test("reduced motion focuses with setView instead of a flight", () => {
   });
 });
 
-test("focus programmatic movement preserves Follow and restores its flag after errors", () => {
+test("focus zoom preserves Follow, dragging overrides it, and camera errors restore the flag", () => {
   const { controller, maps } = setup();
   const map = maps[0];
   controller.setFollowEnabled(true);
 
   assert.equal(controller.focusActiveEvents(), true);
-  map.fire("dragstart");
+  map.fire("zoomstart");
   assert.equal(controller.followEnabled, true);
+  map.fire("dragstart");
+  assert.equal(controller.followEnabled, false);
   map.fire("moveend");
   assert.equal(controller._programmaticMove, false);
 
+  controller.setFollowEnabled(true);
   map.flyToBounds = () => { throw new Error("camera failed"); };
   assert.throws(() => controller.focusActiveEvents(), /camera failed/);
   assert.equal(controller._programmaticMove, false);

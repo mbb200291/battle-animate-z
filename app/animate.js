@@ -1630,12 +1630,14 @@ export function renderBattle(battle, documentRef = document) {
     reprojectMap();
     onMapMoveEnd();
   };
-  const onManualMapStart = () => {
+  const onMapDragStart = () => controller.setFollowEnabled(false);
+  const onManualMapZoomStart = () => {
     if (!controller._programmaticMove) controller.setFollowEnabled(false);
   };
   map.on("move zoom viewreset resize", reprojectMap);
   map.on("movestart zoomstart", onMapMoveStart);
-  map.on("dragstart zoomstart", onManualMapStart);
+  map.on("dragstart", onMapDragStart);
+  map.on("zoomstart", onManualMapZoomStart);
   map.on("moveend", onMapMoveEnd);
   map.on("zoomend", onMapZoomEnd);
 
