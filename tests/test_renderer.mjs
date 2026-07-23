@@ -527,6 +527,61 @@ test("a trail ending at the timeline boundary fades when playback reaches equali
   assert.equal(terminalTrail.classList.contains("is-trail-hidden"), true);
 });
 
+test("reduced motion removes completed trails and ended beacons without exit timers", () => {
+  const battle = battleFixture();
+  battle.movements = [battle.movements[0]];
+  const clock = new FrameClock(true);
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const byClass = (className) => descendants(svg).filter((element) => element.classList.contains(className));
+  const opening = byClass("event-beacon")[0];
+
+  controller.setTrailsEnabled(true);
+  controller.renderAt(900, { mode: "playback" });
+  controller.renderAt(1100, { mode: "playback" });
+
+  const trail = byClass("movement-path")[0];
+  assert.equal(trail.classList.contains("is-trail-fading"), false);
+  assert.equal(trail.classList.contains("is-trail-hidden"), true);
+  assert.equal(controller._trailFadeTimers.size, 0);
+  assert.equal(opening.parentNode, null);
+  assert.equal(controller._beaconExitTimers.size, 0);
+  assert.equal(clock.timeouts.size, 1);
+});
+
+test("destroy cancels owned trail and beacon timers and clears transient state", () => {
+  const battle = battleFixture();
+  battle.movements = [battle.movements[0]];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const trail = descendants(svg).find((element) => element.classList.contains("movement-path"));
+
+  controller.setTrailsEnabled(true);
+  controller.renderAt(900, { mode: "playback" });
+  controller.renderAt(1100, { mode: "playback" });
+  const ownedTimers = [
+    ...controller._trailFadeTimers.values(),
+    ...controller._beaconExitTimers.values(),
+  ];
+  assert.equal(ownedTimers.length, 2);
+
+  controller.destroy();
+
+  assert.equal(controller._trailFadeTimers.size, 0);
+  assert.equal(controller._beaconExitTimers.size, 0);
+  assert.equal(controller._beaconEls.size, 0);
+  assert.equal(controller.sampledState, null);
+  assert.equal(controller._lastTrailHistoricalMs, null);
+  assert.equal(trail.classList.contains("is-trail-fading"), false);
+  assert.equal(trail.classList.contains("is-trail-hidden"), true);
+  assert.ok(ownedTimers.every((timer) => clock.clearedTimeouts.includes(timer)));
+});
+
 test("every movement owns a reveal mask and inferred dashes survive reveal progress", () => {
   const battle = battleFixture();
   battle.movements[0].precision = "inferred";
@@ -1004,6 +1059,15 @@ test("pulse beacon CSS uses the paper token and exact pulse geometry", () => {
   assert.match(labels, /fill:\s*var\(--paper\)/);
   assert.match(labels, /font-weight:\s*800/);
   assert.match(pulse, /transform-box:\s*fill-box/);
+});
+
+test("reduced-motion CSS disables beacon pulse animation and overlay transitions", () => {
+  const css = readFileSync(new URL("../app/styles.css", import.meta.url), "utf8");
+  const media = css.match(/@media \(prefers-reduced-motion: reduce\)\s*\{(?<body>[\s\S]*?)\n\}/)?.groups?.body || "";
+
+  assert.match(media, /\.event-beacon-pulse[\s\S]*animation:\s*none\s*!important/);
+  assert.match(media, /\.event-beacon[\s\S]*transition:\s*none\s*!important/);
+  assert.match(media, /\.movement-path[\s\S]*transition:\s*none\s*!important/);
 });
 
 test("destroy is idempotent and cancels frames and listeners exactly once", () => {

@@ -1107,6 +1107,12 @@ export function renderBattle(battle, documentRef = document) {
     if (prior !== undefined) cancelTimeout(prior);
     movementEl.reveal.setAttribute("stroke-dashoffset", "0");
     movementEl.reveal.style.strokeDashoffset = "0";
+    if (reducedMotion) {
+      owner._trailFadeTimers.delete(key);
+      movementEl.path.classList.remove("is-trail-active", "is-trail-fading");
+      movementEl.path.classList.add("is-trail-hidden");
+      return;
+    }
     movementEl.path.classList.remove("is-trail-active", "is-trail-hidden");
     movementEl.path.classList.add("is-trail-fading");
     const timer = scheduleTimeout(() => {
@@ -1185,6 +1191,8 @@ export function renderBattle(battle, documentRef = document) {
         continue;
       }
       if (mode !== "playback") {
+        removeBeacon(key);
+      } else if (reducedMotion) {
         removeBeacon(key);
       } else if (!beaconExitTimers.has(key)) {
         node.classList.add("is-exiting");
@@ -1410,6 +1418,8 @@ export function renderBattle(battle, documentRef = document) {
       this.pause();
       clearTrailEffects(this);
       for (const key of [...beaconEls.keys()]) removeBeacon(key);
+      this.sampledState = null;
+      this._lastTrailHistoricalMs = null;
       this._destroyed = true;
       this._controlsTeardown?.();
       teardownTimeline();

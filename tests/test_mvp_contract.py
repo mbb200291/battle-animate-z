@@ -879,6 +879,17 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             r'</div>\s*</div>\s*<section id="event-card-stack"[^>]*></section>\s*<aside class="inspector"',
         )
 
+    def test_readme_documents_transient_map_overlays(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        for phrase in (
+            "航跡預設關閉",
+            "只顯示當前 movement",
+            "active-only 脈衝信標",
+            "相近事件會合併顯示數量",
+        ):
+            self.assertIn(phrase, readme)
+
     def test_renderer_uses_timeline_and_symbol_modules(self):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
 
