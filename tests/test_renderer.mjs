@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { renderBattle, wirePlaybackControls } from "../app/animate.js";
+import {
+  renderBattle,
+  resetBattleUI,
+  setBattleDocument,
+  wirePlaybackControls,
+} from "../app/animate.js";
 
 class FakeClassList {
   constructor(owner) {
@@ -51,6 +56,7 @@ class FakeElement {
     this.hidden = false;
     this.value = "";
     this.max = "";
+    this.disabled = false;
     this.clientWidth = id === "battle-map" ? 800 : 0;
     this.clientHeight = id === "battle-map" ? 600 : 0;
     this.removed = false;
@@ -126,10 +132,14 @@ class FakeDocument {
       "event-confidence", "confidence-bar", "engagements", "event-scrubber",
       "event-progress", "historical-time", "compression-notice", "play-button",
       "follow-button", "trails-button", "event-card-stack", "speed-controls",
-      "reset-button", "prev-button", "next-button",
+      "reset-button", "prev-button", "next-button", "focus-event-button",
+      "modern-borders-button", "validation-warnings", "error-banner",
     ]) {
       this.elements.set(id, new FakeElement(id === "battle-map" ? "div" : "span", id));
     }
+    this.elements.get("focus-event-button").disabled = true;
+    this.elements.get("modern-borders-button").textContent = "Modern borders: off";
+    this.elements.get("modern-borders-button").setAttribute("aria-pressed", "false");
     const speeds = this.elements.get("speed-controls");
     for (const rate of [0.5, 1, 2, 4]) {
       const button = new FakeElement("button");
@@ -235,9 +245,20 @@ class FakeMap {
     this.pointFlyCalls = [];
     this.invalidateCount = 0;
     this.projectionOffset = 0;
+    this.panes = new Map();
+    this.layers = new Set();
   }
 
   getContainer() { return this.container; }
+  createPane(name) {
+    const pane = new FakeElement("div");
+    this.panes.set(name, pane);
+    return pane;
+  }
+  getPane(name) { return this.panes.get(name); }
+  addLayer(layer) { this.layers.add(layer); return this; }
+  removeLayer(layer) { this.layers.delete(layer); return this; }
+  hasLayer(layer) { return this.layers.has(layer); }
   setView(_center, zoom) { this.zoom = zoom; return this; }
   fitBounds() { return this; }
   invalidateSize() { this.invalidateCount += 1; }
@@ -260,15 +281,35 @@ class FakeMap {
   remove() { this.removeCount += 1; }
 }
 
-function installLeaflet() {
+function installLeaflet(fetchImpl) {
   const maps = [];
+  const tileCalls = [];
+  const geoJSONCalls = [];
+  const fetchCalls = [];
+  globalThis.fetch = async (...args) => {
+    fetchCalls.push(args);
+    if (fetchImpl) return fetchImpl(...args);
+    return { ok: true, json: async () => ({ type: "FeatureCollection", features: [] }) };
+  };
   globalThis.L = {
     map(container) {
       const map = new FakeMap(container);
       maps.push(map);
       return map;
     },
-    tileLayer() { return { addTo() {} }; },
+    tileLayer(url, options) {
+      tileCalls.push({ url, options });
+      return { addTo() {} };
+    },
+    geoJSON(data, options) {
+      const layer = {
+        data,
+        options,
+        addTo(map) { map.addLayer(this); return this; },
+      };
+      geoJSONCalls.push(layer);
+      return layer;
+    },
     latLngBounds(points) {
       return {
         points,
@@ -277,7 +318,18 @@ function installLeaflet() {
       };
     },
   };
+  maps.tileCalls = tileCalls;
+  maps.geoJSONCalls = geoJSONCalls;
+  maps.fetchCalls = fetchCalls;
   return maps;
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 function battleFixture() {
@@ -709,6 +761,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
   const controller = {
     followEnabled: true,
     trailsEnabled: false,
+    modernBordersEnabled: false,
     toggle: () => calls.push(["toggle"]),
     pause: () => calls.push(["pause"]),
     seek: (value) => calls.push(["seek", value]),
@@ -717,6 +770,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     setSpeed: (value) => calls.push(["speed", value]),
     setFollowEnabled(value) { calls.push(["follow", value]); this.followEnabled = value; },
     setTrailsEnabled(value) { calls.push(["trails", value]); this.trailsEnabled = value; },
+    setModernBordersEnabled(value) { calls.push(["borders", value]); this.modernBordersEnabled = value; },
   };
   wirePlaybackControls(controller, document);
   wirePlaybackControls(controller, document);
@@ -731,6 +785,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
   document.querySelectorAll("#speed-controls [data-speed]")[2].dispatch("click");
   document.getElementById("follow-button").dispatch("click");
   document.getElementById("trails-button").dispatch("click");
+  document.getElementById("modern-borders-button").dispatch("click");
 
   assert.deepEqual(calls, [
     ["toggle"],
@@ -741,7 +796,183 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     ["speed", 2],
     ["follow", false],
     ["trails", true],
+    ["borders", true],
   ]);
+  assert.equal(document.getElementById("focus-event-button").onclick, undefined);
+});
+
+test("battle UI enables borders transport but leaves focus disabled and resets both controls", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+
+  const controller = setBattleDocument(battleFixture(), { documentRef: document });
+  assert.equal(document.getElementById("modern-borders-button").disabled, false);
+  assert.equal(document.getElementById("focus-event-button").disabled, true);
+
+  const borders = document.getElementById("modern-borders-button");
+  borders.textContent = "Modern borders: on";
+  borders.setAttribute("aria-pressed", "true");
+  document.getElementById("focus-event-button").disabled = false;
+  resetBattleUI(document);
+
+  assert.equal(controller._destroyed, true);
+  assert.equal(borders.disabled, true);
+  assert.equal(borders.textContent, "Modern borders: off");
+  assert.equal(borders.getAttribute("aria-pressed"), "false");
+  assert.equal(document.getElementById("focus-event-button").disabled, true);
+});
+
+test("modern borders default off and use the dedicated pane and exact noninteractive style", async () => {
+  const { controller, document, maps, svg } = setup();
+  const pane = maps[0].getPane("modernBordersPane");
+
+  assert.equal(controller.modernBordersEnabled, false);
+  assert.equal(controller._modernBordersLayer, null);
+  assert.equal(controller._modernBordersPromise, null);
+  assert.equal(document.getElementById("modern-borders-button").getAttribute("aria-pressed"), "false");
+  assert.equal(pane.style.zIndex, "350");
+  assert.equal(pane.style.pointerEvents, "none");
+  assert.equal(Number(svg.style.zIndex || 650) > Number(pane.style.zIndex), true);
+
+  await controller.setModernBordersEnabled(true);
+  assert.equal(maps.fetchCalls.length, 1);
+  assert.equal(maps.fetchCalls[0][0], "./data/modern-borders-50m.geojson");
+  assert.equal(maps.geoJSONCalls.length, 1);
+  assert.deepEqual(maps.geoJSONCalls[0].options, {
+    pane: "modernBordersPane",
+    style: {
+      color: "#59636b",
+      weight: 1,
+      opacity: 0.55,
+      fill: false,
+      interactive: false,
+    },
+  });
+  assert.equal(maps[0].hasLayer(maps.geoJSONCalls[0]), true);
+});
+
+test("modern borders lazily load once, reuse one layer, and preserve playback state", async () => {
+  const { controller, document, maps } = setup();
+  controller.seek(500);
+  controller.setFollowEnabled(false);
+  controller.setTrailsEnabled(true);
+  controller.play();
+  const before = {
+    time: controller.currentPresentationMs,
+    playing: controller.isPlaying,
+    follow: controller.followEnabled,
+    trails: controller.trailsEnabled,
+    sampled: controller.sampledState,
+    flyCalls: maps[0].flyCalls.length,
+    pointFlyCalls: maps[0].pointFlyCalls.length,
+  };
+
+  await controller.setModernBordersEnabled(true);
+  const layer = controller._modernBordersLayer;
+  await controller.setModernBordersEnabled(false);
+  await controller.setModernBordersEnabled(true);
+
+  assert.equal(maps.fetchCalls.length, 1);
+  assert.equal(maps.geoJSONCalls.length, 1);
+  assert.equal(controller._modernBordersLayer, layer);
+  assert.equal(maps[0].hasLayer(layer), true);
+  assert.equal(controller.modernBordersEnabled, true);
+  assert.equal(document.getElementById("modern-borders-button").textContent, "Modern borders: on");
+  assert.deepEqual({
+    time: controller.currentPresentationMs,
+    playing: controller.isPlaying,
+    follow: controller.followEnabled,
+    trails: controller.trailsEnabled,
+    sampled: controller.sampledState,
+    flyCalls: maps[0].flyCalls.length,
+    pointFlyCalls: maps[0].pointFlyCalls.length,
+  }, before);
+});
+
+test("pending modern borders load obeys the latest off request", async () => {
+  const pending = deferred();
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet(() => pending.promise);
+  const controller = renderBattle(battleFixture(), document);
+
+  const turningOn = controller.setModernBordersEnabled(true);
+  await controller.setModernBordersEnabled(false);
+  pending.resolve({ ok: true, json: async () => ({ type: "FeatureCollection", features: [] }) });
+  await turningOn;
+
+  assert.equal(controller.modernBordersEnabled, false);
+  assert.equal(document.getElementById("modern-borders-button").getAttribute("aria-pressed"), "false");
+  assert.equal(maps[0].layers.size, 0);
+});
+
+test("modern borders failure stays off, warns without destroying playback, and can retry", async () => {
+  let attempts = 0;
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet(() => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("network down");
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({ type: "FeatureCollection", features: [] }),
+    });
+  });
+  const controller = renderBattle(battleFixture(), document);
+  controller.play();
+
+  await controller.setModernBordersEnabled(true);
+  const warning = document.getElementById("validation-warnings");
+  assert.equal(controller.modernBordersEnabled, false);
+  assert.equal(controller._modernBordersPromise, null);
+  assert.equal(controller._destroyed, false);
+  assert.equal(controller.isPlaying, true);
+  assert.equal(warning.hidden, false);
+  assert.equal(warning.children[0].textContent, "Map layer warning (1)");
+  assert.match(warning.children[1].children[0].textContent, /network down/);
+
+  await controller.setModernBordersEnabled(true);
+  assert.equal(attempts, 2);
+  assert.equal(controller.modernBordersEnabled, true);
+  assert.equal(maps[0].layers.size, 1);
+});
+
+test("destroy removes loaded borders and a late load cannot re-add them", async () => {
+  const loaded = setup();
+  await loaded.controller.setModernBordersEnabled(true);
+  const layer = loaded.controller._modernBordersLayer;
+  loaded.controller.destroy();
+  assert.equal(loaded.maps[0].hasLayer(layer), false);
+
+  const pending = deferred();
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet(() => pending.promise);
+  const controller = renderBattle(battleFixture(), document);
+  const turningOn = controller.setModernBordersEnabled(true);
+  controller.destroy();
+  pending.resolve({ ok: true, json: async () => ({ type: "FeatureCollection", features: [] }) });
+  await turningOn;
+
+  assert.equal(maps[0].layers.size, 0);
+  assert.equal(controller.modernBordersEnabled, false);
+});
+
+test("replacement render resets modern borders off", async () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const first = renderBattle(battleFixture(), document);
+  await first.setModernBordersEnabled(true);
+
+  const second = renderBattle(battleFixture(), document);
+
+  assert.equal(first._destroyed, true);
+  assert.equal(second.modernBordersEnabled, false);
+  assert.equal(document.getElementById("modern-borders-button").textContent, "Modern borders: off");
+  assert.equal(document.getElementById("modern-borders-button").getAttribute("aria-pressed"), "false");
+  assert.equal(maps[0].layers.size, 0);
 });
 
 test("setSpeed updates exactly one selected control without jumping time", () => {
@@ -1097,6 +1328,7 @@ test("destroy tears down owned controls and timeline handlers and blocks public 
   controller.seek(900);
   assert.equal(clock.callbacks.size, 0);
   assert.equal(maps[0].flyCalls.length + maps[0].pointFlyCalls.length, flyCount);
+  assert.equal(document.getElementById("modern-borders-button").onclick, null);
   assert.equal(timelineButton.listeners.get("click")?.size ?? 0, 0);
   assert.equal(eventCard.listeners.get("keydown")?.size ?? 0, 0);
 });

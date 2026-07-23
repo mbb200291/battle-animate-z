@@ -113,6 +113,8 @@ export function wirePlaybackControls(controller, documentRef = document) {
   own(follow, "onclick", () => controller.setFollowEnabled(!controller.followEnabled));
   const trails = $("trails-button");
   own(trails, "onclick", () => controller.setTrailsEnabled(!controller.trailsEnabled));
+  const modernBorders = $("modern-borders-button");
+  own(modernBorders, "onclick", () => controller.setModernBordersEnabled(!controller.modernBordersEnabled));
   const teardown = () => {
     for (const { element, property, handler } of bindings) {
       if (element[property] === handler) element[property] = null;
@@ -563,7 +565,10 @@ export function showDiagnosticList(documentRef, elementId, heading, diagnostics)
 }
 
 function setTransportEnabled(documentRef, enabled) {
-  for (const id of ["play-button", "reset-button", "prev-button", "next-button", "follow-button", "trails-button", "event-scrubber"]) {
+  for (const id of [
+    "play-button", "reset-button", "prev-button", "next-button", "follow-button",
+    "trails-button", "modern-borders-button", "event-scrubber",
+  ]) {
     const element = documentRef.getElementById(id);
     if (element) element.disabled = !enabled;
   }
@@ -611,6 +616,13 @@ export function resetBattleUI(documentRef = document) {
     trails.textContent = "Trails: off";
     trails.setAttribute("aria-pressed", "false");
   }
+  const modernBorders = documentRef.getElementById("modern-borders-button");
+  if (modernBorders) {
+    modernBorders.textContent = "Modern borders: off";
+    modernBorders.setAttribute("aria-pressed", "false");
+  }
+  const focus = documentRef.getElementById("focus-event-button");
+  if (focus) focus.disabled = true;
   setTransportEnabled(documentRef, false);
 }
 
@@ -677,12 +689,16 @@ export function renderBattle(battle, documentRef = document) {
   const orderedEvents = compiled.eventWindows.map(({ event }) => event);
   const orderIndex = new Map(orderedEvents.map((event, index) => [event.id, index]));
 
-  // --- Leaflet map + OSM tiles ---
+  // --- Leaflet map + road-free terrain tiles ---
   const map = L.map(mapEl, { zoomControl: true });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}", {
+    maxNativeZoom: 16,
+    maxZoom: 18,
+    attribution: "Sources: Esri, USGS, NGA, NASA, CGIAR, and the GIS User Community",
   }).addTo(map);
+  const modernBordersPane = map.createPane("modernBordersPane");
+  modernBordersPane.style.zIndex = "350";
+  modernBordersPane.style.pointerEvents = "none";
 
   const allCoords = collectCoordinates(battle);
   const mapHints = battle.animation_hints?.map || {};
@@ -1245,6 +1261,7 @@ export function renderBattle(battle, documentRef = document) {
     playbackRate: 1,
     followEnabled: true,
     trailsEnabled: false,
+    modernBordersEnabled: false,
     isPlaying: false,
     _frame: null,
     _lastFrameTime: null,
@@ -1254,6 +1271,8 @@ export function renderBattle(battle, documentRef = document) {
     _beaconExitTimers: beaconExitTimers,
     _lastTrailHistoricalMs: null,
     _programmaticMove: false,
+    _modernBordersLayer: null,
+    _modernBordersPromise: null,
     _destroyed: false,
 
     renderAt(presentationMs, { mode = "seek" } = {}) {
@@ -1350,6 +1369,69 @@ export function renderBattle(battle, documentRef = document) {
       return this.trailsEnabled;
     },
 
+    async setModernBordersEnabled(enabled) {
+      if (this._destroyed) return false;
+      this.modernBordersEnabled = Boolean(enabled);
+      const button = $("modern-borders-button");
+      const syncButton = () => {
+        if (!button) return;
+        button.setAttribute("aria-pressed", String(this.modernBordersEnabled));
+        button.textContent = `Modern borders: ${this.modernBordersEnabled ? "on" : "off"}`;
+      };
+      syncButton();
+      if (!this.modernBordersEnabled) {
+        if (this._modernBordersLayer && map.hasLayer(this._modernBordersLayer)) {
+          map.removeLayer(this._modernBordersLayer);
+        }
+        return false;
+      }
+
+      let pending = this._modernBordersPromise;
+      if (!this._modernBordersLayer && !pending) {
+        pending = fetch("./data/modern-borders-50m.geojson")
+          .then((response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          })
+          .then((data) => L.geoJSON(data, {
+            pane: "modernBordersPane",
+            style: {
+              color: "#59636b",
+              weight: 1,
+              opacity: 0.55,
+              fill: false,
+              interactive: false,
+            },
+          }));
+        this._modernBordersPromise = pending;
+      }
+
+      try {
+        if (pending) {
+          const layer = await pending;
+          if (this._modernBordersPromise === pending) this._modernBordersPromise = null;
+          if (this._destroyed) return false;
+          this._modernBordersLayer ||= layer;
+        }
+        if (this.modernBordersEnabled && !map.hasLayer(this._modernBordersLayer)) {
+          this._modernBordersLayer.addTo(map);
+        }
+        return this.modernBordersEnabled;
+      } catch (error) {
+        if (this._modernBordersPromise === pending) this._modernBordersPromise = null;
+        if (this._destroyed) return false;
+        this.modernBordersEnabled = false;
+        syncButton();
+        showDiagnosticList(
+          documentRef,
+          "validation-warnings",
+          "Map layer warning",
+          [`Unable to load modern borders: ${error.message}`],
+        );
+        return false;
+      }
+    },
+
     showEvent(index) {
       if (this._destroyed) return this.sampledState;
       const bounded = Math.max(0, Math.min(index, orderedEvents.length - 1));
@@ -1416,6 +1498,10 @@ export function renderBattle(battle, documentRef = document) {
     destroy() {
       if (this._destroyed) return;
       this.pause();
+      this.modernBordersEnabled = false;
+      if (this._modernBordersLayer && map.hasLayer(this._modernBordersLayer)) {
+        map.removeLayer(this._modernBordersLayer);
+      }
       clearTrailEffects(this);
       for (const key of [...beaconEls.keys()]) removeBeacon(key);
       this.sampledState = null;
@@ -1479,6 +1565,7 @@ export function renderBattle(battle, documentRef = document) {
   controller.setSpeed(1);
   controller.setFollowEnabled(true);
   controller.setTrailsEnabled(false);
+  controller.setModernBordersEnabled(false);
 
   mapEl._battleController = controller;
   redrawStaticGeometry();

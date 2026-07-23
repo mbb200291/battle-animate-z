@@ -901,6 +901,24 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn("renderBattle", animate)
         self.assertIn("playTimeline", animate)
 
+    def test_static_app_uses_road_free_hillshade_basemap(self):
+        animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "styles.css").read_text(encoding="utf-8")
+
+        self.assertNotIn("tile.openstreetmap.org", animate)
+        self.assertIn(
+            "https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+            animate,
+        )
+        self.assertIn(
+            "Sources: Esri, USGS, NGA, NASA, CGIAR, and the GIS User Community",
+            animate,
+        )
+        self.assertRegex(
+            styles,
+            r"(?s)#battle-map\s*\{[^}]*background:\s*#b7d4dc;",
+        )
+
     def test_static_app_exposes_continuous_playback_controls(self):
         index = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
         styles = (ROOT / "app" / "styles.css").read_text(encoding="utf-8")
