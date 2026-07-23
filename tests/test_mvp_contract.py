@@ -888,6 +888,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
     def test_static_app_exposes_continuous_playback_controls(self):
         index = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
+        styles = (ROOT / "app" / "styles.css").read_text(encoding="utf-8")
 
         for element_id in (
             "historical-time",
@@ -909,6 +910,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertRegex(
             index,
             r'</div>\s*</div>\s*<section id="event-card-stack"[^>]*></section>\s*<aside class="inspector"',
+        )
+        self.assertRegex(
+            styles.split("@media", 1)[0],
+            r"(?s)\.playback-options\s*\{[^}]*\bflex-wrap:\s*wrap;",
         )
 
     def test_readme_documents_transient_map_overlays(self):

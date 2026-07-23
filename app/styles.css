@@ -322,6 +322,7 @@ button.ghost,
 }
 
 .playback-options {
+  flex-wrap: wrap;
   justify-content: space-between;
 }
 
@@ -684,8 +685,7 @@ button.ghost,
     max-height: none;
   }
 
-  .transport-row,
-  .playback-options {
+  .transport-row {
     flex-wrap: wrap;
   }
 
