@@ -326,10 +326,12 @@ function installLeaflet(fetchImpl) {
 
 function deferred() {
   let resolve;
-  const promise = new Promise((resolvePromise) => {
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function battleFixture() {
@@ -370,6 +372,12 @@ function battleFixture() {
       style: { side_colors: { blue: "#00f", red: "#f00" }, actor_icons: { alpha: "warship_generic", bravo: "infantry" } },
     },
   };
+}
+
+function battleFixtureWithWarning() {
+  const battle = battleFixture();
+  battle.animation_hints.style.actor_icons.alpha = "not_a_real_token";
+  return battle;
 }
 
 function setup() {
@@ -824,8 +832,10 @@ test("battle UI enables borders transport but leaves focus disabled and resets b
 });
 
 test("modern borders default off and use the dedicated pane and exact noninteractive style", async () => {
-  const { controller, document, maps, svg } = setup();
+  const { controller, document, maps } = setup();
   const pane = maps[0].getPane("modernBordersPane");
+  const css = readFileSync(new URL("../app/styles.css", import.meta.url), "utf8");
+  const overlayZIndex = Number(css.match(/\.battle-overlay\s*\{[^}]*z-index:\s*(\d+)/s)?.[1]);
 
   assert.equal(controller.modernBordersEnabled, false);
   assert.equal(controller._modernBordersLayer, null);
@@ -833,7 +843,8 @@ test("modern borders default off and use the dedicated pane and exact noninterac
   assert.equal(document.getElementById("modern-borders-button").getAttribute("aria-pressed"), "false");
   assert.equal(pane.style.zIndex, "350");
   assert.equal(pane.style.pointerEvents, "none");
-  assert.equal(Number(svg.style.zIndex || 650) > Number(pane.style.zIndex), true);
+  assert.equal(Number.isFinite(overlayZIndex), true);
+  assert.equal(overlayZIndex > Number(pane.style.zIndex), true);
 
   await controller.setModernBordersEnabled(true);
   assert.equal(maps.fetchCalls.length, 1);
@@ -919,7 +930,7 @@ test("modern borders failure stays off, warns without destroying playback, and c
       json: async () => ({ type: "FeatureCollection", features: [] }),
     });
   });
-  const controller = renderBattle(battleFixture(), document);
+  const controller = setBattleDocument(battleFixtureWithWarning(), { documentRef: document });
   controller.play();
 
   await controller.setModernBordersEnabled(true);
@@ -929,13 +940,51 @@ test("modern borders failure stays off, warns without destroying playback, and c
   assert.equal(controller._destroyed, false);
   assert.equal(controller.isPlaying, true);
   assert.equal(warning.hidden, false);
-  assert.equal(warning.children[0].textContent, "Map layer warning (1)");
-  assert.match(warning.children[1].children[0].textContent, /network down/);
+  assert.equal(warning.children[0].textContent, "Map layer warning (2)");
+  assert.match(warning.children[1].children[0].textContent, /unknown actor icon token/);
+  assert.match(warning.children[1].children[1].textContent, /network down/);
 
   await controller.setModernBordersEnabled(true);
   assert.equal(attempts, 2);
   assert.equal(controller.modernBordersEnabled, true);
   assert.equal(maps[0].layers.size, 1);
+  assert.equal(warning.children[0].textContent, "JSON validation warnings (1)");
+  assert.equal(warning.children[1].children.length, 1);
+  assert.match(warning.children[1].children[0].textContent, /unknown actor icon token/);
+});
+
+test("turning borders off clears only the map warning", async () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet(async () => { throw new Error("network down"); });
+  const controller = setBattleDocument(battleFixtureWithWarning(), { documentRef: document });
+  const warning = document.getElementById("validation-warnings");
+
+  await controller.setModernBordersEnabled(true);
+  await controller.setModernBordersEnabled(false);
+
+  assert.equal(warning.children[0].textContent, "JSON validation warnings (1)");
+  assert.equal(warning.children[1].children.length, 1);
+  assert.match(warning.children[1].children[0].textContent, /unknown actor icon token/);
+});
+
+test("late border failure after off does not add a map warning", async () => {
+  const pending = deferred();
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet(() => pending.promise);
+  const controller = setBattleDocument(battleFixtureWithWarning(), { documentRef: document });
+
+  const turningOn = controller.setModernBordersEnabled(true);
+  await controller.setModernBordersEnabled(false);
+  pending.reject(new Error("late failure"));
+  await turningOn;
+
+  const warning = document.getElementById("validation-warnings");
+  assert.equal(warning.children[0].textContent, "JSON validation warnings (1)");
+  assert.equal(warning.children[1].children.length, 1);
+  assert.match(warning.children[1].children[0].textContent, /unknown actor icon token/);
+  assert.doesNotMatch(warning.children[1].children[0].textContent, /late failure/);
 });
 
 test("destroy removes loaded borders and a late load cannot re-add them", async () => {

@@ -911,9 +911,14 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             animate,
         )
         self.assertIn(
-            "Sources: Esri, USGS, NGA, NASA, CGIAR, and the GIS User Community",
+            "Sources: Maxar, Airbus, USGS, NGA, NASA, CGIAR, NLS, OS, NMA, "
+            "Geodatastyrelsen, GSA, GSI, Intermap, and the GIS User Community",
             animate,
         )
+        self.assertIn("Made with Natural Earth.", animate)
+        self.assertNotIn("World_Shaded_Relief", animate)
+        self.assertIn('loadBattle("./data/modern-borders-50m.geojson")', animate)
+        self.assertEqual(animate.count("fetch("), 1)
         self.assertRegex(
             styles,
             r"(?s)#battle-map\s*\{[^}]*background:\s*#b7d4dc;",

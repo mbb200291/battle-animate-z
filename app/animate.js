@@ -564,6 +564,17 @@ export function showDiagnosticList(documentRef, elementId, heading, diagnostics)
   box.hidden = false;
 }
 
+function showBattleWarnings(documentRef) {
+  const documentWarnings = documentRef._battleDocumentWarnings || [];
+  const mapWarning = documentRef._battleRuntimeMapWarning;
+  showDiagnosticList(
+    documentRef,
+    "validation-warnings",
+    mapWarning ? "Map layer warning" : "JSON validation warnings",
+    mapWarning ? [...documentWarnings, mapWarning] : documentWarnings,
+  );
+}
+
 function setTransportEnabled(documentRef, enabled) {
   for (const id of [
     "play-button", "reset-button", "prev-button", "next-button", "follow-button",
@@ -580,6 +591,8 @@ function setTransportEnabled(documentRef, enabled) {
 export function resetBattleUI(documentRef = document) {
   documentRef._battlePlaybackTeardown?.();
   documentRef.getElementById("battle-map")?._battleController?.destroy?.();
+  documentRef._battleRuntimeMapWarning = null;
+  showBattleWarnings(documentRef);
   for (const id of [
     "battle-name", "battle-date", "battle-summary", "event-type", "event-title", "event-description",
     "event-precision", "event-confidence",
@@ -635,7 +648,9 @@ export function setBattleDocument(battle, {
   previousController?.destroy?.();
   const { errors, warnings } = validateBattle(battle);
   showDiagnosticList(documentRef, "error-banner", "JSON validation failed", errors);
-  showDiagnosticList(documentRef, "validation-warnings", "JSON validation warnings", warnings);
+  documentRef._battleDocumentWarnings = warnings;
+  documentRef._battleRuntimeMapWarning = null;
+  showBattleWarnings(documentRef);
   if (errors.length) {
     resetBattleUI(documentRef);
     return undefined;
@@ -653,8 +668,9 @@ export function setBattleDocumentFromText(text, options = {}) {
   } catch (error) {
     options.previousController?.destroy?.();
     const documentRef = options.documentRef || document;
+    documentRef._battleDocumentWarnings = [];
+    documentRef._battleRuntimeMapWarning = null;
     resetBattleUI(documentRef);
-    showDiagnosticList(documentRef, "validation-warnings", "JSON validation warnings", []);
     showDiagnosticList(documentRef, "error-banner", "JSON validation failed", [`Invalid JSON: ${error.message}`]);
     return undefined;
   }
@@ -694,7 +710,7 @@ export function renderBattle(battle, documentRef = document) {
   L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}", {
     maxNativeZoom: 16,
     maxZoom: 18,
-    attribution: "Sources: Esri, USGS, NGA, NASA, CGIAR, and the GIS User Community",
+    attribution: "Sources: Maxar, Airbus, USGS, NGA, NASA, CGIAR, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, Intermap, and the GIS User Community | Made with Natural Earth.",
   }).addTo(map);
   const modernBordersPane = map.createPane("modernBordersPane");
   modernBordersPane.style.zIndex = "350";
@@ -1383,16 +1399,14 @@ export function renderBattle(battle, documentRef = document) {
         if (this._modernBordersLayer && map.hasLayer(this._modernBordersLayer)) {
           map.removeLayer(this._modernBordersLayer);
         }
+        documentRef._battleRuntimeMapWarning = null;
+        showBattleWarnings(documentRef);
         return false;
       }
 
       let pending = this._modernBordersPromise;
       if (!this._modernBordersLayer && !pending) {
-        pending = fetch("./data/modern-borders-50m.geojson")
-          .then((response) => {
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            return response.json();
-          })
+        pending = loadBattle("./data/modern-borders-50m.geojson")
           .then((data) => L.geoJSON(data, {
             pane: "modernBordersPane",
             style: {
@@ -1416,18 +1430,18 @@ export function renderBattle(battle, documentRef = document) {
         if (this.modernBordersEnabled && !map.hasLayer(this._modernBordersLayer)) {
           this._modernBordersLayer.addTo(map);
         }
+        if (this.modernBordersEnabled) {
+          documentRef._battleRuntimeMapWarning = null;
+          showBattleWarnings(documentRef);
+        }
         return this.modernBordersEnabled;
       } catch (error) {
         if (this._modernBordersPromise === pending) this._modernBordersPromise = null;
-        if (this._destroyed) return false;
+        if (this._destroyed || !this.modernBordersEnabled) return false;
         this.modernBordersEnabled = false;
         syncButton();
-        showDiagnosticList(
-          documentRef,
-          "validation-warnings",
-          "Map layer warning",
-          [`Unable to load modern borders: ${error.message}`],
-        );
+        documentRef._battleRuntimeMapWarning = `Unable to load modern borders: ${error.message}`;
+        showBattleWarnings(documentRef);
         return false;
       }
     },
