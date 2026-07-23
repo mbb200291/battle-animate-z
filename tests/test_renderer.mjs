@@ -425,12 +425,14 @@ test("map reprojection preserves a playback-owned beacon exit timer", () => {
   const opening = byClass("event-beacon")[0];
   controller.renderAt(1100, { mode: "playback" });
   const timerId = controller._beaconExitTimers.get("opening");
+  const before = opening.getAttribute("transform");
 
   maps[0].projectionOffset = 25;
   maps[0].fire("move");
 
   assert.equal(byClass("event-beacon").includes(opening), true);
   assert.equal(opening.classList.contains("is-exiting"), true);
+  assert.notEqual(opening.getAttribute("transform"), before);
   assert.equal(controller._beaconExitTimers.get("opening"), timerId);
   assert.equal(controller._beaconExitTimers.size, 1);
   clock.flushTimeouts();

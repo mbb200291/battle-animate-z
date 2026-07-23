@@ -1154,6 +1154,19 @@ export function renderBattle(battle, documentRef = document) {
     beaconEls.delete(key);
   }
 
+  function reprojectBeacon(node) {
+    const ids = (node.getAttribute("data-event-ids") || "").split(" ");
+    const points = ids.flatMap((id) => {
+      const event = compiled.eventWindows.find((window) => window.id === id)?.event;
+      const coord = event && eventCoord(event, places);
+      return Array.isArray(coord) ? [project(coord)] : [];
+    });
+    if (!points.length) return;
+    const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+    const y = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+    node.setAttribute("transform", `translate(${x} ${y})`);
+  }
+
   function renderBeacons(sampled, mode) {
     const points = compiled.eventWindows.flatMap(({ id, event }) => {
       if (!sampled.activeEventIds.has(id)) return [];
@@ -1167,7 +1180,10 @@ export function renderBattle(battle, documentRef = document) {
 
     for (const [key, node] of beaconEls) {
       if (activeKeys.has(key)) continue;
-      if (mode === "reproject" && beaconExitTimers.has(key)) continue;
+      if (mode === "reproject" && beaconExitTimers.has(key)) {
+        reprojectBeacon(node);
+        continue;
+      }
       if (mode !== "playback") {
         removeBeacon(key);
       } else if (!beaconExitTimers.has(key)) {
