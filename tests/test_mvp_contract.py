@@ -70,6 +70,21 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("valid", result.stdout)
 
+    def test_modern_border_asset_is_geometry_only_natural_earth(self):
+        path = ROOT / "app" / "data" / "modern-borders-50m.geojson"
+        serialized = path.read_text(encoding="utf-8")
+        borders = json.loads(serialized)
+
+        self.assertEqual(borders["type"], "FeatureCollection")
+        self.assertGreater(len(borders["features"]), 200)
+        self.assertNotIn("crs", borders)
+        for feature in borders["features"]:
+            self.assertEqual(feature["properties"], {})
+            self.assertTrue(feature["geometry"])
+            self.assertNotIn("bbox", feature)
+        for key in ("NAME", "ADMIN", "POP_EST", "SOVEREIGNT"):
+            self.assertNotIn(f'"{key}"', serialized)
+
     def test_yalu_is_a_timed_v030_ship_demo(self):
         battle = json.loads(YALU_EXAMPLE.read_text(encoding="utf-8"))
         expected_icons = {
