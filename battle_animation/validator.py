@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from datetime import datetime, timezone
@@ -199,6 +200,9 @@ def _validate_array(value: list[Any], schema: dict[str, Any], root_schema: dict[
 
 
 def _validate_number(value: int | float, schema: dict[str, Any], path: str, errors: list[ValidationError]) -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        errors.append(ValidationError(path, "expected finite number"))
+        return
     minimum = schema.get("minimum")
     exclusive_minimum = schema.get("exclusiveMinimum")
     maximum = schema.get("maximum")
@@ -261,6 +265,13 @@ def _validate_references(document: Any, errors: list[ValidationError]) -> None:
         for source_id in engagement.get("source_ids", []):
             if source_id not in source_ids:
                 errors.append(ValidationError(f"{path}.source_ids", f"unknown source id {source_id!r}"))
+
+    animation_hints = document.get("animation_hints")
+    cameras = animation_hints.get("camera", []) if isinstance(animation_hints, dict) else []
+    if isinstance(cameras, list):
+        for index, camera in enumerate(cameras):
+            if isinstance(camera, dict):
+                _check_ref(camera, "event_id", event_ids, f"$.animation_hints.camera[{index}]", errors)
 
     outcome = document.get("outcome", {})
     if isinstance(outcome, dict):

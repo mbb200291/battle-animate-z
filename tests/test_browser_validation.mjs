@@ -141,6 +141,7 @@ test("camera hints enforce the schema container, item, required fields, and shap
     ["camera center malformed", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: [0, Infinity] }]; }, /\$\.animation_hints\.camera\[0\]\.center.*coordinate pair/i],
     ["camera center too long", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: [0, 0, 0] }]; }, /\$\.animation_hints\.camera\[0\]\.center.*coordinate pair/i],
     ["camera zoom malformed", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: [0, 0], zoom: NaN }]; }, /\$\.animation_hints\.camera\[0\]\.zoom.*finite number/i],
+    ["camera extra property", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: [0, 0], note: "extra" }]; }, /\$\.animation_hints\.camera\[0\]\.note.*additional property/i],
   ];
   for (const [label, mutate, expected] of cases) {
     const battle = fixture();

@@ -164,7 +164,7 @@ test("includes valid extra points and deduplicates them with collected coordinat
     }],
     places: new Map([["place", { geometry: point(1, 1) }]]),
     actorPositions: new Map(),
-    extraPoints: [[1, 1], [2, 2], null, [Number.NaN, 3]],
+    extraPoints: [[1, 1], [2, 2], [2, 2, 3], null, [Number.NaN, 3]],
   });
 
   assert.deepEqual(plan, {

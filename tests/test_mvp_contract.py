@@ -534,6 +534,46 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
     def test_validator_accepts_v030_movement_and_timeline_timing(self):
         self.assertEqual(validate_document(self._valid_v030_document()), [])
 
+    def test_python_validator_rejects_unknown_camera_event_reference(self):
+        document = self._valid_v030_document()
+        document["animation_hints"]["camera"][0]["event_id"] = "missing-event"
+
+        errors = validate_document(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.animation_hints.camera[0].event_id"
+                and error.message == "unknown id 'missing-event'"
+                for error in errors
+            )
+        )
+
+    def test_python_validator_rejects_nonfinite_camera_numbers(self):
+        cases = (
+            ("center longitude NaN", ("center", 0), math.nan, "$.animation_hints.camera[0].center[0]"),
+            ("center latitude infinity", ("center", 1), math.inf, "$.animation_hints.camera[0].center[1]"),
+            ("zoom NaN", ("zoom", None), math.nan, "$.animation_hints.camera[0].zoom"),
+            ("zoom infinity", ("zoom", None), math.inf, "$.animation_hints.camera[0].zoom"),
+        )
+        for label, (field, index), value, expected_path in cases:
+            with self.subTest(label=label):
+                document = self._valid_v030_document()
+                camera = document["animation_hints"]["camera"][0]
+                if index is None:
+                    camera[field] = value
+                else:
+                    camera[field][index] = value
+
+                errors = validate_document(document)
+
+                self.assertTrue(
+                    any(
+                        error.path == expected_path
+                        and error.message == "expected finite number"
+                        for error in errors
+                    )
+                )
+
     def test_validator_rejects_zero_historical_seconds_per_playback_second(self):
         document = self._valid_v030_document()
         document["animation_hints"]["timeline"]["historical_seconds_per_playback_second"] = 0

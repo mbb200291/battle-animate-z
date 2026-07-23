@@ -1,5 +1,5 @@
 const validPoint = (value) =>
-  Array.isArray(value) && value.length >= 2
+  Array.isArray(value) && value.length === 2
   && Number.isFinite(value[0]) && Number.isFinite(value[1]);
 
 function geometryPoints(geometry) {

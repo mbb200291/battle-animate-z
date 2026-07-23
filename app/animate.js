@@ -396,6 +396,11 @@ function validateRendererShapes(battle, errors) {
           errors.push(`${path}: expected object`);
           return;
         }
+        for (const key of Object.keys(hint)) {
+          if (!["event_id", "center", "zoom"].includes(key)) {
+            errors.push(`${path}.${key}: additional property is not allowed`);
+          }
+        }
         if (!("event_id" in hint)) {
           errors.push(`${path}.event_id: required property`);
         } else if (typeof hint.event_id !== "string"
