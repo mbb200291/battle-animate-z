@@ -898,7 +898,7 @@ test("focus fits simultaneous event, actor, movement, and engagement points", ()
     {
       id: "mover_active", event_id: "opening", actor_id: "mover",
       time: timed("move", "2020-01-01T00:00:00Z", "2020-01-01T00:00:02Z"),
-      path: { type: "LineString", coordinates: [[3, 3], [3, 3]] },
+      path: { type: "LineString", coordinates: [[3, 3], [30, 30]] },
       precision: "exact", confidence: 1,
     },
     {
@@ -933,7 +933,7 @@ test("focus fits simultaneous event, actor, movement, and engagement points", ()
   assert.equal(call.options.duration, 0.9);
   assert.equal(call.options.animate, true);
   assert.deepEqual(call.bounds.points, [
-    [0, 0], [0, 2], [0, 1], [1, 0], [3, 3], [4, 4], [5, 5],
+    [0, 0], [0, 2], [0, 1], [1, 0], [16.5, 16.5], [4, 4], [5, 5], [3, 3], [30, 30],
   ]);
 });
 
@@ -1192,7 +1192,7 @@ test("modern borders failure stays off, warns without destroying playback, and c
   assert.equal(controller._destroyed, false);
   assert.equal(controller.isPlaying, true);
   assert.equal(warning.hidden, false);
-  assert.equal(warning.children[0].textContent, "Map layer warning (2)");
+  assert.equal(warning.children[0].textContent, "Warnings (2)");
   assert.match(warning.children[1].children[0].textContent, /unknown actor icon token/);
   assert.match(warning.children[1].children[1].textContent, /network down/);
 
@@ -1203,6 +1203,19 @@ test("modern borders failure stays off, warns without destroying playback, and c
   assert.equal(warning.children[0].textContent, "JSON validation warnings (1)");
   assert.equal(warning.children[1].children.length, 1);
   assert.match(warning.children[1].children[0].textContent, /unknown actor icon token/);
+});
+
+test("a map-only failure keeps the map layer warning title", async () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet(async () => { throw new Error("network down"); });
+  const controller = setBattleDocument(battleFixture(), { documentRef: document });
+  const warning = document.getElementById("validation-warnings");
+
+  await controller.setModernBordersEnabled(true);
+
+  assert.equal(warning.children[0].textContent, "Map layer warning (1)");
+  assert.match(warning.children[1].children[0].textContent, /network down/);
 });
 
 test("turning borders off clears only the map warning", async () => {

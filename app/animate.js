@@ -218,6 +218,12 @@ export function validateBattle(battle) {
     if ("to_place_id" in movement) check(movement.to_place_id, placeIds, `movements[${i}].to_place_id`);
   });
 
+  array(battle.animation_hints?.camera).forEach((camera, i) => {
+    if (isObject(camera) && "event_id" in camera) {
+      check(camera.event_id, eventIds, `animation_hints.camera[${i}].event_id`);
+    }
+  });
+
   const outcome = battle.outcome;
   if (outcome && typeof outcome === "object") {
     array(outcome.winner_side_ids).forEach((id) => check(id, sideIds, "outcome.winner_side_ids"));
@@ -236,7 +242,7 @@ function isObject(value) {
 
 function validateCoordinatePair(value, path, errors) {
   if (!Array.isArray(value)
-      || value.length < 2
+      || value.length !== 2
       || !Number.isFinite(value[0])
       || !Number.isFinite(value[1])) {
     errors.push(`${path}: expected coordinate pair`);
@@ -379,6 +385,29 @@ function validateRendererShapes(battle, errors) {
           && (typeof mapHints.initial_zoom !== "number" || !Number.isFinite(mapHints.initial_zoom))) {
         errors.push("$.animation_hints.map.initial_zoom: expected finite number");
       }
+    }
+    const camera = battle.animation_hints.camera;
+    if ("camera" in battle.animation_hints && !Array.isArray(camera)) {
+      errors.push("$.animation_hints.camera: expected array");
+    } else if (Array.isArray(camera)) {
+      camera.forEach((hint, index) => {
+        const path = `$.animation_hints.camera[${index}]`;
+        if (!isObject(hint)) {
+          errors.push(`${path}: expected object`);
+          return;
+        }
+        if (!("event_id" in hint)) {
+          errors.push(`${path}.event_id: required property`);
+        } else if (typeof hint.event_id !== "string"
+            || !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(hint.event_id)) {
+          errors.push(`${path}.event_id: expected identifier`);
+        }
+        if (!("center" in hint)) errors.push(`${path}.center: required property`);
+        else validateCoordinatePair(hint.center, `${path}.center`, errors);
+        if ("zoom" in hint && !Number.isFinite(hint.zoom)) {
+          errors.push(`${path}.zoom: expected finite number`);
+        }
+      });
     }
   }
   return errors.length === initialErrorCount;
@@ -570,10 +599,13 @@ export function showDiagnosticList(documentRef, elementId, heading, diagnostics)
 function showBattleWarnings(documentRef) {
   const documentWarnings = documentRef._battleDocumentWarnings || [];
   const mapWarning = documentRef._battleRuntimeMapWarning;
+  const heading = documentWarnings.length && mapWarning
+    ? "Warnings"
+    : mapWarning ? "Map layer warning" : "JSON validation warnings";
   showDiagnosticList(
     documentRef,
     "validation-warnings",
-    mapWarning ? "Map layer warning" : "JSON validation warnings",
+    heading,
     mapWarning ? [...documentWarnings, mapWarning] : documentWarnings,
   );
 }
@@ -713,7 +745,7 @@ export function renderBattle(battle, documentRef = document) {
   L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}", {
     maxNativeZoom: 16,
     maxZoom: 18,
-    attribution: "Sources: Maxar, Airbus, USGS, NGA, NASA, CGIAR, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, Intermap, and the GIS User Community | Made with Natural Earth.",
+    attribution: 'Powered by <a href="https://www.esri.com/">Esri</a> | Sources: Maxar, Airbus, USGS, NGA, NASA, CGIAR, NLS, OS, NMA, Geodatastyrelsen, GSA, GSI, Intermap, and the GIS User Community | Made with Natural Earth.',
   }).addTo(map);
   const modernBordersPane = map.createPane("modernBordersPane");
   modernBordersPane.style.zIndex = "350";
@@ -1048,6 +1080,15 @@ export function renderBattle(battle, documentRef = document) {
     return [...ids];
   }
 
+  function focusExtraPoints(sampled) {
+    const points = [];
+    for (const track of compiled.tracks) {
+      if (sampled.historicalMs < track.startMs || sampled.historicalMs > track.endMs) continue;
+      points.push(track.coordinates[0], track.coordinates.at(-1));
+    }
+    return points;
+  }
+
   function currentFocusPlan(owner) {
     const sampled = owner.sampledState;
     if (!sampled) return { kind: "none" };
@@ -1062,6 +1103,7 @@ export function renderBattle(battle, documentRef = document) {
       actorPositions: sampled.actorPositions,
       cameras: battle.animation_hints?.camera || [],
       extraActorIds: focusExtraActorIds(sampled),
+      extraPoints: focusExtraPoints(sampled),
     });
   }
 

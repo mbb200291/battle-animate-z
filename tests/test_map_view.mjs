@@ -20,6 +20,36 @@ test("uses a matching valid camera hint for one active event", () => {
   assert.deepEqual(plan, { kind: "view", center: [121, 25], zoom: 9 });
 });
 
+test("treats a non-array camera container as empty", () => {
+  const plan = buildFocusPlan({
+    activeEventIds: new Set(["event-a"]),
+    eventWindows: [{
+      id: "event-a",
+      event: { actor_ids: [], place_ids: ["place-a"] },
+    }],
+    places: new Map([["place-a", { geometry: point(120, 24) }]]),
+    actorPositions: new Map(),
+    cameras: {},
+  });
+
+  assert.deepEqual(plan, { kind: "view", center: [120, 24], zoom: 8 });
+});
+
+test("ignores null and malformed camera items", () => {
+  const plan = buildFocusPlan({
+    activeEventIds: new Set(["event-a"]),
+    eventWindows: [{
+      id: "event-a",
+      event: { actor_ids: [], place_ids: ["place-a"] },
+    }],
+    places: new Map([["place-a", { geometry: point(120, 24) }]]),
+    actorPositions: new Map(),
+    cameras: [null, [], { event_id: "event-a", center: [121, 25] }],
+  });
+
+  assert.deepEqual(plan, { kind: "view", center: [120, 24], zoom: 8 });
+});
+
 test("fits points from every simultaneously active event", () => {
   const plan = buildFocusPlan({
     activeEventIds: new Set(["event-a", "event-b"]),
@@ -121,6 +151,25 @@ test("includes target and extra actors after event actors", () => {
   assert.deepEqual(plan, {
     kind: "bounds",
     points: [[1, 1], [2, 2], [3, 3]],
+    maxZoom: 10,
+  });
+});
+
+test("includes valid extra points and deduplicates them with collected coordinates", () => {
+  const plan = buildFocusPlan({
+    activeEventIds: new Set(["event"]),
+    eventWindows: [{
+      id: "event",
+      event: { actor_ids: [], target_actor_ids: [], place_ids: ["place"] },
+    }],
+    places: new Map([["place", { geometry: point(1, 1) }]]),
+    actorPositions: new Map(),
+    extraPoints: [[1, 1], [2, 2], null, [Number.NaN, 3]],
+  });
+
+  assert.deepEqual(plan, {
+    kind: "bounds",
+    points: [[1, 1], [2, 2]],
     maxZoom: 10,
   });
 });

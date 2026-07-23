@@ -129,6 +129,38 @@ test("renderer-required collection members and nested containers reject malforme
   }
 });
 
+test("camera hints enforce the schema container, item, required fields, and shapes", () => {
+  const cases = [
+    ["camera object", (battle) => { battle.animation_hints.camera = {}; }, /\$\.animation_hints\.camera.*expected array/i],
+    ["camera null", (battle) => { battle.animation_hints.camera = null; }, /\$\.animation_hints\.camera.*expected array/i],
+    ["camera null item", (battle) => { battle.animation_hints.camera = [null]; }, /\$\.animation_hints\.camera\[0\].*expected object/i],
+    ["camera array item", (battle) => { battle.animation_hints.camera = [[]]; }, /\$\.animation_hints\.camera\[0\].*expected object/i],
+    ["camera event id missing", (battle) => { battle.animation_hints.camera = [{ center: [0, 0] }]; }, /\$\.animation_hints\.camera\[0\]\.event_id.*required/i],
+    ["camera event id malformed", (battle) => { battle.animation_hints.camera = [{ event_id: "1 bad", center: [0, 0] }]; }, /\$\.animation_hints\.camera\[0\]\.event_id.*identifier/i],
+    ["camera center missing", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a" }]; }, /\$\.animation_hints\.camera\[0\]\.center.*required/i],
+    ["camera center malformed", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: [0, Infinity] }]; }, /\$\.animation_hints\.camera\[0\]\.center.*coordinate pair/i],
+    ["camera center too long", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: [0, 0, 0] }]; }, /\$\.animation_hints\.camera\[0\]\.center.*coordinate pair/i],
+    ["camera zoom malformed", (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: [0, 0], zoom: NaN }]; }, /\$\.animation_hints\.camera\[0\]\.zoom.*finite number/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = fixture();
+    mutate(battle);
+    const errors = validateBattle(battle).errors;
+    assert.equal(errors.length, 1, `${label}: ${errors.join("\n")}`);
+    assert.match(errors[0], expected, label);
+  }
+
+  const validWithoutZoom = fixture();
+  validWithoutZoom.animation_hints.camera = [{ event_id: "event-a", center: [0, 0] }];
+  assert.deepEqual(validateBattle(validWithoutZoom).errors, []);
+});
+
+test("camera hint event ids must resolve to historical events", () => {
+  const battle = fixture();
+  battle.animation_hints.camera = [{ event_id: "missing-event", center: [0, 0], zoom: 8 }];
+  assert.match(messages(validateBattle(battle), "errors"), /animation_hints\.camera\[0\]\.event_id.*missing-event/i);
+});
+
 test("movement, event, and engagement times reject malformed and reversed ranges", () => {
   const battle = fixture();
   battle.movements[0].time.start = "bad";
@@ -376,6 +408,10 @@ test("malformed renderer members and nested shapes never render and tear down sa
     (battle) => { battle.animation_hints.style.event_icons = { advance: 5 }; },
     (battle) => { battle.animation_hints.map = { initial_center: null }; },
     (battle) => { battle.animation_hints.map = { initial_zoom: Number.POSITIVE_INFINITY }; },
+    (battle) => { battle.animation_hints.camera = {}; },
+    (battle) => { battle.animation_hints.camera = null; },
+    (battle) => { battle.animation_hints.camera = [null]; },
+    (battle) => { battle.animation_hints.camera = [{ event_id: "event-a", center: null }]; },
   ];
   for (const mutate of cases) {
     const documentRef = fakeDocument();

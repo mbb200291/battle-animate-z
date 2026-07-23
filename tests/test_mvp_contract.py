@@ -915,6 +915,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "Geodatastyrelsen, GSA, GSI, Intermap, and the GIS User Community",
             animate,
         )
+        self.assertIn('Powered by <a href="https://www.esri.com/">Esri</a>', animate)
         self.assertIn("Made with Natural Earth.", animate)
         self.assertNotIn("World_Shaded_Relief", animate)
         self.assertIn('loadBattle("./data/modern-borders-50m.geojson")', animate)

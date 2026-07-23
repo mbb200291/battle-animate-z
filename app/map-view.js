@@ -22,6 +22,7 @@ export function buildFocusPlan({
   actorPositions,
   cameras = [],
   extraActorIds = [],
+  extraPoints = [],
 }) {
   let windows = eventWindows.filter(({ id }) => activeEventIds.has(id));
   if (!windows.length && selectedEventId) {
@@ -39,12 +40,17 @@ export function buildFocusPlan({
     const position = actorPositions.get(id);
     if (validPoint(position)) points.push(position);
   }
+  for (const point of Array.isArray(extraPoints) ? extraPoints : []) {
+    if (validPoint(point)) points.push(point);
+  }
 
   const unique = [...new Map(points.map((value) => [value.join("\u0000"), value])).values()];
   if (!unique.length) return { kind: "none" };
   if (windows.length === 1) {
-    const camera = cameras.find(({ event_id: id, center, zoom }) =>
-      id === windows[0].id && validPoint(center) && Number.isFinite(zoom));
+    const camera = (Array.isArray(cameras) ? cameras : []).find((hint) =>
+      hint && typeof hint === "object" && !Array.isArray(hint)
+      && hint.event_id === windows[0].id
+      && validPoint(hint.center) && Number.isFinite(hint.zoom));
     if (camera) return { kind: "view", center: camera.center, zoom: camera.zoom };
   }
   if (unique.length === 1) return { kind: "view", center: unique[0], zoom: 8 };
