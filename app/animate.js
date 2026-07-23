@@ -2,6 +2,7 @@
 import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } from "./timeline.js";
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
+import { buildFocusPlan } from "./map-view.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -115,6 +116,8 @@ export function wirePlaybackControls(controller, documentRef = document) {
   own(trails, "onclick", () => controller.setTrailsEnabled(!controller.trailsEnabled));
   const modernBorders = $("modern-borders-button");
   own(modernBorders, "onclick", () => controller.setModernBordersEnabled(!controller.modernBordersEnabled));
+  const focus = $("focus-event-button");
+  own(focus, "onclick", () => controller.focusActiveEvents());
   const teardown = () => {
     for (const { element, property, handler } of bindings) {
       if (element[property] === handler) element[property] = null;
@@ -1030,6 +1033,38 @@ export function renderBattle(battle, documentRef = document) {
     return latest || compiled.eventWindows[0] || null;
   }
 
+  function focusExtraActorIds(sampled) {
+    const ids = new Set();
+    for (const track of compiled.tracks) {
+      if (sampled.historicalMs >= track.startMs && sampled.historicalMs <= track.endMs) {
+        ids.add(track.actorId);
+      }
+    }
+    for (const engagement of engagements) {
+      if (!sampled.activeEngagementIds.has(engagement.id)) continue;
+      ids.add(engagement.attacker_actor_id);
+      ids.add(engagement.target_actor_id);
+    }
+    return [...ids];
+  }
+
+  function currentFocusPlan(owner) {
+    const sampled = owner.sampledState;
+    if (!sampled) return { kind: "none" };
+    const selected = Number.isInteger(owner.currentIndex)
+      ? compiled.eventWindows[owner.currentIndex]
+      : null;
+    return buildFocusPlan({
+      activeEventIds: sampled.activeEventIds,
+      selectedEventId: selected?.id,
+      eventWindows: compiled.eventWindows,
+      places,
+      actorPositions: sampled.actorPositions,
+      cameras: battle.animation_hints?.camera || [],
+      extraActorIds: focusExtraActorIds(sampled),
+    });
+  }
+
   function displaySelectedEvent(owner, selected) {
     if (!selected) return;
     const selectedIndex = orderIndex.get(selected.id) ?? 0;
@@ -1087,6 +1122,16 @@ export function renderBattle(battle, documentRef = document) {
     return [...actorIds].map((actorId) => sampled.actorPositions.get(actorId)).filter(Boolean);
   }
 
+  function moveMapProgrammatically(owner, move) {
+    owner._programmaticMove = true;
+    try {
+      move();
+    } catch (error) {
+      owner._programmaticMove = false;
+      throw error;
+    }
+  }
+
   function maybeFollow(owner, sampled) {
     if (!owner.followEnabled || owner._programmaticMove) return;
     const wallTime = nowMs();
@@ -1110,8 +1155,7 @@ export function renderBattle(battle, documentRef = document) {
     const cameraOptions = reducedMotion
       ? { duration: 0, animate: false }
       : { duration: flyDuration, animate: true };
-    owner._programmaticMove = true;
-    try {
+    moveMapProgrammatically(owner, () => {
       if (uniquePoints.length === 1) {
         const [lon, lat] = uniquePoints[0];
         map.flyTo([lat, lon], map.getZoom(), cameraOptions);
@@ -1119,10 +1163,7 @@ export function renderBattle(battle, documentRef = document) {
         const bounds = L.latLngBounds(uniquePoints.map(([lon, lat]) => [lat, lon])).pad(0.35);
         map.flyToBounds(bounds, { ...cameraOptions, maxZoom: map.getZoom() });
       }
-    } catch (error) {
-      owner._programmaticMove = false;
-      throw error;
-    }
+    });
   }
 
   function clearTrailEffects(owner) {
@@ -1334,10 +1375,12 @@ export function renderBattle(battle, documentRef = document) {
       renderTrails(this, sampled.historicalMs, mode);
       renderBeacons(sampled, mode);
 
-      appendNewActiveEventCards(sampled);
-      displaySelectedEvent(this, selectedEventWindow(sampled));
       const selected = selectedEventWindow(sampled);
+      appendNewActiveEventCards(sampled);
+      displaySelectedEvent(this, selected);
       pruneEventCards(selected?.id);
+      const focusButton = $("focus-event-button");
+      if (focusButton) focusButton.disabled = currentFocusPlan(this).kind === "none";
       maybeFollow(this, sampled);
       return sampled;
     },
@@ -1446,6 +1489,28 @@ export function renderBattle(battle, documentRef = document) {
       }
     },
 
+    focusActiveEvents() {
+      if (this._destroyed || !this.sampledState) return false;
+      const plan = currentFocusPlan(this);
+      if (plan.kind === "none") return false;
+      moveMapProgrammatically(this, () => {
+        if (plan.kind === "view") {
+          const [lon, lat] = plan.center;
+          if (reducedMotion) map.setView([lat, lon], plan.zoom, { animate: false });
+          else map.flyTo([lat, lon], plan.zoom, { duration: 0.9, animate: true });
+        } else {
+          const bounds = L.latLngBounds(plan.points.map(([lon, lat]) => [lat, lon])).pad(0.3);
+          if (reducedMotion) map.fitBounds(bounds, { maxZoom: plan.maxZoom, animate: false });
+          else map.flyToBounds(bounds, {
+            maxZoom: plan.maxZoom,
+            duration: 0.9,
+            animate: true,
+          });
+        }
+      });
+      return true;
+    },
+
     showEvent(index) {
       if (this._destroyed) return this.sampledState;
       const bounded = Math.max(0, Math.min(index, orderedEvents.length - 1));
@@ -1521,6 +1586,8 @@ export function renderBattle(battle, documentRef = document) {
       this.sampledState = null;
       this._lastTrailHistoricalMs = null;
       this._destroyed = true;
+      const focusButton = $("focus-event-button");
+      if (focusButton) focusButton.disabled = true;
       this._controlsTeardown?.();
       teardownTimeline();
       if (invalidateTimer !== null) {

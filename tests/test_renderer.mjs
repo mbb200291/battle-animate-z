@@ -243,6 +243,8 @@ class FakeMap {
     this.zoom = 8;
     this.flyCalls = [];
     this.pointFlyCalls = [];
+    this.fitBoundsCalls = [];
+    this.setViewCalls = [];
     this.invalidateCount = 0;
     this.projectionOffset = 0;
     this.panes = new Map();
@@ -259,8 +261,15 @@ class FakeMap {
   addLayer(layer) { this.layers.add(layer); return this; }
   removeLayer(layer) { this.layers.delete(layer); return this; }
   hasLayer(layer) { return this.layers.has(layer); }
-  setView(_center, zoom) { this.zoom = zoom; return this; }
-  fitBounds() { return this; }
+  setView(center, zoom, options) {
+    this.zoom = zoom;
+    this.setViewCalls.push({ center, zoom, options });
+    return this;
+  }
+  fitBounds(bounds, options) {
+    this.fitBoundsCalls.push({ bounds, options });
+    return this;
+  }
   invalidateSize() { this.invalidateCount += 1; }
   getZoom() { return this.zoom; }
   getSize() { return { x: this.container.clientWidth, y: this.container.clientHeight }; }
@@ -775,6 +784,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     seek: (value) => calls.push(["seek", value]),
     prev: () => calls.push(["prev"]),
     next: () => calls.push(["next"]),
+    focusActiveEvents: () => calls.push(["focus"]),
     setSpeed: (value) => calls.push(["speed", value]),
     setFollowEnabled(value) { calls.push(["follow", value]); this.followEnabled = value; },
     setTrailsEnabled(value) { calls.push(["trails", value]); this.trailsEnabled = value; },
@@ -794,6 +804,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
   document.getElementById("follow-button").dispatch("click");
   document.getElementById("trails-button").dispatch("click");
   document.getElementById("modern-borders-button").dispatch("click");
+  document.getElementById("focus-event-button").dispatch("click");
 
   assert.deepEqual(calls, [
     ["toggle"],
@@ -805,18 +816,18 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     ["follow", false],
     ["trails", true],
     ["borders", true],
+    ["focus"],
   ]);
-  assert.equal(document.getElementById("focus-event-button").onclick, undefined);
 });
 
-test("battle UI enables borders transport but leaves focus disabled and resets both controls", () => {
+test("battle UI enables focus only when a current plan has coordinates and reset disables it", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
 
   const controller = setBattleDocument(battleFixture(), { documentRef: document });
   assert.equal(document.getElementById("modern-borders-button").disabled, false);
-  assert.equal(document.getElementById("focus-event-button").disabled, true);
+  assert.equal(document.getElementById("focus-event-button").disabled, false);
 
   const borders = document.getElementById("modern-borders-button");
   borders.textContent = "Modern borders: on";
@@ -829,6 +840,244 @@ test("battle UI enables borders transport but leaves focus disabled and resets b
   assert.equal(borders.textContent, "Modern borders: off");
   assert.equal(borders.getAttribute("aria-pressed"), "false");
   assert.equal(document.getElementById("focus-event-button").disabled, true);
+});
+
+test("focus uses a matching camera hint without changing renderer state", async () => {
+  const battle = battleFixture();
+  battle.animation_hints.camera = [{ event_id: "opening", center: [121, 25], zoom: 9 }];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = setBattleDocument(battle, { documentRef: document });
+  controller.seek(500);
+  controller.setFollowEnabled(false);
+  controller.setTrailsEnabled(true);
+  await controller.setModernBordersEnabled(true);
+  controller.play();
+  const before = {
+    isPlaying: controller.isPlaying,
+    time: controller.currentPresentationMs,
+    follow: controller.followEnabled,
+    trails: controller.trailsEnabled,
+    borders: controller.modernBordersEnabled,
+    index: controller.currentIndex,
+    positions: [...controller.sampledState.actorPositions].map(([id, point]) => [id, [...point]]),
+  };
+
+  assert.equal(controller.focusActiveEvents(), true);
+
+  assert.deepEqual(maps[0].pointFlyCalls.at(-1), {
+    point: [25, 121],
+    zoom: 9,
+    options: { duration: 0.9, animate: true },
+  });
+  assert.deepEqual({
+    isPlaying: controller.isPlaying,
+    time: controller.currentPresentationMs,
+    follow: controller.followEnabled,
+    trails: controller.trailsEnabled,
+    borders: controller.modernBordersEnabled,
+    index: controller.currentIndex,
+    positions: [...controller.sampledState.actorPositions].map(([id, point]) => [id, [...point]]),
+  }, before);
+});
+
+test("focus fits simultaneous event, actor, movement, and engagement points", () => {
+  const battle = battleFixture();
+  battle.historical_events[0].time.end = "2020-01-01T00:00:02Z";
+  battle.historical_events[1].time.start = "2020-01-01T00:00:00Z";
+  battle.historical_events[0].target_actor_ids = [];
+  battle.historical_events[1].actor_ids = ["bravo"];
+  battle.actors.push(
+    { id: "mover", name: "Mover", kind: "division", side_id: "blue", commander_ids: [] },
+    { id: "gunner", name: "Gunner", kind: "division", side_id: "blue", commander_ids: [] },
+    { id: "target", name: "Target", kind: "division", side_id: "red", commander_ids: [] },
+  );
+  const timed = (label, start, end) => ({ label, start, end, precision: "exact", confidence: 1 });
+  battle.movements.push(
+    {
+      id: "mover_active", event_id: "opening", actor_id: "mover",
+      time: timed("move", "2020-01-01T00:00:00Z", "2020-01-01T00:00:02Z"),
+      path: { type: "LineString", coordinates: [[3, 3], [3, 3]] },
+      precision: "exact", confidence: 1,
+    },
+    {
+      id: "gunner_position", event_id: "opening", actor_id: "gunner",
+      time: timed("position", "2019-12-31T23:59:59Z", "2020-01-01T00:00:00Z"),
+      path: { type: "LineString", coordinates: [[4, 4], [4, 4]] },
+      precision: "exact", confidence: 1,
+    },
+    {
+      id: "target_position", event_id: "opening", actor_id: "target",
+      time: timed("position", "2019-12-31T23:59:59Z", "2020-01-01T00:00:00Z"),
+      path: { type: "LineString", coordinates: [[5, 5], [5, 5]] },
+      precision: "exact", confidence: 1,
+    },
+  );
+  battle.engagements[0].attacker_actor_id = "gunner";
+  battle.engagements[0].target_actor_id = "target";
+  battle.engagements[0].result_actor_id = "target";
+  battle.engagements[0].time.end = "2020-01-01T00:00:02Z";
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(battle, document);
+  controller.seek(2000);
+  maps[0].fire("moveend");
+
+  assert.equal(controller.focusActiveEvents(), true);
+
+  const call = maps[0].flyCalls.at(-1);
+  assert.equal(call.bounds.padRatio, 0.3);
+  assert.equal(call.options.maxZoom, 10);
+  assert.equal(call.options.duration, 0.9);
+  assert.equal(call.options.animate, true);
+  assert.deepEqual(call.bounds.points, [
+    [0, 0], [0, 2], [0, 1], [1, 0], [3, 3], [4, 4], [5, 5],
+  ]);
+});
+
+test("focus falls back to the currently selected event between active windows", () => {
+  const battle = battleFixture();
+  battle.historical_events[0].time.end = "2020-01-01T00:00:00.500Z";
+  battle.historical_events[1].time.start = "2020-01-01T00:00:01.500Z";
+  for (const event of battle.historical_events) {
+    event.actor_ids = [];
+    event.target_actor_ids = [];
+  }
+  battle.movements = [];
+  battle.engagements = [];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(battle, document);
+  controller.seek(1000);
+
+  assert.equal(controller.sampledState.activeEventIds.size, 0);
+  assert.equal(controller.currentIndex, 0);
+  assert.equal(controller.focusActiveEvents(), true);
+  assert.deepEqual(maps[0].pointFlyCalls.at(-1), {
+    point: [0, 0],
+    zoom: 8,
+    options: { duration: 0.9, animate: true },
+  });
+});
+
+test("focus is disabled and does not move when no current coordinates exist", () => {
+  const battle = battleFixture();
+  for (const event of battle.historical_events) {
+    event.actor_ids = [];
+    event.target_actor_ids = [];
+    event.place_ids = [];
+  }
+  battle.movements = [];
+  battle.engagements = [];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = setBattleDocument(battle, { documentRef: document });
+  const before = {
+    fly: maps[0].flyCalls.length,
+    point: maps[0].pointFlyCalls.length,
+    fit: maps[0].fitBoundsCalls.length,
+    view: maps[0].setViewCalls.length,
+  };
+
+  assert.equal(document.getElementById("focus-event-button").disabled, true);
+  assert.equal(controller.focusActiveEvents(), false);
+  assert.deepEqual({
+    fly: maps[0].flyCalls.length,
+    point: maps[0].pointFlyCalls.length,
+    fit: maps[0].fitBoundsCalls.length,
+    view: maps[0].setViewCalls.length,
+  }, before);
+});
+
+test("reduced motion focuses with setView instead of a flight", () => {
+  const battle = battleFixture();
+  battle.animation_hints.camera = [{ event_id: "opening", center: [121, 25], zoom: 9 }];
+  const clock = new FrameClock(true);
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(battle, document);
+  const beforeSetViews = maps[0].setViewCalls.length;
+
+  assert.equal(controller.focusActiveEvents(), true);
+  assert.equal(maps[0].pointFlyCalls.length, 0);
+  assert.equal(maps[0].flyCalls.length, 0);
+  assert.deepEqual(maps[0].setViewCalls.slice(beforeSetViews), [{
+    center: [25, 121],
+    zoom: 9,
+    options: { animate: false },
+  }]);
+
+  maps[0].fire("moveend");
+  controller.seek(1000);
+  assert.equal(controller.focusActiveEvents(), true);
+  assert.equal(maps[0].flyCalls.length, 0);
+  assert.equal(maps[0].pointFlyCalls.length, 0);
+  assert.equal(maps[0].fitBoundsCalls.at(-1).bounds.padRatio, 0.3);
+  assert.deepEqual(maps[0].fitBoundsCalls.at(-1).options, {
+    maxZoom: 10,
+    animate: false,
+  });
+});
+
+test("focus programmatic movement preserves Follow and restores its flag after errors", () => {
+  const { controller, maps } = setup();
+  const map = maps[0];
+  controller.setFollowEnabled(true);
+
+  assert.equal(controller.focusActiveEvents(), true);
+  map.fire("dragstart");
+  assert.equal(controller.followEnabled, true);
+  map.fire("moveend");
+  assert.equal(controller._programmaticMove, false);
+
+  map.flyToBounds = () => { throw new Error("camera failed"); };
+  assert.throws(() => controller.focusActiveEvents(), /camera failed/);
+  assert.equal(controller._programmaticMove, false);
+  assert.equal(controller.followEnabled, true);
+});
+
+test("focus is safe without a sample and after destroy", () => {
+  const { controller, document, maps } = setup();
+  const map = maps[0];
+  controller.sampledState = null;
+  assert.equal(controller.focusActiveEvents(), false);
+  controller.renderAt(0);
+  controller.destroy();
+  const moves = map.flyCalls.length + map.pointFlyCalls.length
+    + map.fitBoundsCalls.length + map.setViewCalls.length;
+
+  assert.equal(document.getElementById("focus-event-button").disabled, true);
+  assert.equal(controller.focusActiveEvents(), false);
+  assert.equal(
+    map.flyCalls.length + map.pointFlyCalls.length + map.fitBoundsCalls.length + map.setViewCalls.length,
+    moves,
+  );
+});
+
+test("render replacement recalculates the native Focus disabled state", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battleFixture(), document);
+  assert.equal(document.getElementById("focus-event-button").disabled, false);
+
+  const empty = battleFixture();
+  for (const event of empty.historical_events) {
+    event.actor_ids = [];
+    event.target_actor_ids = [];
+    event.place_ids = [];
+  }
+  empty.movements = [];
+  empty.engagements = [];
+  renderBattle(empty, document);
+  assert.equal(document.getElementById("focus-event-button").disabled, true);
+
+  renderBattle(battleFixture(), document);
+  assert.equal(document.getElementById("focus-event-button").disabled, false);
 });
 
 test("modern borders default off and use the dedicated pane and exact noninteractive style", async () => {
@@ -1378,6 +1627,7 @@ test("destroy tears down owned controls and timeline handlers and blocks public 
   assert.equal(clock.callbacks.size, 0);
   assert.equal(maps[0].flyCalls.length + maps[0].pointFlyCalls.length, flyCount);
   assert.equal(document.getElementById("modern-borders-button").onclick, null);
+  assert.equal(document.getElementById("focus-event-button").onclick, null);
   assert.equal(timelineButton.listeners.get("click")?.size ?? 0, 0);
   assert.equal(eventCard.listeners.get("keydown")?.size ?? 0, 0);
 });
