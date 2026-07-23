@@ -972,6 +972,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         for phrase in (
             "Focus event",
+            "When a single event has usable geography",
+            "camera hint with both `center` and `zoom` takes priority",
             "Modern borders",
             "off by default",
             "not historical borders",
@@ -987,6 +989,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "geojson/ne_50m_admin_0_countries.geojson",
             readme,
         )
+        self.assertNotIn("Leaflet + OpenStreetMap basemap", readme)
 
     def test_renderer_uses_timeline_and_symbol_modules(self):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")

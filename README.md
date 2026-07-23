@@ -267,7 +267,7 @@ Version `0.3.0` uses continuous historical-time playback（連續歷史時間播
 
 ### Map controls
 
-**Focus event** frames every currently active event and its related units in one click. If no event is active it falls back to the selected event, and a matching camera hint takes priority. Focus is not Follow: it does not enable camera tracking or change playback, Trails, or the historical time. With reduced motion enabled, Focus moves the map without a fly animation.
+**Focus event** frames every currently active event and its related units in one click. If no event is active it falls back to the selected event. When a single event has usable geography, a matching camera hint with both `center` and `zoom` takes priority. Focus is not Follow: it does not enable camera tracking or change playback, Trails, or the historical time. With reduced motion enabled, Focus moves the map without a fly animation.
 
 **Modern borders** are off by default and reset to off whenever a document is loaded. They are optional modern de facto reference boundaries, not historical borders, and contain no country names, roads, or labels.
 
