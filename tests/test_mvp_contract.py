@@ -967,6 +967,27 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertIn(phrase, readme)
 
+    def test_readme_documents_map_controls_and_sources(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        for phrase in (
+            "Focus event",
+            "Modern borders",
+            "off by default",
+            "not historical borders",
+            "World Hillshade",
+            "Natural Earth",
+            "ca96624a56bd078437bca8184e78163e5039ad19",
+        ):
+            self.assertIn(phrase, readme)
+
+        self.assertIn(
+            "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/"
+            "ca96624a56bd078437bca8184e78163e5039ad19/"
+            "geojson/ne_50m_admin_0_countries.geojson",
+            readme,
+        )
+
     def test_renderer_uses_timeline_and_symbol_modules(self):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
 

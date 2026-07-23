@@ -12,7 +12,7 @@ The format intentionally avoids military simulation standards such as MSDL or C-
 - `battle_animation/validator.py` validates schema fields, internal references, movement timing, controlled icon tokens, and recoverable warnings.
 - `app/timeline.js` compiles historical timestamps, idle compression, and legacy synthetic timing into a deterministic presentation timeline.
 - `app/symbols.js` owns the controlled SVG unit-symbol catalog and kind-based legacy fallback.
-- `app/index.html` and `app/animate.js` provide continuous playback, scrubbing, speed controls, camera follow, and inline validation diagnostics.
+- `app/index.html` and `app/animate.js` provide continuous playback, scrubbing, speed controls, camera follow, one-click active-event focus, optional modern borders, and inline validation diagnostics.
 
 ## Schema Principles
 
@@ -261,9 +261,21 @@ Open:
 http://localhost:8000/app/
 ```
 
-The app renders battle data over a Leaflet + OpenStreetMap basemap (map tiles require network access). Version `0.3.0` uses continuous historical-time playback（連續歷史時間播放）to interpolate each actor along timed waypoints instead of jumping between events. Long inactive gaps use idle compression（閒置時間壓縮）without changing the historical clock. The transport provides play/pause, a continuous scrubber, `0.5×`/`1×`/`2×`/`4×` speed controls, follow-camera control, and keyboard controls (arrow keys / space).
+Version `0.3.0` uses continuous historical-time playback（連續歷史時間播放）to interpolate each actor along timed waypoints instead of jumping between events. Long inactive gaps use idle compression（閒置時間壓縮）without changing the historical clock. The transport provides play/pause, a continuous scrubber, `0.5×`/`1×`/`2×`/`4×` speed controls, follow-camera control, and keyboard controls (arrow keys / space).
 
 地圖疊加效果保持短暫且可控：航跡預設關閉，關閉時不顯示 movement 路徑；開啟後只顯示當前 movement，逐步揭示路徑，完成後淡出。事件使用 active-only 脈衝信標，相近事件會合併顯示數量。系統偏好減少動態效果時，完成的航跡與結束的信標會立即移除。
+
+### Map controls
+
+**Focus event** frames every currently active event and its related units in one click. If no event is active it falls back to the selected event, and a matching camera hint takes priority. Focus is not Follow: it does not enable camera tracking or change playback, Trails, or the historical time. With reduced motion enabled, Focus moves the map without a fly animation.
+
+**Modern borders** are off by default and reset to off whenever a document is loaded. They are optional modern de facto reference boundaries, not historical borders, and contain no country names, roads, or labels.
+
+### Map background
+
+The basemap is Esri World Hillshade. The app deliberately does not load a road or reference layer; tiles require network access, and the app displays the provider attribution.
+
+The optional borders use the public-domain Natural Earth 1:50m Admin 0 Countries data, credited in the app as “Made with Natural Earth.” The asset was downloaded from the [official raw source at commit `ca96624a56bd078437bca8184e78163e5039ad19`](https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_admin_0_countries.geojson), then transformed to retain only each feature's `type` and `geometry` with empty `properties`.
 
 Actor icons are controlled SVG tokens rendered as clear, top-down naval silhouettes or standard land/air symbols. A `0.3.0` document should provide only catalog tokens. Legacy `0.1.0` and `0.2.0` documents remain supported: missing historical timing receives a deterministic synthetic animation timeline, while missing or legacy icon values fall back by actor kind to a controlled SVG symbol.
 
