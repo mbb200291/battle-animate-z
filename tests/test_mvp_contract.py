@@ -884,6 +884,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         for phrase in (
             "航跡預設關閉",
+            "關閉時不顯示 movement 路徑",
+            "開啟後只顯示當前 movement",
             "只顯示當前 movement",
             "active-only 脈衝信標",
             "相近事件會合併顯示數量",

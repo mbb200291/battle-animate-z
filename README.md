@@ -240,7 +240,7 @@ http://localhost:8000/app/
 
 The app renders battle data over a Leaflet + OpenStreetMap basemap (map tiles require network access). Version `0.3.0` uses continuous historical-time playback（連續歷史時間播放）to interpolate each actor along timed waypoints instead of jumping between events. Long inactive gaps use idle compression（閒置時間壓縮）without changing the historical clock. The transport provides play/pause, a continuous scrubber, `0.5×`/`1×`/`2×`/`4×` speed controls, follow-camera control, and keyboard controls (arrow keys / space).
 
-地圖疊加效果保持短暫且可控：航跡預設關閉；關閉時只顯示當前 movement，開啟後才會逐步揭示並淡出已完成航跡。事件使用 active-only 脈衝信標，相近事件會合併顯示數量。系統偏好減少動態效果時，完成的航跡與結束的信標會立即移除。
+地圖疊加效果保持短暫且可控：航跡預設關閉，關閉時不顯示 movement 路徑；開啟後只顯示當前 movement，逐步揭示路徑，完成後淡出。事件使用 active-only 脈衝信標，相近事件會合併顯示數量。系統偏好減少動態效果時，完成的航跡與結束的信標會立即移除。
 
 Actor icons are controlled SVG tokens rendered as clear, top-down naval silhouettes or standard land/air symbols. A `0.3.0` document should provide only catalog tokens. Legacy `0.1.0` and `0.2.0` documents remain supported: missing historical timing receives a deterministic synthetic animation timeline, while missing or legacy icon values fall back by actor kind to a controlled SVG symbol.
 
