@@ -48,12 +48,17 @@ Geographic fields use a small GeoJSON subset:
 
 Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, disputed, or unknown through `precision` and `confidence`.
 
-## Generate JSON With AI
+## Generate JSON With AI — Battle JSON Prompt 1.0.0
 
 Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
 
 ````text
-你是一個歷史資料標準化助理。請根據我提供的 Wikipedia / Wikidata / Wiki 頁面內容，產生「完全符合」 battle-animation-schema v0.1.0／v0.2.0／v0.3.0 的 JSON，供地圖動畫 app 使用。
+你是一個歷史資料標準化助理。請根據我提供且你實際可讀取的 Wikipedia、Wikidata 或其他 Wiki 頁面內容，產生一個完全符合 battle-animation-schema 0.3.0 的 JSON，供地圖動畫 app 使用。
+
+本提示詞版本是 Battle JSON Prompt 1.0.0。Prompt 版本與 schema 版本是兩件事：
+- schema_version 固定使用字串 "0.3.0"（不要加 v，也不要寫成數字）。
+- metadata.source_system 固定使用字串 "battle_json_prompt_1.0.0"，讓文件保留生成規則的版本。
+- 0.1.0 與 0.2.0 只供 app 讀取舊文件，不是本提示詞的輸出選項。
 
 ===== 最重要的輸出規則（違反任何一條都算失敗）=====
 1. 只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
@@ -63,15 +68,20 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
    若提供逐單位交戰細節，可再加 1 個選填 key：engagements。除上述以外不要有其他 key。
 3. 絕對不要輸出 problems / suggested_fixes / corrected_json 這種檢查用包裝物件。
    要直接輸出最終 JSON 本體。
-4. schema_version：基本資料使用 "0.1.0"；engagements／ship／parent_id 使用 "0.2.0"；
-   使用 movement.time、waypoint_times 或歷史比例時間軌時請用字串 "0.3.0"。
-   schema_version：使用精細時間軌時請用字串 "0.3.0"。（不要加 `v`，也不要寫成數字。）
+4. schema_version 與 metadata.source_system 必須使用上方指定的固定字串。
 5. 整份 schema 的每個物件都是 additionalProperties:false：
    「只能使用下方列出的欄位名稱，多出任何一個欄位都會驗證失敗。」
    不要自行新增 type / role / source_ids / precision / notes / language 等未列出的欄位。
 
+===== 生成原則：資料充分時做深，資料不足時不要猜 =====
+1. 先在內部核對來源涵蓋的單位、事件、時間、位置、交戰與結果，再產生 JSON；不要輸出這份內部核對。
+2. 來源若支持個別軍艦或師／旅等單位、分段時間、代表位置與交戰結果，應使用 schema 0.3.0 的 actors、movements、waypoint_times、engagements 完整表達，不要無故降回粗略層級。
+3. 精細度以來源為上限。缺少依據的 actor、艦種／兵種、路徑、時間、attacker／target 或 result 必須省略；低 confidence 不能把臆測變成合法資料。
+4. inferred 只能用於來源已確認發生及先後順序的事件之代表性幾何或時間，相關 confidence <= 0.5。
+
 ===== 各物件的「合法欄位」（required 標 *，其餘為選填）=====
 metadata: *id *title *created_at *updated_at *license *source_system, wikidata_qid
+  - created_at / updated_at 使用實際建立與更新日期（YYYY-MM-DD），不要照抄範例值。
 battle: *id *name *part_of *date *summary *confidence, also_known_as
   - date 是物件：*label *precision *confidence, start, end
   - 不要用 start_date / end_date；改用 date.start / date.end（字串），或只放 date.label。
@@ -94,7 +104,7 @@ movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id
   - path 是 LineString：{"type":"LineString","coordinates":[[lon,lat],...]}（至少 2 個點）。
   - time 使用與 historical_events.time 相同結構。
   - waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增；每個時間必須落在 movement.time 範圍內。
-  - 只有在來源已確認事件確實發生及先後順序時，才能推估代表性路徑或時間；movement 必須標 precision:"inferred"，time.precision 使用 hour／range 等時間粒度，且 time.confidence <= 0.6。
+  - 只有在來源已確認事件確實發生及先後順序時，才能推估代表性路徑或時間；movement 必須標 precision:"inferred"，time.precision 使用 hour／range 等時間粒度，且 time.confidence <= 0.5。
 engagements[]（選填；只有來源明確支持「誰打誰、結果如何」時才提供）:
   *id *event_id *attacker_actor_id *target_actor_id *type *confidence, result, result_actor_id, at_place_id, time, source_ids
   - type 只能是：fire, bombardment, ram, torpedo, charge, melee, other
@@ -106,6 +116,7 @@ outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - casualties[] 每項：*side_id *label *confidence, min, max
 sources[]: *id *title *url *retrieved_at *license, note
   - 用 retrieved_at（不要用 accessed_at）；不要放 type。
+  - retrieved_at 必須填寫實際取得資料的日期（YYYY-MM-DD），不得照抄範例日期。
 animation_hints: *map *style *timeline, camera
   - map: *initial_center *initial_zoom, bounds_padding（initial_center 為 [lon,lat]）
   - style: side_colors, actor_icons, event_icons, movement_line_width
@@ -152,7 +163,7 @@ animation_hints: *map *style *timeline, camera
 ===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
 {
   "schema_version": "0.3.0",
-  "metadata": { "id": "battle_example", "title": "範例戰役", "created_at": "2026-06-22", "updated_at": "2026-06-22", "license": "CC BY-SA 4.0", "source_system": "ai_extraction_zhwiki" },
+  "metadata": { "id": "battle_example", "title": "範例戰役", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0", "source_system": "battle_json_prompt_1.0.0" },
   "battle": { "id": "battle_example", "name": "範例戰役", "also_known_as": ["別名"], "part_of": "某場戰爭", "date": { "label": "1894-09-15", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "summary": "一句話說明這場戰役。", "confidence": 0.85 },
   "sides": [
     { "id": "side_a", "name": "甲方", "color": "#2f6fb5", "belligerents": [{ "id": "bel_a", "name": "甲國" }] },
@@ -175,7 +186,7 @@ animation_hints: *map *style *timeline, camera
     { "id": "mov_b_advance", "event_id": "evt_advance", "actor_id": "actor_b_army", "from_place_id": "place_harbor", "to_place_id": "place_ridge", "path": { "type": "LineString", "coordinates": [[122.1, 39.0], [122.7, 38.8], [123.4, 38.6]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1894-09-16 08:00–09:00", "start": "1894-09-16T08:00:00", "end": "1894-09-16T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1894-09-16T08:00:00", "1894-09-16T08:30:00", "1894-09-16T09:00:00"] }
   ],
   "outcome": { "summary": "乙方獲勝。", "winner_side_ids": ["side_b"], "casualties": [{ "side_id": "side_a", "label": "約 500 人", "min": 400, "max": 600, "confidence": 0.6 }], "confidence": 0.85, "source_ids": ["src_wiki"] },
-  "sources": [ { "id": "src_wiki", "title": "維基百科條目", "url": "https://zh.wikipedia.org/wiki/...", "retrieved_at": "2026-06-22", "license": "CC BY-SA 4.0" } ],
+  "sources": [ { "id": "src_wiki", "title": "維基百科條目", "url": "https://zh.wikipedia.org/wiki/...", "retrieved_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0" } ],
   "animation_hints": {
     "map": { "initial_center": [122.8, 38.8], "initial_zoom": 7, "bounds_padding": 0.05 },
     "style": {
@@ -191,6 +202,9 @@ animation_hints: *map *style *timeline, camera
 
 ===== 資料來源 =====
 [貼上 Wikipedia / Wikidata / Wiki 頁面文字、表格、URL 或摘要]
+
+若你無法實際讀取 URL，請停止生成並請使用者貼上頁面文字、表格或摘要；不得假裝已讀取 URL，也不得依 URL 標題補寫內容。
+created_at、updated_at 與 retrieved_at 必須替換成實際日期，不得原樣保留 "YYYY-MM-DD"。
 
 ===== 指定戰役 =====
 [例如：Battle of Waterloo]

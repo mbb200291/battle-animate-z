@@ -391,15 +391,20 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
-    def test_readme_prompt_teaches_v030_timing_and_tokens(self):
+    def test_readme_prompt_v1_teaches_v030_provenance_evidence_and_tokens(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
         for required in (
-            'schema_version：使用精細時間軌時請用字串 "0.3.0"',
+            "Battle JSON Prompt 1.0.0",
+            'schema_version 固定使用字串 "0.3.0"',
+            '"source_system": "battle_json_prompt_1.0.0"',
+            "無法實際讀取 URL",
+            "請使用者貼上頁面文字",
+            "retrieved_at 必須填寫實際取得資料的日期",
             "waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增",
             "不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱",
             'precision:"inferred"',
-            "confidence <= 0.6",
+            "confidence <= 0.5",
             '"schema_version": "0.3.0"',
             '"historical_seconds_per_playback_second": 120',
             '"idle_compression_threshold_seconds": 900',
@@ -414,6 +419,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略",
         ):
             self.assertIn(required, readme)
+        for obsolete in (
+            "battle-animation-schema v0.1.0／v0.2.0／v0.3.0",
+            '基本資料使用 "0.1.0"',
+            "confidence <= 0.6",
+            '"retrieved_at": "2026-06-22"',
+        ):
+            self.assertNotIn(obsolete, readme)
         token_paragraph = re.search(
             r"actor_icons 只能使用以下 21 個受控名稱：\n(?P<tokens>.*?unit_generic。)",
             readme,
