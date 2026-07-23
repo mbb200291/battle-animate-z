@@ -900,6 +900,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertIn(f'id="{element_id}"', index)
         self.assertIn('id="trails-button" type="button" class="ghost" aria-pressed="false">Trails: off</button>', index)
+        self.assertIn('<button id="focus-event-button" type="button" class="ghost" disabled>Focus event</button>', index)
+        self.assertIn('<button id="modern-borders-button" type="button" class="ghost" aria-pressed="false">Modern borders: off</button>', index)
         self.assertRegex(
             index,
             r'id="event-scrubber"[^>]*step="any"',

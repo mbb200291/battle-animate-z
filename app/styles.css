@@ -333,10 +333,17 @@ button.ghost,
 }
 
 .speed-controls button[aria-pressed="true"],
-#follow-button[aria-pressed="true"] {
+#follow-button[aria-pressed="true"],
+#trails-button[aria-pressed="true"],
+#modern-borders-button[aria-pressed="true"] {
   color: var(--panel);
   background: var(--ink);
   border-color: var(--ink);
+}
+
+#focus-event-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .scrubber {
