@@ -80,7 +80,7 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 2. 來源若支持個別軍艦或師／旅等單位、分段時間、代表位置與交戰結果，應使用 schema 0.3.0 的 actors、movements、waypoint_times、engagements 完整表達，不要無故降回粗略層級。
 3. 精細度以來源為上限。低 confidence 不能把臆測變成合法資料。required 欄位不能省略：
    - battle.date 或 historical_events[].time 若只有粗略時間，就以來源支持的 year／month／day／hour／range 粒度填寫；若來源確實未提供時間，使用 label:"時間不詳"、precision:"unknown" 與低 confidence，不要虛構日期。
-   - movement.path 沒有來源支持的代表性路徑時，省略整筆 movement；只有 path 有依據而精確時間不足時，省略選填的 movement.time 與 waypoint_times。
+   - movement.path 既沒有直接來源支持、也不符合下方 inferred 代表性路徑規則時，省略整筆 movement；只有 path 有依據而精確時間不足時，省略選填的 movement.time 與 waypoint_times。
    - engagement 只有在 attacker、target、action 與 result 都有來源支持時才建立；若任何一項缺少來源支持，整筆 engagement 必須省略。
 4. inferred 只能用於來源已確認發生及先後順序的事件之代表性幾何或時間，相關 confidence <= 0.5。
 

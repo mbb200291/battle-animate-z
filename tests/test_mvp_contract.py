@@ -416,6 +416,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "不得生成 JSON",
             "required 欄位不能省略",
             "省略整筆 movement",
+            "也不符合下方 inferred 代表性路徑規則",
             "若任何一項缺少來源支持，整筆 engagement 必須省略",
             "waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增",
             "不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱",
