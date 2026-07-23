@@ -393,18 +393,33 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
     def test_readme_prompt_v1_teaches_v030_provenance_evidence_and_tokens(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        prompt_match = re.search(
+            r"## Generate JSON With AI — Battle JSON Prompt 1\.0\.0.*?"
+            r"````text\n(?P<prompt>.*?)\n````",
+            readme,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(prompt_match)
+        prompt = prompt_match.group("prompt")
 
         for required in (
             "Battle JSON Prompt 1.0.0",
             'schema_version 固定使用字串 "0.3.0"',
-            '"source_system": "battle_json_prompt_1.0.0"',
+            'metadata.source_system 固定使用字串 "battle_json_prompt_1.0.0"',
+            "只輸出「一個 JSON 物件」",
+            "唯一例外",
+            "不要新增 prompt_version",
             "無法實際讀取 URL",
             "請使用者貼上頁面文字",
             "retrieved_at 必須填寫實際取得資料的日期",
+            "缺少必要的 title、url 或 license",
+            "不得生成 JSON",
+            "required 欄位不能省略",
+            "省略整筆 movement",
+            "若任何一項缺少來源支持，整筆 engagement 必須省略",
             "waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增",
             "不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱",
             'precision:"inferred"',
-            "confidence <= 0.5",
             '"schema_version": "0.3.0"',
             '"historical_seconds_per_playback_second": 120',
             '"idle_compression_threshold_seconds": 900',
@@ -418,17 +433,19 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "來源已確認事件確實發生及先後順序",
             "沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略",
         ):
-            self.assertIn(required, readme)
+            self.assertIn(required, prompt)
         for obsolete in (
             "battle-animation-schema v0.1.0／v0.2.0／v0.3.0",
             '基本資料使用 "0.1.0"',
             "confidence <= 0.6",
             '"retrieved_at": "2026-06-22"',
         ):
-            self.assertNotIn(obsolete, readme)
+            self.assertNotIn(obsolete, prompt)
+        self.assertNotIn('"prompt_version"', prompt)
+        self.assertEqual(set(re.findall(r"confidence <= (0\.\d+)", prompt)), {"0.5"})
         token_paragraph = re.search(
             r"actor_icons 只能使用以下 21 個受控名稱：\n(?P<tokens>.*?unit_generic。)",
-            readme,
+            prompt,
             re.DOTALL,
         )
         self.assertIsNotNone(token_paragraph)
@@ -437,10 +454,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         )
         self.assertEqual(len(documented_token_list), len(ACTOR_ICON_TOKENS))
         self.assertEqual(set(documented_token_list), ACTOR_ICON_TOKENS)
-        self.assertNotIn("寧可多給細節", readme)
-        self.assertNotIn("強烈建議提供", readme)
+        self.assertNotIn("寧可多給細節", prompt)
+        self.assertNotIn("強烈建議提供", prompt)
         for stale_emoji in ("🚢", "⛵", "🪖", "🐎", "💥", "🛡️", "✈️", "🏰", "🚩"):
-            self.assertNotIn(stale_emoji, readme)
+            self.assertNotIn(stale_emoji, prompt)
 
     def test_readme_embedded_v030_sample_validates_in_python_and_browser(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

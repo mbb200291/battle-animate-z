@@ -58,10 +58,12 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 本提示詞版本是 Battle JSON Prompt 1.0.0。Prompt 版本與 schema 版本是兩件事：
 - schema_version 固定使用字串 "0.3.0"（不要加 v，也不要寫成數字）。
 - metadata.source_system 固定使用字串 "battle_json_prompt_1.0.0"，讓文件保留生成規則的版本。
+- 不要新增 prompt_version；目前 schema 沒有這個欄位。
 - 0.1.0 與 0.2.0 只供 app 讀取舊文件，不是本提示詞的輸出選項。
 
 ===== 最重要的輸出規則（違反任何一條都算失敗）=====
-1. 只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
+1. 資料與來源資訊足以生成時，只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
+   唯一例外：沒有可讀取的來源內容，或來源缺少 schema 必填的來源資訊時，先用一句話請使用者補充，不要輸出 JSON。
 2. 最外層物件必須包含這 12 個必備 key（名稱與順序如下）：
    schema_version, metadata, battle, sides, commanders, actors, places,
    historical_events, movements, outcome, sources, animation_hints
@@ -76,7 +78,10 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 ===== 生成原則：資料充分時做深，資料不足時不要猜 =====
 1. 先在內部核對來源涵蓋的單位、事件、時間、位置、交戰與結果，再產生 JSON；不要輸出這份內部核對。
 2. 來源若支持個別軍艦或師／旅等單位、分段時間、代表位置與交戰結果，應使用 schema 0.3.0 的 actors、movements、waypoint_times、engagements 完整表達，不要無故降回粗略層級。
-3. 精細度以來源為上限。缺少依據的 actor、艦種／兵種、路徑、時間、attacker／target 或 result 必須省略；低 confidence 不能把臆測變成合法資料。
+3. 精細度以來源為上限。低 confidence 不能把臆測變成合法資料。required 欄位不能省略：
+   - battle.date 或 historical_events[].time 若只有粗略時間，就以來源支持的 year／month／day／hour／range 粒度填寫；若來源確實未提供時間，使用 label:"時間不詳"、precision:"unknown" 與低 confidence，不要虛構日期。
+   - movement.path 沒有來源支持的代表性路徑時，省略整筆 movement；只有 path 有依據而精確時間不足時，省略選填的 movement.time 與 waypoint_times。
+   - engagement 只有在 attacker、target、action 與 result 都有來源支持時才建立；若任何一項缺少來源支持，整筆 engagement 必須省略。
 4. inferred 只能用於來源已確認發生及先後順序的事件之代表性幾何或時間，相關 confidence <= 0.5。
 
 ===== 各物件的「合法欄位」（required 標 *，其餘為選填）=====
@@ -110,6 +115,7 @@ engagements[]（選填；只有來源明確支持「誰打誰、結果如何」�
   - type 只能是：fire, bombardment, ram, torpedo, charge, melee, other
   - result 只能是：hit, miss, damaged, disabled, sunk, repelled, captured, none
   - event_id 對應某個 historical_events.id（交火會在該事件顯示）。
+  - attacker、target、type 與 result 任一缺少來源支持時，不要建立該 engagement。
   - 當 result 為 sunk / disabled / captured，用 result_actor_id 指出「被擊沉／失能的是哪個 actor」（不填則預設為 target）。
 outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
@@ -117,10 +123,12 @@ outcome: *summary *winner_side_ids *confidence *source_ids, casualties
 sources[]: *id *title *url *retrieved_at *license, note
   - 用 retrieved_at（不要用 accessed_at）；不要放 type。
   - retrieved_at 必須填寫實際取得資料的日期（YYYY-MM-DD），不得照抄範例日期。
+  - title、url 與 license 都必須來自實際來源。不要假設所有來源都是 CC BY-SA 4.0，也不要照抄範例 license。
 animation_hints: *map *style *timeline, camera
   - map: *initial_center *initial_zoom, bounds_padding（initial_center 為 [lon,lat]）
   - style: side_colors, actor_icons, event_icons, movement_line_width
   - timeline: default_event_duration_ms, ordered_event_ids, historical_seconds_per_playback_second, idle_compression_threshold_seconds, idle_compressed_duration_ms（請依時間順序列出所有事件 id）
+    0.3.0 使用連續歷史時間播放；長時間無事件時用 idle 欄位做閒置時間壓縮，不得改寫歷史時間。
   - camera[] 每項：*event_id *center, zoom（center 為 [lon,lat]）
   - animation_hints 只放渲染提示，不要在裡面放任何史實斷言或 source。
 
@@ -203,7 +211,8 @@ animation_hints: *map *style *timeline, camera
 ===== 資料來源 =====
 [貼上 Wikipedia / Wikidata / Wiki 頁面文字、表格、URL 或摘要]
 
-若你無法實際讀取 URL，請停止生成並請使用者貼上頁面文字、表格或摘要；不得假裝已讀取 URL，也不得依 URL 標題補寫內容。
+若已提供可用的頁面文字、表格或摘要，可以只依那些內容生成。若沒有其他可用內容且你無法實際讀取 URL，請停止生成並請使用者貼上頁面文字、表格或摘要；不得假裝已讀取 URL，也不得依 URL 標題補寫內容。
+每筆來源都必須附有實際 title、url 與 license。缺少必要的 title、url 或 license 時，請使用者補充；資料補齊前不得生成 JSON。
 created_at、updated_at 與 retrieved_at 必須替換成實際日期，不得原樣保留 "YYYY-MM-DD"。
 
 ===== 指定戰役 =====
