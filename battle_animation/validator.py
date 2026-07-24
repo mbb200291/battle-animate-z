@@ -81,6 +81,7 @@ def validate_document_with_warnings(
     _validate(document, schema, schema, "$", errors)
     _validate_references(document, errors)
     _validate_timing(document, errors, warnings)
+    _validate_frontline_timing(document, errors, warnings)
     _validate_movement_overlaps(document, errors, warnings)
     _validate_icon_tokens(document, warnings)
     return errors, warnings
@@ -266,6 +267,35 @@ def _validate_references(document: Any, errors: list[ValidationError]) -> None:
             if source_id not in source_ids:
                 errors.append(ValidationError(f"{path}.source_ids", f"unknown source id {source_id!r}"))
 
+    frontline_snapshots = document.get("frontline_snapshots", [])
+    if isinstance(frontline_snapshots, list):
+        for index, snapshot in enumerate(frontline_snapshots):
+            if not isinstance(snapshot, dict):
+                continue
+            path = f"$.frontline_snapshots[{index}]"
+            if isinstance(snapshot.get("event_id"), str):
+                _check_optional_ref(snapshot, "event_id", event_ids, path, errors)
+            control_areas = snapshot.get("control_areas", [])
+            if isinstance(control_areas, list):
+                for area_index, area in enumerate(control_areas):
+                    if isinstance(area, dict) and isinstance(area.get("side_id"), str):
+                        _check_ref(
+                            area,
+                            "side_id",
+                            side_ids,
+                            f"{path}.control_areas[{area_index}]",
+                            errors,
+                        )
+            source_values = snapshot.get("source_ids", [])
+            if isinstance(source_values, list):
+                for source_id in source_values:
+                    if isinstance(source_id, str) and source_id not in source_ids:
+                        errors.append(
+                            ValidationError(
+                                f"{path}.source_ids", f"unknown source id {source_id!r}"
+                            )
+                        )
+
     animation_hints = document.get("animation_hints")
     cameras = animation_hints.get("camera", []) if isinstance(animation_hints, dict) else []
     if isinstance(cameras, list):
@@ -300,7 +330,7 @@ def _validate_timing(
         return
     _validate_datetime_offset_styles(document, errors)
 
-    for collection_name in ("historical_events", "engagements"):
+    for collection_name in ("historical_events", "engagements", "frontline_snapshots"):
         collection = document.get(collection_name, [])
         if not isinstance(collection, list):
             continue
@@ -390,6 +420,76 @@ def _validate_date_value_time(
     return start, end
 
 
+def _validate_unique_ids(
+    items: Any, path: str, errors: list[ValidationError]
+) -> None:
+    if not isinstance(items, list):
+        return
+    seen: set[str] = set()
+    for index, item in enumerate(items):
+        item_id = item.get("id") if isinstance(item, dict) else None
+        if not isinstance(item_id, str):
+            continue
+        if item_id in seen:
+            errors.append(ValidationError(f"{path}[{index}].id", f"duplicate id {item_id!r}"))
+        seen.add(item_id)
+
+
+def _validate_frontline_timing(
+    document: Any, errors: list[ValidationError], warnings: list[ValidationWarning]
+) -> None:
+    if not isinstance(document, dict):
+        return
+    snapshots = document.get("frontline_snapshots", [])
+    if not isinstance(snapshots, list):
+        return
+
+    _validate_unique_ids(snapshots, "$.frontline_snapshots", errors)
+    previous_start: float | None = None
+    for index, snapshot in enumerate(snapshots):
+        if not isinstance(snapshot, dict):
+            continue
+        path = f"$.frontline_snapshots[{index}]"
+        if "front_lines" not in snapshot and "control_areas" not in snapshot:
+            errors.append(
+                ValidationError(path, "must include front_lines or control_areas")
+            )
+        for collection_name in ("front_lines", "control_areas"):
+            _validate_unique_ids(
+                snapshot.get(collection_name),
+                f"{path}.{collection_name}",
+                errors,
+            )
+
+        time_value = snapshot.get("time")
+        if not isinstance(time_value, dict):
+            continue
+        time_path = f"{path}.time"
+        if "start" not in time_value:
+            if not any(
+                error.path == time_path or error.path.startswith(f"{time_path}.")
+                for error in errors
+            ):
+                warnings.append(
+                    ValidationWarning(
+                        time_path,
+                        "snapshot without time.start is excluded from animation",
+                    )
+                )
+            continue
+        try:
+            start = _parse_battle_time(time_value["start"])
+        except (TypeError, ValueError):
+            continue
+        if previous_start is not None and start <= previous_start:
+            errors.append(
+                ValidationError(
+                    f"{time_path}.start", "values must be strictly increasing"
+                )
+            )
+        previous_start = start
+
+
 def _validate_datetime_offset_styles(document: dict[str, Any], errors: list[ValidationError]) -> None:
     expected_offset_style: bool | None = None
     for path, value in _iter_timing_values(document):
@@ -416,7 +516,12 @@ def _validate_datetime_offset_styles(document: dict[str, Any], errors: list[Vali
 
 
 def _iter_timing_values(document: dict[str, Any]):
-    for collection_name in ("historical_events", "movements", "engagements"):
+    for collection_name in (
+        "historical_events",
+        "movements",
+        "engagements",
+        "frontline_snapshots",
+    ):
         collection = document.get(collection_name, [])
         if not isinstance(collection, list):
             continue

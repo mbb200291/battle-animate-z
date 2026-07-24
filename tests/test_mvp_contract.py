@@ -634,6 +634,192 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         )
         self.assertEqual(validate_document(frontline_document()), [])
 
+    def test_frontline_snapshot_requires_lines_or_control_areas(self):
+        document = frontline_document()
+        snapshot = document["frontline_snapshots"][0]
+        del snapshot["front_lines"]
+        del snapshot["control_areas"]
+
+        errors = validate_document(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.frontline_snapshots[0]"
+                and error.message == "must include front_lines or control_areas"
+                for error in errors
+            )
+        )
+
+    def test_frontline_snapshot_references_must_resolve(self):
+        cases = (
+            (
+                lambda snapshot: snapshot.__setitem__("event_id", "missing-event"),
+                "$.frontline_snapshots[0].event_id",
+                "unknown id 'missing-event'",
+            ),
+            (
+                lambda snapshot: snapshot["control_areas"][0].__setitem__(
+                    "side_id", "missing-side"
+                ),
+                "$.frontline_snapshots[0].control_areas[0].side_id",
+                "unknown id 'missing-side'",
+            ),
+            (
+                lambda snapshot: snapshot.__setitem__("source_ids", ["missing-source"]),
+                "$.frontline_snapshots[0].source_ids",
+                "unknown source id 'missing-source'",
+            ),
+        )
+        for mutate, expected_path, expected_message in cases:
+            with self.subTest(path=expected_path):
+                document = frontline_document()
+                mutate(document["frontline_snapshots"][0])
+
+                errors = validate_document(document)
+
+                self.assertTrue(
+                    any(
+                        error.path == expected_path and error.message == expected_message
+                        for error in errors
+                    )
+                )
+
+    def test_structurally_invalid_frontline_references_do_not_raise(self):
+        document = frontline_document()
+        snapshot = document["frontline_snapshots"][0]
+        snapshot["event_id"] = []
+        snapshot["control_areas"][0]["side_id"] = {}
+        snapshot["source_ids"] = [[]]
+
+        try:
+            errors = validate_document(document)
+        except (TypeError, ValueError) as error:
+            self.fail(f"validation raised for structurally invalid references: {error}")
+
+        self.assertEqual(
+            [
+                (error.path, error.message)
+                for error in errors
+                if error.path.startswith("$.frontline_snapshots")
+            ],
+            [
+                (
+                    "$.frontline_snapshots[0].event_id",
+                    "expected string, got list",
+                ),
+                (
+                    "$.frontline_snapshots[0].control_areas[0].side_id",
+                    "expected string, got dict",
+                ),
+                (
+                    "$.frontline_snapshots[0].source_ids[0]",
+                    "expected string, got list",
+                ),
+            ],
+        )
+
+    def test_frontline_snapshot_ids_must_be_unique(self):
+        document = frontline_document()
+        duplicate = deepcopy(document["frontline_snapshots"][0])
+        duplicate["time"]["start"] = "1942-11-19T09:00:00Z"
+        document["frontline_snapshots"].append(duplicate)
+
+        errors = validate_document(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.frontline_snapshots[1].id"
+                and error.message == "duplicate id 'front_day_1'"
+                for error in errors
+            )
+        )
+
+    def test_frontline_shape_ids_must_be_unique_within_snapshot(self):
+        cases = (
+            (
+                "front_lines",
+                "$.frontline_snapshots[0].front_lines[1].id",
+                "front_main",
+            ),
+            (
+                "control_areas",
+                "$.frontline_snapshots[0].control_areas[1].id",
+                "area_a",
+            ),
+        )
+        for collection, expected_path, duplicate_id in cases:
+            with self.subTest(collection=collection):
+                document = frontline_document()
+                shapes = document["frontline_snapshots"][0][collection]
+                shapes.append(deepcopy(shapes[0]))
+
+                errors = validate_document(document)
+
+                self.assertTrue(
+                    any(
+                        error.path == expected_path
+                        and error.message == f"duplicate id {duplicate_id!r}"
+                        for error in errors
+                    )
+                )
+
+    def test_frontline_snapshot_starts_must_be_strictly_increasing(self):
+        for start in ("1942-11-19T08:00:00Z", "1942-11-19T07:59:00Z"):
+            with self.subTest(start=start):
+                document = frontline_document()
+                later = deepcopy(document["frontline_snapshots"][0])
+                later["id"] = "front_day_2"
+                later["front_lines"][0]["id"] = "front_second"
+                later["control_areas"][0]["id"] = "area_second"
+                later["time"]["start"] = start
+                document["frontline_snapshots"].append(later)
+
+                errors = validate_document(document)
+
+                self.assertTrue(
+                    any(
+                        error.path == "$.frontline_snapshots[1].time.start"
+                        and error.message == "values must be strictly increasing"
+                        for error in errors
+                    )
+                )
+
+    def test_frontline_snapshot_without_start_warns_but_remains_valid(self):
+        document = frontline_document()
+        del document["frontline_snapshots"][0]["time"]["start"]
+
+        errors, warnings = validate_document_with_warnings(document)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(
+            [
+                (warning.path, warning.message)
+                for warning in warnings
+                if "snapshot without time.start" in warning.message
+            ],
+            [(
+                "$.frontline_snapshots[0].time",
+                "snapshot without time.start is excluded from animation",
+            )],
+        )
+
+    def test_malformed_frontline_snapshot_start_is_an_error_not_a_warning(self):
+        document = frontline_document()
+        document["frontline_snapshots"][0]["time"]["start"] = "not-a-date"
+
+        errors, warnings = validate_document_with_warnings(document)
+
+        self.assertTrue(
+            any(
+                error.path == "$.frontline_snapshots[0].time.start"
+                and error.message == "invalid ISO battle time"
+                for error in errors
+            )
+        )
+        self.assertFalse(
+            any("snapshot without time.start" in warning.message for warning in warnings)
+        )
+
     def test_python_types_declare_v040_frontlines(self):
         self.assertEqual(FrontLine.__required_keys__, frozenset({"id", "geometry"}))
         self.assertEqual(FrontLine.__optional_keys__, frozenset())
