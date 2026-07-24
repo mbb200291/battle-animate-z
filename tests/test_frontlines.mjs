@@ -1,0 +1,207 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  deriveFrontlineFallback,
+  interpolateFrontlineSnapshots,
+  resampleLine,
+  resampleRing,
+} from "../app/frontlines.js";
+
+const line = (id, coordinates) => ({
+  id,
+  geometry: { type: "LineString", coordinates },
+});
+
+const area = (id, sideId, coordinates) => ({
+  id,
+  side_id: sideId,
+  geometry: { type: "Polygon", coordinates },
+});
+
+test("resampleLine includes endpoints and returns fresh coordinates", () => {
+  const input = [[0, 0], [10, 0]];
+  const sampled = resampleLine(input, 3);
+  assert.deepEqual(sampled, [[0, 0], [5, 0], [10, 0]]);
+  assert.notEqual(sampled, input);
+  assert.notEqual(sampled[0], input[0]);
+  assert.deepEqual(input, [[0, 0], [10, 0]]);
+});
+
+test("resampleLine locally unwraps dateline crossings", () => {
+  const midpoint = resampleLine([[179, 0], [-179, 0]], 3)[1][0];
+  assert.equal(Math.abs(midpoint), 180);
+});
+
+test("resampleRing returns the requested unique samples plus a fresh closing point", () => {
+  const input = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]];
+  const sampled = resampleRing(input, 4);
+  assert.equal(sampled.length, 5);
+  assert.deepEqual(sampled.at(-1), sampled[0]);
+  assert.notEqual(sampled.at(-1), sampled[0]);
+  assert.equal(new Set(sampled.slice(0, -1).map(String)).size, 4);
+  assert.deepEqual(input.at(-1), input[0]);
+});
+
+test("matching stable IDs interpolate compatible lines and polygon rings", () => {
+  const from = {
+    precision: "approximate",
+    confidence: 0.7,
+    front_lines: [line("main", [[0, 0], [10, 0]])],
+    control_areas: [area("held", "blue", [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]])],
+  };
+  const to = {
+    precision: "inferred",
+    confidence: 0.4,
+    front_lines: [line("main", [[0, 2], [10, 2]])],
+    control_areas: [area("held", "blue", [[[2, 0], [4, 0], [4, 2], [2, 2], [2, 0]]])],
+  };
+
+  const result = interpolateFrontlineSnapshots(from, to, 0.5);
+  assert.deepEqual(result.interpolatedLines[0].geometry.coordinates[0], [0, 1]);
+  assert.deepEqual(result.interpolatedLines[0].geometry.coordinates.at(-1), [10, 1]);
+  assert.equal(result.interpolatedLines[0].precision, "inferred");
+  assert.equal(result.interpolatedLines[0].confidence, 0.4);
+  assert.equal(result.interpolatedAreas[0].sideId, "blue");
+  assert.deepEqual(result.interpolatedAreas[0].geometry.coordinates[0][0], [1, 0]);
+  assert.equal(result.interpolatedAreas[0].precision, "inferred");
+  assert.equal(result.interpolatedAreas[0].confidence, 0.4);
+});
+
+test("unmatched IDs and incompatible polygon ring counts crossfade", () => {
+  const outer = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]];
+  const hole = [[1, 1], [2, 1], [2, 2], [1, 2], [1, 1]];
+  const result = interpolateFrontlineSnapshots(
+    {
+      front_lines: [line("old", [[0, 0], [1, 0]])],
+      control_areas: [area("held", "a", [outer])],
+    },
+    {
+      front_lines: [line("new", [[0, 1], [1, 1]])],
+      control_areas: [area("held", "a", [outer, hole])],
+    },
+    0.5,
+  );
+
+  assert.deepEqual(result.interpolatedLines, []);
+  assert.deepEqual(result.interpolatedAreas, []);
+  assert.deepEqual(result.exitingLines.map(({ id }) => id), ["old"]);
+  assert.deepEqual(result.enteringLines.map(({ id }) => id), ["new"]);
+  assert.deepEqual(result.exitingAreas.map(({ id }) => id), ["held"]);
+  assert.deepEqual(result.enteringAreas.map(({ id }) => id), ["held"]);
+});
+
+test("snapshot interpolation does not mutate either snapshot", () => {
+  const from = { front_lines: [line("main", [[179, 0], [-179, 0]])], control_areas: [] };
+  const to = { front_lines: [line("main", [[178, 2], [-178, 2]])], control_areas: [] };
+  const before = JSON.stringify([from, to]);
+  interpolateFrontlineSnapshots(from, to, 0.5);
+  assert.equal(JSON.stringify([from, to]), before);
+});
+
+test("transition metadata keeps approximate over exact precision", () => {
+  const result = interpolateFrontlineSnapshots(
+    { precision: "exact", confidence: 0.8, front_lines: [line("main", [[0, 0], [1, 0]])] },
+    { precision: "approximate", confidence: 0.6, front_lines: [line("main", [[0, 1], [1, 1]])] },
+    0.5,
+  );
+  assert.equal(result.interpolatedLines[0].precision, "approximate");
+  assert.equal(result.interpolatedLines[0].confidence, 0.6);
+});
+
+const actors = [
+  { id: "a1", side_id: "a", kind: "division" },
+  { id: "a2", side_id: "a", kind: "brigade" },
+  { id: "b1", side_id: "b", kind: "corps" },
+  { id: "ship", side_id: "b", kind: "ship" },
+];
+
+test("fallback emits eligible influences and fixed uncertainty metadata", () => {
+  const positions = new Map([
+    ["a1", [0, 0]], ["a2", [0, 2]], ["b1", [4, 1]], ["ship", [1, 1]],
+  ]);
+  const derived = deriveFrontlineFallback({ actors, positions, maxPairDistance: 10 });
+  assert.equal(derived.confidence, 0.35);
+  assert.equal(derived.precision, "inferred");
+  assert.equal(derived.label, "DERIVED FROM UNIT POSITIONS");
+  assert.equal(derived.influences.some(({ actorId }) => actorId === "ship"), false);
+  assert.deepEqual(derived.influences.map(({ actorId }) => actorId), ["a1", "a2", "b1"]);
+});
+
+test("fallback uses mutual-nearest pairs and orders two midpoints by widest axis", () => {
+  const derived = deriveFrontlineFallback({
+    actors: [
+      { id: "a1", side_id: "a", kind: "army" },
+      { id: "a2", side_id: "a", kind: "regiment" },
+      { id: "b1", side_id: "b", kind: "corps" },
+      { id: "b2", side_id: "b", kind: "division" },
+    ],
+    positions: new Map([
+      ["a1", [0, 10]], ["a2", [0, 0]], ["b1", [4, 10]], ["b2", [4, 0]],
+    ]),
+    maxPairDistance: 5,
+  });
+  assert.deepEqual(derived.contactLine, [[2, 0], [2, 10]]);
+  assert.deepEqual(derived.pairs.map(({ actorIds }) => actorIds), [["a1", "b1"], ["a2", "b2"]]);
+});
+
+test("one mutual pair creates a short perpendicular contact segment", () => {
+  const derived = deriveFrontlineFallback({
+    actors: [actors[0], actors[2]],
+    positions: new Map([["a1", [0, 0]], ["b1", [4, 0]]]),
+    maxPairDistance: 10,
+  });
+  assert.equal(derived.contactLine.length, 2);
+  assert.equal(derived.contactLine[0][0], 2);
+  assert.equal(derived.contactLine[1][0], 2);
+  assert.ok(derived.contactLine[0][1] < 0);
+  assert.ok(derived.contactLine[1][1] > 0);
+});
+
+test("one side or over-distance enemies retain influences without a contact line", () => {
+  const oneSide = deriveFrontlineFallback({
+    actors: actors.slice(0, 2),
+    positions: new Map([["a1", [0, 0]], ["a2", [1, 0]]]),
+    maxPairDistance: 10,
+  });
+  assert.equal(oneSide.influences.length, 2);
+  assert.equal(oneSide.contactLine, null);
+
+  const distant = deriveFrontlineFallback({
+    actors: [actors[0], actors[2]],
+    positions: new Map([["a1", [0, 0]], ["b1", [20, 0]]]),
+    maxPairDistance: 10,
+  });
+  assert.equal(distant.influences.length, 2);
+  assert.equal(distant.contactLine, null);
+  assert.deepEqual(distant.pairs, []);
+});
+
+test("fallback excludes generic and non-land actor kinds", () => {
+  const kinds = ["army", "corps", "division", "brigade", "regiment", "unit", "ship", "fleet", "person", "other"];
+  const allActors = kinds.map((kind, index) => ({ id: `u${index}`, side_id: index % 2 ? "b" : "a", kind }));
+  const positions = new Map(allActors.map((actor, index) => [actor.id, [index, 0]]));
+  const derived = deriveFrontlineFallback({ actors: allActors, positions, maxPairDistance: 20 });
+  assert.deepEqual(derived.influences.map(({ actorId }) => actorId), ["u0", "u1", "u2", "u3", "u4"]);
+});
+
+test("fallback never reads combat strength, casualties, or outcome", () => {
+  const guarded = new Proxy(
+    { id: "a1", side_id: "a", kind: "division" },
+    {
+      get(target, property, receiver) {
+        if (["strength", "casualties", "outcome"].includes(property)) {
+          throw new Error(`forbidden read: ${String(property)}`);
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    },
+  );
+  const derived = deriveFrontlineFallback({
+    actors: [guarded, { id: "b1", side_id: "b", kind: "division" }],
+    positions: new Map([["a1", [0, 0]], ["b1", [2, 0]]]),
+    maxPairDistance: 10,
+  });
+  assert.equal(derived.influences.length, 2);
+  assert.equal(derived.pairs.length, 1);
+});
