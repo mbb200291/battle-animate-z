@@ -99,6 +99,10 @@ class FakeElement {
     return this.attributes.get(name) ?? null;
   }
 
+  removeAttribute(name) {
+    this.attributes.delete(name);
+  }
+
   addEventListener(type, listener) {
     this.listeners ??= new Map();
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
@@ -133,13 +137,16 @@ class FakeDocument {
       "event-progress", "historical-time", "compression-notice", "play-button",
       "follow-button", "trails-button", "event-card-stack", "speed-controls",
       "reset-button", "prev-button", "next-button", "focus-event-button",
-      "modern-borders-button", "validation-warnings", "error-banner",
+      "modern-borders-button", "fronts-button", "validation-warnings", "error-banner",
     ]) {
       this.elements.set(id, new FakeElement(id === "battle-map" ? "div" : "span", id));
     }
     this.elements.get("focus-event-button").disabled = true;
     this.elements.get("modern-borders-button").textContent = "Modern borders: off";
     this.elements.get("modern-borders-button").setAttribute("aria-pressed", "false");
+    this.elements.get("fronts-button").textContent = "Fronts: off";
+    this.elements.get("fronts-button").setAttribute("aria-pressed", "false");
+    this.elements.get("fronts-button").disabled = true;
     const speeds = this.elements.get("speed-controls");
     for (const rate of [0.5, 1, 2, 4]) {
       const button = new FakeElement("button");
@@ -386,6 +393,36 @@ function battleFixture() {
 function battleFixtureWithWarning() {
   const battle = battleFixture();
   battle.animation_hints.style.actor_icons.alpha = "not_a_real_token";
+  return battle;
+}
+
+function frontlineBattleFixture() {
+  const battle = battleFixture();
+  battle.schema_version = "0.4.0";
+  battle.sides[0].color = "#2468ac";
+  const snapshot = (id, start, shift, precision = "approximate", confidence = 0.8) => ({
+    id,
+    time: { label: id, start, precision, confidence },
+    precision,
+    confidence,
+    source_ids: [],
+    front_lines: [{
+      id: "main_front",
+      geometry: { type: "LineString", coordinates: [[shift, -0.5], [shift, 0.5]] },
+    }],
+    control_areas: [{
+      id: "blue_area",
+      side_id: "blue",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[shift - 1, -1], [shift, -1], [shift, 1], [shift - 1, -1]]],
+      },
+    }],
+  });
+  battle.frontline_snapshots = [
+    snapshot("front_0", "2020-01-01T00:00:00Z", 0),
+    snapshot("front_1", "2020-01-01T00:00:01Z", 1, "inferred", 0.6),
+  ];
   return battle;
 }
 
@@ -779,6 +816,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     followEnabled: true,
     trailsEnabled: false,
     modernBordersEnabled: false,
+    frontsEnabled: true,
     toggle: () => calls.push(["toggle"]),
     pause: () => calls.push(["pause"]),
     seek: (value) => calls.push(["seek", value]),
@@ -789,6 +827,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     setFollowEnabled(value) { calls.push(["follow", value]); this.followEnabled = value; },
     setTrailsEnabled(value) { calls.push(["trails", value]); this.trailsEnabled = value; },
     setModernBordersEnabled(value) { calls.push(["borders", value]); this.modernBordersEnabled = value; },
+    setFrontsEnabled(value) { calls.push(["fronts", value]); this.frontsEnabled = value; },
   };
   wirePlaybackControls(controller, document);
   wirePlaybackControls(controller, document);
@@ -804,6 +843,7 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
   document.getElementById("follow-button").dispatch("click");
   document.getElementById("trails-button").dispatch("click");
   document.getElementById("modern-borders-button").dispatch("click");
+  document.getElementById("fronts-button").dispatch("click");
   document.getElementById("focus-event-button").dispatch("click");
 
   assert.deepEqual(calls, [
@@ -816,8 +856,116 @@ test("wirePlaybackControls routes continuous controls once when rewired", () => 
     ["follow", false],
     ["trails", true],
     ["borders", true],
+    ["fronts", false],
     ["focus"],
   ]);
+});
+
+test("fronts control rewires once without pausing or changing time", () => {
+  const document = new FakeDocument(new FrameClock().window);
+  const calls = [];
+  const old = {
+    frontsEnabled: false,
+    setFrontsEnabled: () => calls.push("old"),
+  };
+  const current = {
+    frontsEnabled: true,
+    currentPresentationMs: 625,
+    isPlaying: true,
+    setFrontsEnabled(value) {
+      calls.push(["current", value]);
+      this.frontsEnabled = value;
+    },
+  };
+  wirePlaybackControls(old, document);
+  wirePlaybackControls(current, document);
+  document.getElementById("fronts-button").dispatch("click");
+
+  assert.deepEqual(calls, [["current", false]]);
+  assert.equal(current.currentPresentationMs, 625);
+  assert.equal(current.isPlaying, true);
+});
+
+test("source-backed frontlines render in fixed order and toggle independently", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = descendants(svg);
+  const layer = all.find((element) => element.classList.contains("frontline-layer"));
+  const area = all.find((element) => element.classList.contains("front-control-area"));
+  const line = all.find((element) => element.classList.contains("front-line"));
+  const movement = all.find((element) => element.classList.contains("movement-path"));
+  const unit = all.find((element) => element.classList.contains("unit"));
+  const beacon = all.find((element) => element.classList.contains("event-beacon-layer"));
+  const button = document.getElementById("fronts-button");
+
+  assert.ok(layer && area && line && movement && unit && beacon);
+  assert.ok(svg.children.indexOf(layer) < svg.children.indexOf(movement));
+  assert.ok(svg.children.indexOf(layer) < svg.children.indexOf(unit));
+  assert.ok(svg.children.indexOf(layer) < svg.children.indexOf(beacon));
+  assert.ok(layer.children.indexOf(area.parentNode) < layer.children.indexOf(line.parentNode));
+  assert.ok(line.classList.contains("is-source-backed"));
+  assert.equal(area.getAttribute("fill"), "#2468ac");
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, "Fronts: on");
+  assert.equal(button.getAttribute("aria-pressed"), "true");
+
+  const before = {
+    time: controller.currentPresentationMs,
+    playing: controller.isPlaying,
+    follow: controller.followEnabled,
+    trails: controller.trailsEnabled,
+    borders: controller.modernBordersEnabled,
+    unitTransform: unit.getAttribute("transform"),
+  };
+  controller.setFrontsEnabled(false);
+  assert.equal(layer.getAttribute("hidden"), "");
+  assert.deepEqual({
+    time: controller.currentPresentationMs,
+    playing: controller.isPlaying,
+    follow: controller.followEnabled,
+    trails: controller.trailsEnabled,
+    borders: controller.modernBordersEnabled,
+    unitTransform: unit.getAttribute("transform"),
+  }, before);
+});
+
+test("frontline geometry updates keyed nodes and inferred snapshots show confidence", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const firstLine = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  const firstArea = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "area:blue_area");
+  const beforePath = firstLine.getAttribute("d");
+
+  controller.seek(1000);
+
+  const all = descendants(svg);
+  assert.equal(all.find((element) => element.getAttribute("data-frontline-key") === "line:main_front"), firstLine);
+  assert.equal(all.find((element) => element.getAttribute("data-frontline-key") === "area:blue_area"), firstArea);
+  assert.notEqual(firstLine.getAttribute("d"), beforePath);
+  assert.ok(firstLine.classList.contains("is-inferred"));
+  assert.equal(all.find((element) => element.classList.contains("frontline-confidence-label")).textContent, "推定 · 60%");
+});
+
+test("frontline availability resets and is recomputed for replacement documents", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const first = renderBattle(frontlineBattleFixture(), document);
+  first.setFrontsEnabled(false);
+  const second = renderBattle(frontlineBattleFixture(), document);
+  assert.equal(second.frontsEnabled, true);
+
+  const third = renderBattle(battleFixture(), document);
+  const button = document.getElementById("fronts-button");
+  assert.equal(third.frontsEnabled, false);
+  assert.equal(button.disabled, true);
+  assert.equal(button.textContent, "Fronts: off");
 });
 
 test("battle UI enables focus only when a current plan has coordinates and reset disables it", () => {

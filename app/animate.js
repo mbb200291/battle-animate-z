@@ -3,6 +3,7 @@ import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } fro
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
 import { buildFocusPlan } from "./map-view.js";
+import { interpolateFrontlineSnapshots } from "./frontlines.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -116,6 +117,8 @@ export function wirePlaybackControls(controller, documentRef = document) {
   own(trails, "onclick", () => controller.setTrailsEnabled(!controller.trailsEnabled));
   const modernBorders = $("modern-borders-button");
   own(modernBorders, "onclick", () => controller.setModernBordersEnabled(!controller.modernBordersEnabled));
+  const fronts = $("fronts-button");
+  own(fronts, "onclick", () => controller.setFrontsEnabled(!controller.frontsEnabled));
   const focus = $("focus-event-button");
   own(focus, "onclick", () => controller.focusActiveEvents());
   const teardown = () => {
@@ -892,6 +895,12 @@ export function resetBattleUI(documentRef = document) {
     modernBorders.textContent = "Modern borders: off";
     modernBorders.setAttribute("aria-pressed", "false");
   }
+  const fronts = documentRef.getElementById("fronts-button");
+  if (fronts) {
+    fronts.textContent = "Fronts: off";
+    fronts.setAttribute("aria-pressed", "false");
+    fronts.disabled = true;
+  }
   const focus = documentRef.getElementById("focus-event-button");
   if (focus) focus.disabled = true;
   setTransportEnabled(documentRef, false);
@@ -950,6 +959,7 @@ export function renderBattle(battle, documentRef = document) {
   const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
   const places = new Map(battle.places.map((place) => [place.id, place]));
   const compiled = compileTimeline(battle);
+  const frontlinesAvailable = compiled.frontlineKeyframes.length > 0;
   const displayOffsetMinutes = battleDisplayOffsetMinutes(battle);
 
   const style = battle.animation_hints?.style || {};
@@ -1024,6 +1034,13 @@ export function renderBattle(battle, documentRef = document) {
       placeEls.push({ kind: "closed", coords: geometry.coordinates[0], path });
     }
   }
+
+  const frontlineLayer = svgEl(documentRef, "g", { class: "frontline-layer" });
+  const controlAreaLayer = svgEl(documentRef, "g", { class: "front-control-area-layer" });
+  const frontLineLayer = svgEl(documentRef, "g", { class: "front-line-layer" });
+  frontlineLayer.append(controlAreaLayer, frontLineLayer);
+  svg.append(frontlineLayer);
+  const frontlineEls = new Map();
 
   const movementEls = new Map();
   for (const [sourceIndex, movement] of battle.movements.entries()) {
@@ -1129,6 +1146,59 @@ export function renderBattle(battle, documentRef = document) {
     }
   }
 
+  function keyedFrontlineElement(key, parent, name, className) {
+    let element = frontlineEls.get(key);
+    if (!element) {
+      element = svgEl(documentRef, name, {
+        class: className,
+        "data-frontline-key": key,
+      });
+      parent.append(element);
+      frontlineEls.set(key, element);
+    }
+    return element;
+  }
+
+  function renderFrontlines(sampled) {
+    const state = sampled.frontline;
+    const active = new Set();
+    if (state) {
+      const geometry = interpolateFrontlineSnapshots(state.before, state.after, state.progress);
+      for (const area of geometry.interpolatedAreas) {
+        const key = `area:${area.id}`;
+        active.add(key);
+        const path = keyedFrontlineElement(key, controlAreaLayer, "path", "front-control-area");
+        path.setAttribute("d", `${toPath(area.geometry.coordinates[0])} Z`);
+        path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
+        path.classList.toggle("is-inferred", area.precision === "inferred");
+      }
+      for (const line of geometry.interpolatedLines) {
+        const key = `line:${line.id}`;
+        active.add(key);
+        const path = keyedFrontlineElement(key, frontLineLayer, "path", "front-line is-source-backed");
+        path.setAttribute("d", toPath(line.geometry.coordinates));
+        path.classList.toggle("is-inferred", line.precision === "inferred");
+        let label = frontlineEls.get(`${key}:label`);
+        if (line.precision === "inferred") {
+          if (!label) {
+            label = keyedFrontlineElement(`${key}:label`, frontLineLayer, "text", "frontline-confidence-label");
+          }
+          active.add(`${key}:label`);
+          const point = project(line.geometry.coordinates[Math.floor(line.geometry.coordinates.length / 2)]);
+          label.setAttribute("x", point.x + 7);
+          label.setAttribute("y", point.y - 7);
+          label.textContent = `推定 · ${Math.round(line.confidence * 100)}%`;
+        }
+      }
+    }
+    for (const [key, element] of frontlineEls) {
+      if (!active.has(key)) {
+        element.remove();
+        frontlineEls.delete(key);
+      }
+    }
+  }
+
   function updateActorPositions() {
     for (const [actorId, { g }] of unitEls) {
       const coord = actorPositions.get(actorId);
@@ -1174,6 +1244,7 @@ export function renderBattle(battle, documentRef = document) {
 
   function reprojectMap() {
     redrawStaticGeometry();
+    if (controller.sampledState) renderFrontlines(controller.sampledState);
     updateActorPositions();
     redrawEngagementEndpoints();
     if (controller.sampledState) renderBeacons(controller.sampledState, "reproject");
@@ -1584,6 +1655,7 @@ export function renderBattle(battle, documentRef = document) {
     followEnabled: true,
     trailsEnabled: false,
     modernBordersEnabled: false,
+    frontsEnabled: frontlinesAvailable,
     isPlaying: false,
     _frame: null,
     _lastFrameTime: null,
@@ -1604,6 +1676,7 @@ export function renderBattle(battle, documentRef = document) {
       const sampled = sampleTimeline(compiled, bounded);
       this.sampledState = sampled;
       actorPositions = sampled.actorPositions;
+      renderFrontlines(sampled);
       updatePlaybackReadout(sampled, bounded);
 
       for (const [actorId, { g, heading, symbol }] of unitEls) {
@@ -1691,6 +1764,20 @@ export function renderBattle(battle, documentRef = document) {
       }
       this.renderAt(this.currentPresentationMs);
       return this.trailsEnabled;
+    },
+
+    setFrontsEnabled(enabled) {
+      if (this._destroyed) return this.frontsEnabled;
+      this.frontsEnabled = Boolean(enabled) && frontlinesAvailable;
+      if (this.frontsEnabled) frontlineLayer.removeAttribute("hidden");
+      else frontlineLayer.setAttribute("hidden", "");
+      const button = $("fronts-button");
+      if (button) {
+        button.disabled = !frontlinesAvailable;
+        button.setAttribute("aria-pressed", String(this.frontsEnabled));
+        button.textContent = `Fronts: ${this.frontsEnabled ? "on" : "off"}`;
+      }
+      return this.frontsEnabled;
     },
 
     async setModernBordersEnabled(enabled) {
@@ -1847,6 +1934,7 @@ export function renderBattle(battle, documentRef = document) {
         map.removeLayer(this._modernBordersLayer);
       }
       clearTrailEffects(this);
+      frontlineEls.clear();
       for (const key of [...beaconEls.keys()]) removeBeacon(key);
       this.sampledState = null;
       this._lastTrailHistoricalMs = null;
@@ -1914,6 +2002,7 @@ export function renderBattle(battle, documentRef = document) {
   controller.setFollowEnabled(true);
   controller.setTrailsEnabled(false);
   controller.setModernBordersEnabled(false);
+  controller.setFrontsEnabled(frontlinesAvailable);
 
   mapEl._battleController = controller;
   redrawStaticGeometry();

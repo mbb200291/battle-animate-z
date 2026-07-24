@@ -336,10 +336,47 @@ button.ghost,
 .speed-controls button[aria-pressed="true"],
 #follow-button[aria-pressed="true"],
 #trails-button[aria-pressed="true"],
-#modern-borders-button[aria-pressed="true"] {
+#modern-borders-button[aria-pressed="true"],
+#fronts-button[aria-pressed="true"] {
   color: var(--panel);
   background: var(--ink);
   border-color: var(--ink);
+}
+
+.front-control-area {
+  pointer-events: none;
+  opacity: 0.16;
+}
+
+.front-control-area.is-inferred {
+  opacity: 0.09;
+}
+
+.front-line {
+  pointer-events: none;
+  fill: none;
+  stroke: #263746;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.front-line.is-source-backed {
+  stroke-dasharray: none;
+}
+
+.front-line.is-inferred {
+  stroke-dasharray: 10 7;
+}
+
+.frontline-confidence-label {
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 4px;
+}
+
+.frontline-layer[hidden] {
+  display: none;
 }
 
 #focus-event-button:disabled {

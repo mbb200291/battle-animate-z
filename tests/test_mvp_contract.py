@@ -1374,6 +1374,18 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn('id="trails-button" type="button" class="ghost" aria-pressed="false">Trails: off</button>', index)
         self.assertIn('<button id="focus-event-button" type="button" class="ghost" disabled>Focus event</button>', index)
         self.assertIn('<button id="modern-borders-button" type="button" class="ghost" aria-pressed="false">Modern borders: off</button>', index)
+        fronts = '<button id="fronts-button" type="button" class="ghost" aria-pressed="false" disabled>Fronts: off</button>'
+        self.assertIn(fronts, index)
+        self.assertGreater(index.index(fronts), index.index("Modern borders: off"))
+        for selector in (
+            ".front-control-area",
+            ".front-control-area.is-inferred",
+            ".front-line.is-source-backed",
+            ".front-line.is-inferred",
+            ".frontline-confidence-label",
+            ".frontline-layer[hidden]",
+        ):
+            self.assertIn(selector, styles)
         self.assertRegex(
             index,
             r'id="event-scrubber"[^>]*step="any"',
