@@ -1225,20 +1225,22 @@ export function renderBattle(battle, documentRef = document) {
     return geometry;
   }
 
-  function crossedIncompatibleKeyframe(previousSampled, sampled) {
-    if (!previousSampled || sampled.historicalMs <= previousSampled.historicalMs) return null;
-    let crossed = null;
-    compiled.frontlineKeyframes.slice(1).forEach((keyframe, index) => {
+  function crossedIncompatibleKeyframes(previousSampled, sampled) {
+    if (!previousSampled || sampled.historicalMs <= previousSampled.historicalMs) return [];
+    const crossed = [];
+    for (let index = 1; index < compiled.frontlineKeyframes.length; index += 1) {
+      const keyframe = compiled.frontlineKeyframes[index];
+      if (keyframe.historicalMs > sampled.historicalMs) break;
       if (keyframe.historicalMs <= previousSampled.historicalMs || keyframe.historicalMs > sampled.historicalMs) {
-        return;
+        continue;
       }
-      const prior = compiled.frontlineKeyframes[index];
+      const prior = compiled.frontlineKeyframes[index - 1];
       const geometry = interpolateFrontlineSnapshots(prior.snapshot, keyframe.snapshot, 0);
       if (geometry.enteringLines.length || geometry.exitingLines.length
           || geometry.enteringAreas.length || geometry.exitingAreas.length) {
-        crossed = geometry;
+        crossed.push(geometry);
       }
-    });
+    }
     return crossed;
   }
 
@@ -1247,10 +1249,10 @@ export function renderBattle(battle, documentRef = document) {
     const state = sampled.frontline;
     const active = new Set();
     if (state) {
-      const crossedGeometry = mode === "playback" && !reducedMotion
-        ? crossedIncompatibleKeyframe(previousSampled, sampled)
-        : null;
-      const crossing = Boolean(crossedGeometry);
+      const crossedGeometries = mode === "playback" && !reducedMotion
+        ? crossedIncompatibleKeyframes(previousSampled, sampled)
+        : [];
+      const crossing = crossedGeometries.length > 0;
       const geometry = frontlineGeometry(state);
       const targetKeys = new Set([
         ...geometry.interpolatedAreas.map((area) => `area:${area.id}`),
@@ -1260,12 +1262,15 @@ export function renderBattle(battle, documentRef = document) {
       if (crossing) {
         clearFrontTransitions(controller);
         const sameKeyCrossfades = new Set();
-        for (const [prefix, exiting, incoming] of [
-          ["line", crossedGeometry.exitingLines, crossedGeometry.enteringLines],
-          ["area", crossedGeometry.exitingAreas, crossedGeometry.enteringAreas],
+        for (const [prefix, exitField, enterField] of [
+          ["line", "exitingLines", "enteringLines"],
+          ["area", "exitingAreas", "enteringAreas"],
         ]) {
-          const incomingIds = new Set(incoming.map(({ id }) => id));
-          exiting.forEach(({ id }) => {
+          const exitingIds = new Set(crossedGeometries.flatMap((item) =>
+            item[exitField].map(({ id }) => id)));
+          const incomingIds = new Set(crossedGeometries.flatMap((item) =>
+            item[enterField].map(({ id }) => id)));
+          exitingIds.forEach((id) => {
             if (incomingIds.has(id)) sameKeyCrossfades.add(`${prefix}:${id}`);
           });
         }
@@ -1375,6 +1380,7 @@ export function renderBattle(battle, documentRef = document) {
 
   function reprojectMap() {
     redrawStaticGeometry();
+    if (controller._frontTransitionTimers.size) clearFrontTransitions(controller);
     if (controller.sampledState) renderFrontlines(controller.sampledState);
     updateActorPositions();
     redrawEngagementEndpoints();

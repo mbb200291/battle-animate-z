@@ -477,6 +477,21 @@ function incompatibleStableLineFixture() {
   return battle;
 }
 
+function repeatedTopologyCrossingFixture() {
+  const battle = topologyChangeBattleFixture();
+  const final = structuredClone(battle.frontline_snapshots[0]);
+  final.id = "front_2";
+  final.time = {
+    ...final.time,
+    label: "front_2",
+    start: "2020-01-01T00:00:02Z",
+  };
+  final.front_lines[0].geometry.coordinates = [[2, -0.5], [2, 0.5]];
+  final.control_areas[0].geometry.coordinates = [[[1, -1], [2, -1], [2, 1], [1, -1]]];
+  battle.frontline_snapshots.push(final);
+  return battle;
+}
+
 function setup() {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
@@ -1149,6 +1164,47 @@ test("an unsafe same-id line resampling crossfades instead of reusing one node",
   assert.equal(lines.length, 2);
   assert.equal(lines.filter((line) => line.classList.contains("is-front-exiting")).length, 1);
   assert.equal(lines.filter((line) => line.classList.contains("is-front-entering")).length, 1);
+});
+
+test("a frame crossing A-to-B-to-A topology crossfades the repeated final key", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(repeatedTopologyCrossingFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(2000, { mode: "playback" });
+
+  const lines = descendants(svg).filter((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front");
+  assert.equal(lines.length, 2);
+  assert.equal(lines.filter((line) => line.classList.contains("is-front-exiting")).length, 1);
+  assert.equal(lines.filter((line) => line.classList.contains("is-front-entering")).length, 1);
+  assert.equal(controller._frontTransitionTimers.size, 1);
+});
+
+test("map reprojection settles a frontline crossfade before projecting the target", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(topologyChangeBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  controller.renderAt(1000, { mode: "playback" });
+  const target = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:split_front");
+  const before = target.getAttribute("d");
+
+  maps[0].projectionOffset = 25;
+  maps[0].fire("move");
+
+  const geometry = descendants(svg).filter((element) =>
+    element.classList.contains("front-line") || element.classList.contains("front-control-area"));
+  assert.equal(controller._frontTransitionTimers.size, 0);
+  assert.equal(geometry.some((element) =>
+    element.classList.contains("is-front-entering") || element.classList.contains("is-front-exiting")), false);
+  assert.equal(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front"), false);
+  assert.notEqual(target.getAttribute("d"), before);
 });
 
 test("frontline seek replaces topology immediately and backward seek is deterministic", () => {
