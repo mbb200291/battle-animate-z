@@ -918,6 +918,9 @@ test("source-backed frontlines render in fixed order and toggle independently", 
     follow: controller.followEnabled,
     trails: controller.trailsEnabled,
     borders: controller.modernBordersEnabled,
+    focusDisabled: document.getElementById("focus-event-button").disabled,
+    beaconChildren: [...beacon.children],
+    historicalTime: document.getElementById("historical-time").textContent,
     unitTransform: unit.getAttribute("transform"),
   };
   controller.setFrontsEnabled(false);
@@ -928,6 +931,9 @@ test("source-backed frontlines render in fixed order and toggle independently", 
     follow: controller.followEnabled,
     trails: controller.trailsEnabled,
     borders: controller.modernBordersEnabled,
+    focusDisabled: document.getElementById("focus-event-button").disabled,
+    beaconChildren: [...beacon.children],
+    historicalTime: document.getElementById("historical-time").textContent,
     unitTransform: unit.getAttribute("transform"),
   }, before);
 });
@@ -941,6 +947,9 @@ test("frontline geometry updates keyed nodes and inferred snapshots show confide
   const firstLine = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
   const firstArea = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "area:blue_area");
   const beforePath = firstLine.getAttribute("d");
+
+  controller.seek(500);
+  assert.match(firstLine.getAttribute("d"), /^M 450\.0 350\.0 /);
 
   controller.seek(1000);
 
