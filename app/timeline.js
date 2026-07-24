@@ -387,7 +387,7 @@ function compatibleStableIds(before, after) {
   const areasAfter = array(after?.control_areas);
   const sameIds = (left, right) =>
     left.length === right.length
-    && left.every(({ id }) => right.some((item) => item?.id === id));
+    && left.every((item) => right.some((candidate) => candidate?.id === item?.id));
   if (!sameIds(linesBefore, linesAfter) || !sameIds(areasBefore, areasAfter)) return false;
 
   const afterLines = new Map(linesAfter.map((line) => [line?.id, line]));

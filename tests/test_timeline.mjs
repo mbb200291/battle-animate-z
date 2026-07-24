@@ -176,6 +176,24 @@ test("frontline stable-ID or unsafe topology changes crossfade", () => {
   );
 });
 
+test("malformed frontline members safely degrade to crossfade", () => {
+  for (const collection of ["front_lines", "control_areas"]) {
+    const before = frontlineSnapshot("before", 0);
+    const after = frontlineSnapshot("after", 10);
+    before[collection] = [null];
+    after[collection] = [null];
+    const timeline = compileTimeline(frontlineBattle([before, after]));
+
+    assert.doesNotThrow(() =>
+      sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(5)))));
+    assert.equal(
+      sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(5)))).frontline.transition,
+      "crossfade",
+      collection,
+    );
+  }
+});
+
 test("frontline progress remains historical through idle compression and backward seeks", () => {
   const timeline = compileTimeline(frontlineBattle());
   const atFive = toPresentationTime(timeline, parseBattleTime(iso(5)));
