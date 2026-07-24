@@ -961,6 +961,25 @@ test("frontline geometry updates keyed nodes and inferred snapshots show confide
   assert.equal(all.find((element) => element.classList.contains("frontline-confidence-label")).textContent, "推定 · 60%");
 });
 
+test("frontline SVG paths keep adjacent dateline coordinates on one world copy", () => {
+  const battle = frontlineBattleFixture();
+  for (const snapshot of battle.frontline_snapshots) {
+    snapshot.front_lines[0].geometry.coordinates = [[179, 0], [-179, 0]];
+  }
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const line = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  const xCoordinates = [...line.getAttribute("d").matchAll(/[ML] (-?\d+(?:\.\d+)?)/g)]
+    .map((match) => Number(match[1]));
+  const largestJump = Math.max(...xCoordinates.slice(1)
+    .map((x, index) => Math.abs(x - xCoordinates[index])));
+
+  assert.ok(largestJump < 10, `projected frontline jumped ${largestJump}px across world copies`);
+});
+
 test("frontline availability resets and is recomputed for replacement documents", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);

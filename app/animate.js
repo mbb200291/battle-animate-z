@@ -1015,6 +1015,18 @@ export function renderBattle(battle, documentRef = document) {
         return `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
       })
       .join(" ");
+  const toFrontlinePath = (coords) => {
+    let previousLongitude;
+    return coords
+      .map(([longitude, latitude], index) => {
+        while (previousLongitude !== undefined && longitude - previousLongitude > 180) longitude -= 360;
+        while (previousLongitude !== undefined && longitude - previousLongitude < -180) longitude += 360;
+        previousLongitude = longitude;
+        const point = project([longitude, latitude]);
+        return `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
+      })
+      .join(" ");
+  };
 
   const placeEls = [];
   for (const place of battle.places) {
@@ -1168,7 +1180,7 @@ export function renderBattle(battle, documentRef = document) {
         const key = `area:${area.id}`;
         active.add(key);
         const path = keyedFrontlineElement(key, controlAreaLayer, "path", "front-control-area");
-        path.setAttribute("d", `${toPath(area.geometry.coordinates[0])} Z`);
+        path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
         path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
         path.classList.toggle("is-inferred", area.precision === "inferred");
       }
@@ -1176,7 +1188,7 @@ export function renderBattle(battle, documentRef = document) {
         const key = `line:${line.id}`;
         active.add(key);
         const path = keyedFrontlineElement(key, frontLineLayer, "path", "front-line is-source-backed");
-        path.setAttribute("d", toPath(line.geometry.coordinates));
+        path.setAttribute("d", toFrontlinePath(line.geometry.coordinates));
         path.classList.toggle("is-inferred", line.precision === "inferred");
         let label = frontlineEls.get(`${key}:label`);
         if (line.precision === "inferred") {
