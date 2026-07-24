@@ -8,8 +8,28 @@ import { deriveFrontlineFallback, interpolateFrontlineSnapshots } from "./frontl
 const SVG_NS = "http://www.w3.org/2000/svg";
 const FRONT_CROSSFADE_MS = 500;
 const FRONT_INFLUENCE_RADIUS = 28;
+const FRONT_PAIR_MAX_PX = 160;
 
-const fallbackPairDistance = (zoom) => Math.max(0.25, 4 * (2 ** (8 - zoom)));
+function fallbackPairDistance(project, influences, zoom) {
+  let pixelsPerDegree = 0;
+  for (const { position: [longitude, latitude] } of influences) {
+    const origin = project([longitude, latitude]);
+    const east = project([longitude + 1, latitude]);
+    const latitudeStep = latitude >= 0
+      ? Math.min(1, 89.9 - latitude)
+      : Math.max(-1, -89.9 - latitude);
+    const poleward = project([longitude, latitude + latitudeStep]);
+    pixelsPerDegree = Math.max(
+      pixelsPerDegree,
+      Math.hypot(east.x - origin.x, east.y - origin.y),
+      latitudeStep
+        ? Math.hypot(poleward.x - origin.x, poleward.y - origin.y) / Math.abs(latitudeStep)
+        : 0,
+    );
+  }
+  const zoomLimit = Math.max(0.25, 4 * (2 ** (8 - zoom)));
+  return pixelsPerDegree ? Math.min(zoomLimit, FRONT_PAIR_MAX_PX / pixelsPerDegree) : zoomLimit;
+}
 
 const DEFAULT_ICONS = {
   advance: "↗",
@@ -1336,10 +1356,14 @@ export function renderBattle(battle, documentRef = document) {
         controller._frontTransitionTimers.set("topology", timer);
       }
     } else if (battle.schema_version === "0.4.0") {
+      const unboundedFallback = deriveFrontlineFallback({
+        actors: battle.actors,
+        positions: sampled.actorPositions,
+      });
       const fallback = deriveFrontlineFallback({
         actors: battle.actors,
         positions: sampled.actorPositions,
-        maxPairDistance: fallbackPairDistance(map.getZoom()),
+        maxPairDistance: fallbackPairDistance(project, unboundedFallback.influences, map.getZoom()),
       });
       for (const influence of fallback.influences) {
         const key = `derived:influence:${influence.actorId}`;

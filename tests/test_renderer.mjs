@@ -253,7 +253,7 @@ class FrameClock {
 }
 
 class FakeMap {
-  constructor(container) {
+  constructor(container, mercator = false) {
     this.container = container;
     this.listeners = new Map();
     this.removeCount = 0;
@@ -267,6 +267,7 @@ class FakeMap {
     this.projectionOffset = 0;
     this.panes = new Map();
     this.layers = new Set();
+    this.mercator = mercator;
   }
 
   getContainer() { return this.container; }
@@ -292,7 +293,10 @@ class FakeMap {
   getZoom() { return this.zoom; }
   getSize() { return { x: this.container.clientWidth, y: this.container.clientHeight }; }
   latLngToContainerPoint([lat, lon]) {
-    return { x: lon * 100 + 400 + this.projectionOffset, y: 300 - lat * 100 };
+    const projectedLat = this.mercator
+      ? Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) * 180 / Math.PI
+      : lat;
+    return { x: lon * 100 + 400 + this.projectionOffset, y: 300 - projectedLat * 100 };
   }
   on(events, listener) {
     events.split(/\s+/).forEach((event) => {
@@ -308,7 +312,7 @@ class FakeMap {
   remove() { this.removeCount += 1; }
 }
 
-function installLeaflet(fetchImpl) {
+function installLeaflet(fetchImpl, { mercator = false } = {}) {
   const maps = [];
   const tileCalls = [];
   const geoJSONCalls = [];
@@ -320,7 +324,7 @@ function installLeaflet(fetchImpl) {
   };
   globalThis.L = {
     map(container) {
-      const map = new FakeMap(container);
+      const map = new FakeMap(container, mercator);
       maps.push(map);
       return map;
     },
@@ -1156,6 +1160,27 @@ test("fallback pairing becomes more conservative when zoomed in", () => {
   assert.equal(all.filter((element) => element.classList.contains("front-influence")).length, 2);
   assert.equal(all.some((element) =>
     element.classList.contains("front-line") && element.classList.contains("is-derived")), false);
+});
+
+test("fallback pairing stays screen-bounded at high Mercator latitudes", () => {
+  const renderAtLatitude = (latitude) => {
+    const battle = frontlineFallbackBattleFixture();
+    battle.movements.find(({ actor_id: actorId }) => actorId === "alpha").path.coordinates =
+      [[0, latitude], [0, latitude]];
+    battle.movements.find(({ actor_id: actorId }) => actorId === "bravo").path.coordinates =
+      [[0, latitude + 1], [0, latitude + 1]];
+    battle.animation_hints.map.initial_center = [0, latitude];
+    const clock = new FrameClock();
+    const document = new FakeDocument(clock.window);
+    installLeaflet(undefined, { mercator: true });
+    renderBattle(battle, document);
+    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+    return descendants(svg).some((element) =>
+      element.classList.contains("front-line") && element.classList.contains("is-derived"));
+  };
+
+  assert.equal(renderAtLatitude(0), true);
+  assert.equal(renderAtLatitude(75), false);
 });
 
 test("land actors without sampled coordinates do not enable fallback", () => {
