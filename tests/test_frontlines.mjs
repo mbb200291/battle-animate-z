@@ -145,6 +145,41 @@ test("fallback uses mutual-nearest pairs and orders two midpoints by widest axis
   assert.deepEqual(derived.pairs.map(({ actorIds }) => actorIds), [["a1", "b1"], ["a2", "b2"]]);
 });
 
+test("multiple fallback midpoints stay locally continuous across the dateline", () => {
+  const derived = deriveFrontlineFallback({
+    actors: [
+      { id: "a1", side_id: "a", kind: "army" },
+      { id: "b1", side_id: "b", kind: "army" },
+      { id: "a2", side_id: "a", kind: "army" },
+      { id: "b2", side_id: "b", kind: "army" },
+    ],
+    positions: new Map([
+      ["a1", [179, 0]], ["b1", [-179, 0]],
+      ["a2", [-179, 10]], ["b2", [179, 10]],
+    ]),
+    maxPairDistance: 5,
+  });
+  assert.equal(derived.contactLine.length, 2);
+  assert.ok(Math.abs(derived.contactLine[1][0] - derived.contactLine[0][0]) <= 180);
+});
+
+test("equal-distance mutual-nearest ties use actor id independent of input order", () => {
+  const actorsById = {
+    a: { id: "a", side_id: "a", kind: "army" },
+    b1: { id: "b1", side_id: "b", kind: "army" },
+    b2: { id: "b2", side_id: "b", kind: "army" },
+  };
+  const positions = new Map([["a", [0, 0]], ["b1", [-1, 0]], ["b2", [1, 0]]]);
+  const pairIds = (order) => deriveFrontlineFallback({
+    actors: order.map((id) => actorsById[id]),
+    positions,
+    maxPairDistance: 5,
+  }).pairs.map(({ actorIds }) => actorIds);
+
+  assert.deepEqual(pairIds(["a", "b2", "b1"]), pairIds(["b1", "a", "b2"]));
+  assert.deepEqual(pairIds(["a", "b2", "b1"]), [["a", "b1"]]);
+});
+
 test("one mutual pair creates a short perpendicular contact segment", () => {
   const derived = deriveFrontlineFallback({
     actors: [actors[0], actors[2]],

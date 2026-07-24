@@ -208,7 +208,8 @@ export function deriveFrontlineFallback({ actors = [], positions = new Map(), ma
       actorId,
       sideId,
       position: [...positions.get(actorId)],
-    }));
+    }))
+    .sort((left, right) => left.actorId < right.actorId ? -1 : left.actorId > right.actorId ? 1 : 0);
 
   const nearest = new Map();
   for (const influence of influences) {
@@ -217,7 +218,8 @@ export function deriveFrontlineFallback({ actors = [], positions = new Map(), ma
     for (const candidate of influences) {
       if (candidate.sideId === influence.sideId) continue;
       const candidateDistance = distance(influence.position, candidate.position);
-      if (candidateDistance < bestDistance) {
+      if (candidateDistance < bestDistance ||
+          (candidateDistance === bestDistance && candidate.actorId < best?.actorId)) {
         best = candidate;
         bestDistance = candidateDistance;
       }
@@ -244,7 +246,13 @@ export function deriveFrontlineFallback({ actors = [], positions = new Map(), ma
 
   let contactLine = null;
   if (pairs.length > 1) {
-    const midpoints = pairs.map((pair) => pair.midpoint);
+    const anchor = pairs[0].midpoint[0];
+    const midpoints = pairs.map((pair) => {
+      const point = [...pair.midpoint];
+      while (point[0] - anchor > 180) point[0] -= 360;
+      while (point[0] - anchor < -180) point[0] += 360;
+      return point;
+    });
     const longitudeSpan = Math.max(...midpoints.map(([value]) => value)) - Math.min(...midpoints.map(([value]) => value));
     const latitudeSpan = Math.max(...midpoints.map(([, value]) => value)) - Math.min(...midpoints.map(([, value]) => value));
     const axis = longitudeSpan >= latitudeSpan ? 0 : 1;
