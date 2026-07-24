@@ -784,6 +784,37 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                     )
                 )
 
+    def test_missing_frontline_start_does_not_reset_ordering_baseline(self):
+        for final_start in ("1942-11-19T08:00:00Z", "1942-11-19T07:59:00Z"):
+            with self.subTest(final_start=final_start):
+                document = frontline_document()
+                first = document["frontline_snapshots"][0]
+                missing = deepcopy(first)
+                missing["id"] = "front_day_2"
+                del missing["time"]["start"]
+                final = deepcopy(first)
+                final["id"] = "front_day_3"
+                final["time"]["start"] = final_start
+                document["frontline_snapshots"].extend([missing, final])
+
+                errors, warnings = validate_document_with_warnings(document)
+
+                self.assertTrue(
+                    any(
+                        error.path == "$.frontline_snapshots[2].time.start"
+                        and error.message == "values must be strictly increasing"
+                        for error in errors
+                    )
+                )
+                self.assertTrue(
+                    any(
+                        warning.path == "$.frontline_snapshots[1].time"
+                        and warning.message
+                        == "snapshot without time.start is excluded from animation"
+                        for warning in warnings
+                    )
+                )
+
     def test_frontline_snapshot_without_start_warns_but_remains_valid(self):
         document = frontline_document()
         del document["frontline_snapshots"][0]["time"]["start"]
