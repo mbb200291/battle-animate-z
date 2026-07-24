@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schema_version": {
-      "enum": ["0.1.0", "0.2.0", "0.3.0"]
+      "enum": ["0.1.0", "0.2.0", "0.3.0", "0.4.0"]
     },
     "metadata": {
       "$ref": "#/$defs/Metadata"
@@ -85,6 +85,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/Engagement"
+      }
+    },
+    "frontline_snapshots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FrontlineSnapshot"
       }
     }
   },
@@ -409,6 +415,86 @@
             "items": {
               "$ref": "#/$defs/Position"
             }
+          }
+        }
+      }
+    },
+    "FrontLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "geometry"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "geometry": {
+          "$ref": "#/$defs/LineString"
+        }
+      }
+    },
+    "ControlArea": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "side_id", "geometry"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "side_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "geometry": {
+          "$ref": "#/$defs/Polygon"
+        }
+      }
+    },
+    "FrontlineSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "time", "precision", "confidence", "source_ids"],
+      "anyOf": [
+        {
+          "required": ["front_lines"]
+        },
+        {
+          "required": ["control_areas"]
+        }
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "time": {
+          "$ref": "#/$defs/DateValue"
+        },
+        "event_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "front_lines": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/FrontLine"
+          }
+        },
+        "control_areas": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ControlArea"
+          }
+        },
+        "precision": {
+          "$ref": "#/$defs/Precision"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "source_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Identifier"
           }
         }
       }

@@ -107,6 +107,28 @@ class Polygon(TypedDict):
 Geometry = Point | LineString | Polygon
 
 
+class FrontLine(TypedDict):
+    id: Identifier
+    geometry: LineString
+
+
+class ControlArea(TypedDict):
+    id: Identifier
+    side_id: Identifier
+    geometry: Polygon
+
+
+class FrontlineSnapshot(TypedDict):
+    id: Identifier
+    time: DateValue
+    precision: Precision
+    confidence: Confidence
+    source_ids: list[Identifier]
+    event_id: NotRequired[Identifier]
+    front_lines: NotRequired[list[FrontLine]]
+    control_areas: NotRequired[list[ControlArea]]
+
+
 class Place(TypedDict):
     id: Identifier
     name: str
@@ -221,7 +243,7 @@ class AnimationHints(TypedDict):
 
 
 class BattleAnimationDocument(TypedDict):
-    schema_version: Literal["0.1.0", "0.2.0", "0.3.0"]
+    schema_version: Literal["0.1.0", "0.2.0", "0.3.0", "0.4.0"]
     metadata: Metadata
     battle: Battle
     sides: list[Side]
@@ -234,3 +256,4 @@ class BattleAnimationDocument(TypedDict):
     sources: list[Source]
     animation_hints: AnimationHints
     engagements: NotRequired[list[Engagement]]
+    frontline_snapshots: NotRequired[list[FrontlineSnapshot]]

@@ -23,6 +23,65 @@ SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
 MAX_INFERRED_WITHDRAWAL_SPEED_KMH = 18
 
 
+def valid_v030_document():
+    document = deepcopy(json.loads(EXAMPLE.read_text(encoding="utf-8")))
+    document["schema_version"] = "0.3.0"
+    movement = document["movements"][0]
+    movement["path"]["coordinates"] = movement["path"]["coordinates"][:2]
+    movement["time"] = {
+        "label": "18 June 1815, noon",
+        "start": "1815-06-18T12:00:00Z",
+        "precision": "hour",
+        "confidence": 0.8,
+    }
+    movement["waypoint_times"] = ["1815-06-18T12:00:00Z", "1815-06-18T12:10:00Z"]
+    timeline = document["animation_hints"]["timeline"]
+    timeline["historical_seconds_per_playback_second"] = 60
+    timeline["idle_compression_threshold_seconds"] = 0
+    timeline["idle_compressed_duration_ms"] = 0
+    return document
+
+
+def frontline_document():
+    document = valid_v030_document()
+    document["schema_version"] = "0.4.0"
+    document["frontline_snapshots"] = [{
+        "id": "front_day_1",
+        "time": {
+            "label": "1942-11-19T08:00:00Z",
+            "start": "1942-11-19T08:00:00Z",
+            "precision": "hour",
+            "confidence": 0.9,
+        },
+        "event_id": document["historical_events"][0]["id"],
+        "front_lines": [{
+            "id": "front_main",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[43.1, 49.2], [44.0, 48.9]],
+            },
+        }],
+        "control_areas": [{
+            "id": "area_a",
+            "side_id": document["sides"][0]["id"],
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[
+                    [42.5, 49.8],
+                    [44.0, 49.5],
+                    [44.0, 48.9],
+                    [42.5, 49.0],
+                    [42.5, 49.8],
+                ]],
+            },
+        }],
+        "precision": "approximate",
+        "confidence": 0.8,
+        "source_ids": [document["sources"][0]["id"]],
+    }]
+    return document
+
+
 class BattleAnimationMvpContractTest(unittest.TestCase):
     def _minimal_timed_document(self):
         document = deepcopy(json.loads(EXAMPLE.read_text(encoding="utf-8")))
@@ -41,22 +100,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         return document
 
     def _valid_v030_document(self):
-        document = deepcopy(json.loads(EXAMPLE.read_text(encoding="utf-8")))
-        document["schema_version"] = "0.3.0"
-        movement = document["movements"][0]
-        movement["path"]["coordinates"] = movement["path"]["coordinates"][:2]
-        movement["time"] = {
-            "label": "18 June 1815, noon",
-            "start": "1815-06-18T12:00:00Z",
-            "precision": "hour",
-            "confidence": 0.8,
-        }
-        movement["waypoint_times"] = ["1815-06-18T12:00:00Z", "1815-06-18T12:10:00Z"]
-        timeline = document["animation_hints"]["timeline"]
-        timeline["historical_seconds_per_playback_second"] = 60
-        timeline["idle_compression_threshold_seconds"] = 0
-        timeline["idle_compressed_duration_ms"] = 0
-        return document
+        return valid_v030_document()
 
     def test_waterloo_example_validates_with_cli(self):
         result = subprocess.run(
@@ -524,12 +568,76 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
     def test_python_types_declare_v030_fields(self):
         source = (ROOT / "battle_animation" / "types.py").read_text(encoding="utf-8")
-        self.assertIn('Literal["0.1.0", "0.2.0", "0.3.0"]', source)
+        self.assertIn('Literal["0.1.0", "0.2.0", "0.3.0", "0.4.0"]', source)
         self.assertIn("time: NotRequired[DateValue]", source)
         self.assertIn("waypoint_times: NotRequired[list[str]]", source)
         self.assertIn("historical_seconds_per_playback_second: float", source)
         self.assertIn("idle_compression_threshold_seconds: float", source)
         self.assertIn("idle_compressed_duration_ms: float", source)
+
+    def test_schema_declares_v040_frontline_snapshots(self):
+        schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+
+        self.assertIn("0.4.0", schema["properties"]["schema_version"]["enum"])
+        snapshots = schema["properties"]["frontline_snapshots"]
+        self.assertEqual(snapshots["items"]["$ref"], "#/$defs/FrontlineSnapshot")
+
+        front_line = schema["$defs"]["FrontLine"]
+        self.assertFalse(front_line["additionalProperties"])
+        self.assertEqual(set(front_line["required"]), {"id", "geometry"})
+        self.assertEqual(set(front_line["properties"]), {"id", "geometry"})
+        self.assertEqual(front_line["properties"]["geometry"], {"$ref": "#/$defs/LineString"})
+
+        control_area = schema["$defs"]["ControlArea"]
+        self.assertFalse(control_area["additionalProperties"])
+        self.assertEqual(set(control_area["required"]), {"id", "side_id", "geometry"})
+        self.assertEqual(set(control_area["properties"]), {"id", "side_id", "geometry"})
+        self.assertEqual(control_area["properties"]["geometry"], {"$ref": "#/$defs/Polygon"})
+
+        snapshot = schema["$defs"]["FrontlineSnapshot"]
+        self.assertFalse(snapshot["additionalProperties"])
+        self.assertEqual(
+            set(snapshot["required"]),
+            {"id", "time", "precision", "confidence", "source_ids"},
+        )
+        self.assertEqual(
+            set(snapshot["properties"]),
+            {
+                "id",
+                "time",
+                "event_id",
+                "front_lines",
+                "control_areas",
+                "precision",
+                "confidence",
+                "source_ids",
+            },
+        )
+        self.assertEqual(snapshot["properties"]["time"], {"$ref": "#/$defs/DateValue"})
+        self.assertEqual(snapshot["properties"]["front_lines"]["minItems"], 1)
+        self.assertEqual(snapshot["properties"]["control_areas"]["minItems"], 1)
+        self.assertEqual(snapshot["properties"]["source_ids"]["minItems"], 1)
+        self.assertEqual(
+            snapshot["anyOf"],
+            [{"required": ["front_lines"]}, {"required": ["control_areas"]}],
+        )
+        self.assertEqual(validate_document(frontline_document()), [])
+
+    def test_python_types_declare_v040_frontlines(self):
+        source = (ROOT / "battle_animation" / "types.py").read_text(encoding="utf-8")
+
+        self.assertIn("class FrontLine(TypedDict):", source)
+        self.assertIn("class ControlArea(TypedDict):", source)
+        self.assertIn("class FrontlineSnapshot(TypedDict):", source)
+        self.assertIn("time: DateValue", source)
+        self.assertIn("event_id: NotRequired[Identifier]", source)
+        self.assertIn("front_lines: NotRequired[list[FrontLine]]", source)
+        self.assertIn("control_areas: NotRequired[list[ControlArea]]", source)
+        self.assertIn('Literal["0.1.0", "0.2.0", "0.3.0", "0.4.0"]', source)
+        self.assertIn(
+            "frontline_snapshots: NotRequired[list[FrontlineSnapshot]]",
+            source,
+        )
 
     def test_validator_accepts_v030_movement_and_timeline_timing(self):
         self.assertEqual(validate_document(self._valid_v030_document()), [])
