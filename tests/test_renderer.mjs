@@ -89,6 +89,14 @@ class FakeElement {
     this.removed = true;
   }
 
+  cloneNode(deep = false) {
+    const clone = new FakeElement(this.tagName);
+    for (const [name, value] of this.attributes) clone.setAttribute(name, value);
+    clone.textContent = this.textContent;
+    if (deep) clone.append(...this.children.map((child) => child.cloneNode(true)));
+    return clone;
+  }
+
   setAttribute(name, value) {
     const stringValue = String(value);
     this.attributes.set(name, stringValue);
@@ -452,6 +460,20 @@ function partialTopologyChangeBattleFixture() {
       },
     });
   }
+  return battle;
+}
+
+function incompatibleStableAreaFixture() {
+  const battle = frontlineBattleFixture();
+  battle.frontline_snapshots[1].control_areas[0].geometry.coordinates.push([
+    [0.2, -0.2], [0.4, -0.2], [0.2, 0], [0.2, -0.2],
+  ]);
+  return battle;
+}
+
+function incompatibleStableLineFixture() {
+  const battle = frontlineBattleFixture();
+  battle.frontline_snapshots[0].front_lines[0].geometry.coordinates = [[0, 0], [0, 0]];
   return battle;
 }
 
@@ -1083,6 +1105,50 @@ test("a playback frame jump across an incompatible keyframe still crossfades", (
   assert.equal(oldLine.classList.contains("is-front-exiting"), true);
   assert.equal(newLine.classList.contains("is-front-entering"), true);
   assert.equal(controller._frontTransitionTimers.size, 1);
+});
+
+test("an incompatible polygon with the same stable id crossfades through a temporary old node", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(incompatibleStableAreaFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(900, { mode: "playback" });
+  controller.renderAt(1000, { mode: "playback" });
+
+  const areas = descendants(svg).filter((element) =>
+    element.getAttribute("data-frontline-key") === "area:blue_area");
+  assert.equal(controller._frontTransitionTimers.size, 1);
+  assert.equal(areas[0].classList.contains("is-front-entering"), true);
+  assert.equal(areas.length, 2);
+  assert.equal(areas.filter((area) => area.classList.contains("is-front-exiting")).length, 1);
+  assert.equal(areas.filter((area) => area.classList.contains("is-front-entering")).length, 1);
+
+  clock.flushTimeouts();
+
+  const settled = descendants(svg).filter((element) =>
+    element.getAttribute("data-frontline-key") === "area:blue_area");
+  assert.equal(settled.length, 1);
+  assert.equal(settled[0].classList.contains("is-front-entering"), false);
+  assert.equal(settled[0].classList.contains("is-front-exiting"), false);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
+test("an unsafe same-id line resampling crossfades instead of reusing one node", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(incompatibleStableLineFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(1000, { mode: "playback" });
+
+  const lines = descendants(svg).filter((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front");
+  assert.equal(lines.length, 2);
+  assert.equal(lines.filter((line) => line.classList.contains("is-front-exiting")).length, 1);
+  assert.equal(lines.filter((line) => line.classList.contains("is-front-entering")).length, 1);
 });
 
 test("frontline seek replaces topology immediately and backward seek is deterministic", () => {

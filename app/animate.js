@@ -1054,6 +1054,7 @@ export function renderBattle(battle, documentRef = document) {
   frontlineLayer.append(controlAreaLayer, frontLineLayer);
   svg.append(frontlineLayer);
   const frontlineEls = new Map();
+  const transientFrontlineEls = new Set();
 
   const movementEls = new Map();
   for (const [sourceIndex, movement] of battle.movements.entries()) {
@@ -1175,6 +1176,8 @@ export function renderBattle(battle, documentRef = document) {
   function clearFrontTransitions(owner) {
     for (const timer of owner._frontTransitionTimers.values()) cancelTimeout(timer);
     owner._frontTransitionTimers.clear();
+    for (const element of transientFrontlineEls) element.remove();
+    transientFrontlineEls.clear();
     for (const [key, element] of frontlineEls) {
       if (element.classList.contains("is-front-exiting")) {
         element.remove();
@@ -1187,6 +1190,26 @@ export function renderBattle(battle, documentRef = document) {
 
   function frontlineGeometry(state) {
     const geometry = interpolateFrontlineSnapshots(state.before, state.after, state.progress);
+    if (state.before === state.after) {
+      const lineIds = new Set(geometry.interpolatedLines.map(({ id }) => id));
+      const areaIds = new Set(geometry.interpolatedAreas.map(({ id }) => id));
+      geometry.interpolatedLines.push(...(state.before.front_lines || [])
+        .filter(({ id }) => !lineIds.has(id))
+        .map((line) => ({
+          ...line,
+          precision: line.precision ?? state.before.precision,
+          confidence: line.confidence ?? state.before.confidence,
+        })));
+      geometry.interpolatedAreas.push(...(state.before.control_areas || [])
+        .filter(({ id }) => !areaIds.has(id))
+        .map((area) => ({
+          ...area,
+          sideId: area.side_id,
+          precision: area.precision ?? state.before.precision,
+          confidence: area.confidence ?? state.before.confidence,
+        })));
+      return geometry;
+    }
     if (state.transition !== "crossfade") return geometry;
     geometry.interpolatedLines.push(...geometry.exitingLines.map((line) => ({
       ...line,
@@ -1203,16 +1226,20 @@ export function renderBattle(battle, documentRef = document) {
   }
 
   function crossedIncompatibleKeyframe(previousSampled, sampled) {
-    if (!previousSampled || sampled.historicalMs <= previousSampled.historicalMs) return false;
-    return compiled.frontlineKeyframes.slice(1).some((keyframe, index) => {
+    if (!previousSampled || sampled.historicalMs <= previousSampled.historicalMs) return null;
+    let crossed = null;
+    compiled.frontlineKeyframes.slice(1).forEach((keyframe, index) => {
       if (keyframe.historicalMs <= previousSampled.historicalMs || keyframe.historicalMs > sampled.historicalMs) {
-        return false;
+        return;
       }
       const prior = compiled.frontlineKeyframes[index];
       const geometry = interpolateFrontlineSnapshots(prior.snapshot, keyframe.snapshot, 0);
-      return geometry.enteringLines.length || geometry.exitingLines.length
-        || geometry.enteringAreas.length || geometry.exitingAreas.length;
+      if (geometry.enteringLines.length || geometry.exitingLines.length
+          || geometry.enteringAreas.length || geometry.exitingAreas.length) {
+        crossed = geometry;
+      }
     });
+    return crossed;
   }
 
   function renderFrontlines(sampled, mode = "reproject", previousSampled = null) {
@@ -1220,8 +1247,10 @@ export function renderBattle(battle, documentRef = document) {
     const state = sampled.frontline;
     const active = new Set();
     if (state) {
-      const crossing = mode === "playback" && !reducedMotion
-        && crossedIncompatibleKeyframe(previousSampled, sampled);
+      const crossedGeometry = mode === "playback" && !reducedMotion
+        ? crossedIncompatibleKeyframe(previousSampled, sampled)
+        : null;
+      const crossing = Boolean(crossedGeometry);
       const geometry = frontlineGeometry(state);
       const targetKeys = new Set([
         ...geometry.interpolatedAreas.map((area) => `area:${area.id}`),
@@ -1230,8 +1259,25 @@ export function renderBattle(battle, documentRef = document) {
       const entering = [];
       if (crossing) {
         clearFrontTransitions(controller);
+        const sameKeyCrossfades = new Set();
+        for (const [prefix, exiting, incoming] of [
+          ["line", crossedGeometry.exitingLines, crossedGeometry.enteringLines],
+          ["area", crossedGeometry.exitingAreas, crossedGeometry.enteringAreas],
+        ]) {
+          const incomingIds = new Set(incoming.map(({ id }) => id));
+          exiting.forEach(({ id }) => {
+            if (incomingIds.has(id)) sameKeyCrossfades.add(`${prefix}:${id}`);
+          });
+        }
         for (const [key, element] of frontlineEls) {
-          if (!targetKeys.has(key)
+          if (sameKeyCrossfades.has(key)) {
+            const exiting = element.cloneNode(true);
+            exiting.classList.remove("is-front-entering");
+            exiting.classList.add("is-front-exiting");
+            element.parentNode.append(exiting);
+            transientFrontlineEls.add(exiting);
+            entering.push(element);
+          } else if (!targetKeys.has(key)
               && (element.classList.contains("front-line") || element.classList.contains("front-control-area"))) {
             element.classList.add("is-front-exiting");
           }
