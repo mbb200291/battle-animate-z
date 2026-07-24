@@ -352,6 +352,11 @@ button.ghost,
   opacity: 0.09;
 }
 
+.front-influence {
+  pointer-events: none;
+  opacity: 0.10;
+}
+
 .front-line {
   pointer-events: none;
   fill: none;
@@ -368,11 +373,20 @@ button.ghost,
   stroke-dasharray: 10 7;
 }
 
+.front-line.is-derived {
+  stroke-dasharray: 7 7;
+  opacity: 0.68;
+}
+
 .frontline-confidence-label {
   font-size: 11px;
   paint-order: stroke;
   stroke: var(--paper);
   stroke-width: 4px;
+}
+
+.frontline-confidence-label.is-derived {
+  letter-spacing: 0.04em;
 }
 
 .frontline-layer[hidden] {

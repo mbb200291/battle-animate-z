@@ -3,10 +3,13 @@ import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } fro
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
 import { buildFocusPlan } from "./map-view.js";
-import { interpolateFrontlineSnapshots } from "./frontlines.js";
+import { deriveFrontlineFallback, interpolateFrontlineSnapshots } from "./frontlines.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const FRONT_CROSSFADE_MS = 500;
+const FRONT_INFLUENCE_RADIUS = 28;
+
+const fallbackPairDistance = (zoom) => Math.max(0.25, 4 * (2 ** (8 - zoom)));
 
 const DEFAULT_ICONS = {
   advance: "↗",
@@ -960,7 +963,13 @@ export function renderBattle(battle, documentRef = document) {
   const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
   const places = new Map(battle.places.map((place) => [place.id, place]));
   const compiled = compileTimeline(battle);
-  const frontlinesAvailable = compiled.frontlineKeyframes.length > 0;
+  const initialSample = sampleTimeline(compiled, 0);
+  const fallbackAvailable = battle.schema_version === "0.4.0"
+    && deriveFrontlineFallback({
+      actors: battle.actors,
+      positions: initialSample.actorPositions,
+    }).influences.length > 0;
+  const frontlinesAvailable = compiled.frontlineKeyframes.length > 0 || fallbackAvailable;
   const displayOffsetMinutes = battleDisplayOffsetMinutes(battle);
 
   const style = battle.animation_hints?.style || {};
@@ -1325,6 +1334,41 @@ export function renderBattle(battle, documentRef = document) {
           clearFrontTransitions(controller);
         }, FRONT_CROSSFADE_MS);
         controller._frontTransitionTimers.set("topology", timer);
+      }
+    } else if (battle.schema_version === "0.4.0") {
+      const fallback = deriveFrontlineFallback({
+        actors: battle.actors,
+        positions: sampled.actorPositions,
+        maxPairDistance: fallbackPairDistance(map.getZoom()),
+      });
+      for (const influence of fallback.influences) {
+        const key = `derived:influence:${influence.actorId}`;
+        active.add(key);
+        const circle = keyedFrontlineElement(key, controlAreaLayer, "circle", "front-influence");
+        const point = project(influence.position);
+        circle.setAttribute("data-front-actor-id", influence.actorId);
+        circle.setAttribute("cx", point.x);
+        circle.setAttribute("cy", point.y);
+        circle.setAttribute("r", FRONT_INFLUENCE_RADIUS);
+        circle.setAttribute("fill", colorOf(influence.sideId));
+      }
+      if (fallback.contactLine) {
+        const lineKey = "derived:line";
+        const labelKey = "derived:label";
+        active.add(lineKey);
+        active.add(labelKey);
+        const path = keyedFrontlineElement(lineKey, frontLineLayer, "path", "front-line is-derived");
+        path.setAttribute("d", toFrontlinePath(fallback.contactLine));
+        const label = keyedFrontlineElement(
+          labelKey,
+          frontLineLayer,
+          "text",
+          "frontline-confidence-label is-derived",
+        );
+        const point = project(fallback.contactLine[Math.floor(fallback.contactLine.length / 2)]);
+        label.setAttribute("x", point.x + 7);
+        label.setAttribute("y", point.y - 7);
+        label.textContent = `${fallback.label} · ≤${Math.round(fallback.confidence * 100)}%`;
       }
     }
     for (const [key, element] of frontlineEls) {

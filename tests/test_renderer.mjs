@@ -437,6 +437,34 @@ function frontlineBattleFixture() {
   return battle;
 }
 
+function frontlineFallbackBattleFixture() {
+  const battle = battleFixture();
+  battle.schema_version = "0.4.0";
+  battle.actors[0].kind = "division";
+  battle.actors[1].kind = "brigade";
+  battle.actors.push(
+    { id: "fleet", name: "Fleet", kind: "fleet", side_id: "blue", commander_ids: [] },
+    { id: "observer", name: "Observer", kind: "person", side_id: "red", commander_ids: [] },
+  );
+  battle.movements.push(
+    {
+      ...structuredClone(battle.movements[0]),
+      id: "fleet_hold",
+      actor_id: "fleet",
+      path: { type: "LineString", coordinates: [[0.2, 0.2], [0.2, 0.2]] },
+    },
+    {
+      ...structuredClone(battle.movements[0]),
+      id: "observer_hold",
+      actor_id: "observer",
+      path: { type: "LineString", coordinates: [[0.3, 0.3], [0.3, 0.3]] },
+    },
+  );
+  battle.actors[0].strength = 10000;
+  battle.outcome = { winner_side_ids: ["blue"], source_ids: [], summary: "Blue wins" };
+  return battle;
+}
+
 function topologyChangeBattleFixture() {
   const battle = frontlineBattleFixture();
   battle.frontline_snapshots[1].front_lines[0].id = "split_front";
@@ -1002,6 +1030,145 @@ test("source-backed frontlines render in fixed order and toggle independently", 
     historicalTime: document.getElementById("historical-time").textContent,
     unitTransform: unit.getAttribute("transform"),
   }, before);
+});
+
+test("land fallback defaults on and renders only eligible influences with a derived line", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineFallbackBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = descendants(svg);
+  const influences = all.filter((element) => element.classList.contains("front-influence"));
+  const line = all.find((element) =>
+    element.classList.contains("front-line") && element.classList.contains("is-derived"));
+  const label = all.find((element) =>
+    element.classList.contains("frontline-confidence-label") && element.classList.contains("is-derived"));
+
+  assert.equal(controller.frontsEnabled, true);
+  assert.equal(document.getElementById("fronts-button").disabled, false);
+  assert.deepEqual(influences.map((element) => element.getAttribute("data-front-actor-id")).sort(), ["alpha", "bravo"]);
+  assert.equal(influences.every((element) => element.getAttribute("r") === "28"), true);
+  assert.ok(line);
+  assert.equal(label.textContent, "DERIVED FROM UNIT POSITIONS · ≤35%");
+});
+
+test("source frontline at the current time suppresses renderer fallback", () => {
+  const battle = frontlineFallbackBattleFixture();
+  battle.frontline_snapshots = frontlineBattleFixture().frontline_snapshots.slice(0, 1);
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = descendants(svg);
+
+  assert.equal(all.some((element) => element.classList.contains("front-influence")), false);
+  assert.equal(all.some((element) =>
+    element.classList.contains("front-line") && element.classList.contains("is-source-backed")), true);
+  assert.equal(all.some((element) => element.classList.contains("is-derived")), false);
+});
+
+test("one-side fallback shows influences without inventing a contact line", () => {
+  const battle = frontlineFallbackBattleFixture();
+  battle.actors.find(({ id }) => id === "bravo").side_id = "blue";
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = descendants(svg);
+
+  assert.equal(all.filter((element) => element.classList.contains("front-influence")).length, 2);
+  assert.equal(all.some((element) =>
+    element.classList.contains("front-line") && element.classList.contains("is-derived")), false);
+});
+
+test("all-naval battle has no fallback and keeps Fronts disabled", () => {
+  const battle = frontlineFallbackBattleFixture();
+  battle.actors.forEach((actor) => { actor.kind = "fleet"; });
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  assert.equal(controller.frontsEnabled, false);
+  assert.equal(document.getElementById("fronts-button").disabled, true);
+  assert.equal(descendants(svg).some((element) => element.classList.contains("front-influence")), false);
+});
+
+test("fallback descriptors ignore strength casualties and outcome", () => {
+  const describe = (battle) => {
+    const clock = new FrameClock();
+    const document = new FakeDocument(clock.window);
+    installLeaflet();
+    renderBattle(battle, document);
+    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+    return descendants(svg)
+      .filter((element) => element.classList.contains("front-influence")
+        || element.classList.contains("is-derived"))
+      .map((element) => ({
+        tag: element.tagName,
+        className: element.getAttribute("class"),
+        actorId: element.getAttribute("data-front-actor-id"),
+        cx: element.getAttribute("cx"),
+        cy: element.getAttribute("cy"),
+        d: element.getAttribute("d"),
+        text: element.textContent,
+      }));
+  };
+  const first = frontlineFallbackBattleFixture();
+  const second = structuredClone(first);
+  second.actors[0].strength = 1;
+  second.actors[0].casualties = 9999;
+  second.outcome = { winner_side_ids: ["red"], source_ids: [], summary: "Red wins" };
+
+  assert.deepEqual(describe(first), describe(second));
+});
+
+test("fallback influence centers reproject while their screen radius stays fixed", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  renderBattle(frontlineFallbackBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const influence = descendants(svg).find((element) => element.classList.contains("front-influence"));
+  const before = influence.getAttribute("cx");
+
+  maps[0].projectionOffset = 25;
+  maps[0].fire("move");
+
+  assert.notEqual(influence.getAttribute("cx"), before);
+  assert.equal(influence.getAttribute("r"), "28");
+});
+
+test("fallback pairing becomes more conservative when zoomed in", () => {
+  const battle = frontlineFallbackBattleFixture();
+  battle.animation_hints.map.initial_zoom = 12;
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = descendants(svg);
+
+  assert.equal(all.filter((element) => element.classList.contains("front-influence")).length, 2);
+  assert.equal(all.some((element) =>
+    element.classList.contains("front-line") && element.classList.contains("is-derived")), false);
+});
+
+test("land actors without sampled coordinates do not enable fallback", () => {
+  const battle = frontlineFallbackBattleFixture();
+  battle.places = [];
+  battle.movements = [];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+
+  assert.equal(controller.frontsEnabled, false);
+  assert.equal(document.getElementById("fronts-button").disabled, true);
 });
 
 test("frontline geometry updates keyed nodes and inferred snapshots show confidence", () => {
