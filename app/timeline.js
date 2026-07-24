@@ -357,6 +357,84 @@ function compileEngagementWindows(battle, eventById, fallbackDurationMs) {
   return windows;
 }
 
+function compileFrontlineKeyframes(battle) {
+  return array(battle?.frontline_snapshots)
+    .map((snapshot, sourceIndex) => ({
+      id: snapshot?.id,
+      snapshot,
+      sourceIndex,
+      historicalMs: parseBattleTime(snapshot?.time?.start),
+    }))
+    .filter(({ historicalMs }) => Number.isFinite(historicalMs))
+    .sort((left, right) =>
+      left.historicalMs - right.historicalMs || left.sourceIndex - right.sourceIndex);
+}
+
+function usablePath(points, minimumLength) {
+  return Array.isArray(points)
+    && points.length >= minimumLength
+    && points.every((point) =>
+      Array.isArray(point) && point.length >= 2
+      && Number.isFinite(point[0]) && Number.isFinite(point[1]))
+    && points.some((point, index) =>
+      index > 0 && (point[0] !== points[index - 1][0] || point[1] !== points[index - 1][1]));
+}
+
+function compatibleStableIds(before, after) {
+  const linesBefore = array(before?.front_lines);
+  const linesAfter = array(after?.front_lines);
+  const areasBefore = array(before?.control_areas);
+  const areasAfter = array(after?.control_areas);
+  const sameIds = (left, right) =>
+    left.length === right.length
+    && left.every(({ id }) => right.some((item) => item?.id === id));
+  if (!sameIds(linesBefore, linesAfter) || !sameIds(areasBefore, areasAfter)) return false;
+
+  const afterLines = new Map(linesAfter.map((line) => [line?.id, line]));
+  for (const line of linesBefore) {
+    const next = afterLines.get(line?.id);
+    if (
+      line?.geometry?.type !== "LineString" || next?.geometry?.type !== "LineString"
+      || !usablePath(line.geometry.coordinates, 2) || !usablePath(next.geometry.coordinates, 2)
+    ) return false;
+  }
+
+  const afterAreas = new Map(areasAfter.map((area) => [area?.id, area]));
+  for (const area of areasBefore) {
+    const next = afterAreas.get(area?.id);
+    const beforeRings = area?.geometry?.type === "Polygon" ? area.geometry.coordinates : null;
+    const afterRings = next?.geometry?.type === "Polygon" ? next.geometry.coordinates : null;
+    if (
+      !Array.isArray(beforeRings) || !Array.isArray(afterRings)
+      || beforeRings.length !== 1 || afterRings.length !== 1
+      || !usablePath(beforeRings[0], 4) || !usablePath(afterRings[0], 4)
+    ) return false;
+  }
+  return true;
+}
+
+function sampleFrontline(timeline, historicalMs) {
+  const keyframes = array(timeline?.frontlineKeyframes);
+  if (!keyframes.length) return null;
+  const afterIndex = keyframes.findIndex((keyframe) => keyframe.historicalMs > historicalMs);
+  if (afterIndex < 0) {
+    const snapshot = keyframes.at(-1).snapshot;
+    return { before: snapshot, after: snapshot, progress: 0, transition: "interpolate" };
+  }
+  if (afterIndex === 0) {
+    const snapshot = keyframes[0].snapshot;
+    return { before: snapshot, after: snapshot, progress: 0, transition: "interpolate" };
+  }
+  const before = keyframes[afterIndex - 1];
+  const after = keyframes[afterIndex];
+  return {
+    before: before.snapshot,
+    after: after.snapshot,
+    progress: (historicalMs - before.historicalMs) / (after.historicalMs - before.historicalMs),
+    transition: compatibleStableIds(before.snapshot, after.snapshot) ? "interpolate" : "crossfade",
+  };
+}
+
 function geometryPoint(geometry) {
   if (!geometry || typeof geometry !== "object") return null;
   let coordinates = geometry.coordinates;
@@ -471,7 +549,12 @@ export function compileTimeline(battle = {}) {
   const eventById = new Map(eventWindows.map((window) => [window.id, window]));
   const tracks = compileTracks(battle, eventById, fallbackDurationMs);
   const engagementWindows = compileEngagementWindows(battle, eventById, fallbackDurationMs);
-  const allWindows = [...eventWindows, ...tracks, ...engagementWindows];
+  const frontlineKeyframes = compileFrontlineKeyframes(battle);
+  const frontlineInstants = frontlineKeyframes.map(({ historicalMs }) => ({
+    startMs: historicalMs,
+    endMs: historicalMs,
+  }));
+  const allWindows = [...eventWindows, ...tracks, ...engagementWindows, ...frontlineInstants];
   const starts = allWindows.map(({ startMs }) => startMs).filter(Number.isFinite);
   const ends = allWindows.map(({ endMs }) => endMs).filter(Number.isFinite);
   const historicalStartMs = starts.length ? Math.min(...starts) : 0;
@@ -490,6 +573,7 @@ export function compileTimeline(battle = {}) {
     tracks,
     eventWindows,
     engagementWindows,
+    frontlineKeyframes,
     historicalStartMs,
     historicalEndMs,
     presentationDurationMs: timeWarp.presentationDurationMs || fallbackPresentationDurationMs,
@@ -698,6 +782,7 @@ export function sampleTimeline(timeline, presentationMs) {
 
   return {
     historicalMs,
+    frontline: sampleFrontline(timeline, historicalMs),
     actorPositions,
     headings,
     activeEventIds,

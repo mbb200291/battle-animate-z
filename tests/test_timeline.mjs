@@ -47,6 +47,130 @@ function movement(id, actorId, eventId, coordinates, start, end, extras = {}) {
   return value;
 }
 
+function frontlineSnapshot(id, minutes, lineIds = ["line"], areaIds = ["area"]) {
+  const snapshot = {
+    id,
+    time: { start: minutes === undefined ? undefined : iso(minutes) },
+    precision: "approximate",
+    confidence: 0.8,
+    source_ids: ["source"],
+  };
+  if (lineIds.length) {
+    snapshot.front_lines = lineIds.map((lineId, index) => ({
+      id: lineId,
+      geometry: { type: "LineString", coordinates: [[index, 0], [index + 1, 1]] },
+    }));
+  }
+  if (areaIds.length) {
+    snapshot.control_areas = areaIds.map((areaId, index) => ({
+      id: areaId,
+      side_id: "side",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[index, 0], [index + 1, 0], [index + 1, 1], [index, 0]]],
+      },
+    }));
+  }
+  return snapshot;
+}
+
+function frontlineBattle(snapshots = [
+  frontlineSnapshot("front_0", 0),
+  frontlineSnapshot("front_10", 10),
+  frontlineSnapshot("front_20", 20),
+]) {
+  return battle({
+    frontline_snapshots: snapshots,
+    animation_hints: {
+      timeline: {
+        historical_seconds_per_playback_second: 60,
+        idle_compression_threshold_seconds: 5 * 60,
+        idle_compressed_duration_ms: 1_200,
+      },
+    },
+  });
+}
+
+test("frontline snapshots compile into chronological keyframes and interpolate by historical time", () => {
+  const timeline = compileTimeline(frontlineBattle());
+  assert.equal(timeline.frontlineKeyframes.length, 3);
+
+  const sample = sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(5))));
+  assert.equal(sample.frontline.before.id, "front_0");
+  assert.equal(sample.frontline.after.id, "front_10");
+  assert.equal(sample.frontline.progress, 0.5);
+  assert.equal(sample.frontline.transition, "interpolate");
+});
+
+test("frontline keyframes define bounds without becoming active event ranges", () => {
+  const timeline = compileTimeline(frontlineBattle());
+
+  assert.equal(timeline.historicalStartMs, parseBattleTime(iso(0)));
+  assert.equal(timeline.historicalEndMs, parseBattleTime(iso(20)));
+  assert.deepEqual(timeline.eventWindows, []);
+  assert.equal(sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(10)))).activeEventIds.size, 0);
+  assert.equal(timeline.compressedGaps.length, 2);
+});
+
+test("one frontline snapshot persists and missing-start snapshots are excluded", () => {
+  const missing = frontlineSnapshot("missing", undefined);
+  const timeline = compileTimeline(frontlineBattle([missing, frontlineSnapshot("only", 10)]));
+
+  assert.deepEqual(timeline.frontlineKeyframes.map(({ id }) => id), ["only"]);
+  for (const presentationMs of [0, timeline.presentationDurationMs]) {
+    const frontline = sampleTimeline(timeline, presentationMs).frontline;
+    assert.equal(frontline.before.id, "only");
+    assert.equal(frontline.after.id, "only");
+    assert.equal(frontline.progress, 0);
+    assert.equal(frontline.transition, "interpolate");
+  }
+});
+
+test("frontline keyframes use source order to break equal-time ties", () => {
+  const timeline = compileTimeline(frontlineBattle([
+    frontlineSnapshot("later_source", 10),
+    frontlineSnapshot("earlier_source", 10),
+    frontlineSnapshot("first", 0),
+  ]));
+
+  assert.deepEqual(
+    timeline.frontlineKeyframes.map(({ id, sourceIndex }) => [id, sourceIndex]),
+    [["first", 2], ["later_source", 0], ["earlier_source", 1]],
+  );
+});
+
+test("frontline stable-ID or unsafe topology changes crossfade", () => {
+  const changedIds = compileTimeline(frontlineBattle([
+    frontlineSnapshot("before", 0, ["line"]),
+    frontlineSnapshot("after", 10, ["replacement"]),
+  ]));
+  assert.equal(
+    sampleTimeline(changedIds, toPresentationTime(changedIds, parseBattleTime(iso(5)))).frontline.transition,
+    "crossfade",
+  );
+
+  const before = frontlineSnapshot("before", 0);
+  const after = frontlineSnapshot("after", 10);
+  after.control_areas[0].geometry.coordinates.push([
+    [0.2, 0.2], [0.4, 0.2], [0.2, 0.2],
+  ]);
+  const changedRings = compileTimeline(frontlineBattle([before, after]));
+  assert.equal(
+    sampleTimeline(changedRings, toPresentationTime(changedRings, parseBattleTime(iso(5)))).frontline.transition,
+    "crossfade",
+  );
+});
+
+test("frontline progress remains historical through idle compression and backward seeks", () => {
+  const timeline = compileTimeline(frontlineBattle());
+  const atFive = toPresentationTime(timeline, parseBattleTime(iso(5)));
+  const first = sampleTimeline(timeline, atFive).frontline;
+  assert.equal(first.progress, 0.5);
+
+  sampleTimeline(timeline, timeline.presentationDurationMs);
+  assert.deepEqual(sampleTimeline(timeline, atFive).frontline, first);
+});
+
 test("parseBattleTime treats offset-free battle time as UTC-like", () => {
   assert.equal(parseBattleTime("1894-09-17T12:34:56.250"), Date.UTC(1894, 8, 17, 12, 34, 56, 250));
 });
