@@ -1185,24 +1185,54 @@ export function renderBattle(battle, documentRef = document) {
     }
   }
 
+  function frontlineGeometry(state) {
+    const geometry = interpolateFrontlineSnapshots(state.before, state.after, state.progress);
+    if (state.transition !== "crossfade") return geometry;
+    geometry.interpolatedLines.push(...geometry.exitingLines.map((line) => ({
+      ...line,
+      precision: line.precision ?? state.before.precision,
+      confidence: line.confidence ?? state.before.confidence,
+    })));
+    geometry.interpolatedAreas.push(...geometry.exitingAreas.map((area) => ({
+      ...area,
+      sideId: area.side_id,
+      precision: area.precision ?? state.before.precision,
+      confidence: area.confidence ?? state.before.confidence,
+    })));
+    return geometry;
+  }
+
+  function crossedIncompatibleKeyframe(previousSampled, sampled) {
+    if (!previousSampled || sampled.historicalMs <= previousSampled.historicalMs) return false;
+    return compiled.frontlineKeyframes.slice(1).some((keyframe, index) => {
+      if (keyframe.historicalMs <= previousSampled.historicalMs || keyframe.historicalMs > sampled.historicalMs) {
+        return false;
+      }
+      const prior = compiled.frontlineKeyframes[index];
+      const geometry = interpolateFrontlineSnapshots(prior.snapshot, keyframe.snapshot, 0);
+      return geometry.enteringLines.length || geometry.exitingLines.length
+        || geometry.enteringAreas.length || geometry.exitingAreas.length;
+    });
+  }
+
   function renderFrontlines(sampled, mode = "reproject", previousSampled = null) {
     if (mode === "seek") clearFrontTransitions(controller);
     const state = sampled.frontline;
     const active = new Set();
     if (state) {
-      const geometry = state.transition === "crossfade"
-        ? interpolateFrontlineSnapshots(state.before, state.before, 0)
-        : interpolateFrontlineSnapshots(state.before, state.after, state.progress);
-      const priorState = previousSampled?.frontline;
       const crossing = mode === "playback" && !reducedMotion
-        && priorState?.transition === "crossfade"
-        && priorState.after === state.before
-        && state.before === state.after;
+        && crossedIncompatibleKeyframe(previousSampled, sampled);
+      const geometry = frontlineGeometry(state);
+      const targetKeys = new Set([
+        ...geometry.interpolatedAreas.map((area) => `area:${area.id}`),
+        ...geometry.interpolatedLines.map((line) => `line:${line.id}`),
+      ]);
       const entering = [];
       if (crossing) {
         clearFrontTransitions(controller);
-        for (const element of frontlineEls.values()) {
-          if (element.classList.contains("front-line") || element.classList.contains("front-control-area")) {
+        for (const [key, element] of frontlineEls) {
+          if (!targetKeys.has(key)
+              && (element.classList.contains("front-line") || element.classList.contains("front-control-area"))) {
             element.classList.add("is-front-exiting");
           }
         }
@@ -1210,8 +1240,9 @@ export function renderBattle(battle, documentRef = document) {
       for (const area of geometry.interpolatedAreas) {
         const key = `area:${area.id}`;
         active.add(key);
+        const existed = frontlineEls.has(key);
         const path = keyedFrontlineElement(key, controlAreaLayer, "path", "front-control-area");
-        if (crossing) entering.push(path);
+        if (crossing && !existed) entering.push(path);
         path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
         path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
         path.classList.toggle("is-inferred", area.precision === "inferred");
@@ -1219,8 +1250,9 @@ export function renderBattle(battle, documentRef = document) {
       for (const line of geometry.interpolatedLines) {
         const key = `line:${line.id}`;
         active.add(key);
+        const existed = frontlineEls.has(key);
         const path = keyedFrontlineElement(key, frontLineLayer, "path", "front-line is-source-backed");
-        if (crossing) entering.push(path);
+        if (crossing && !existed) entering.push(path);
         path.setAttribute("d", toFrontlinePath(line.geometry.coordinates));
         path.classList.toggle("is-inferred", line.precision === "inferred");
         let label = frontlineEls.get(`${key}:label`);

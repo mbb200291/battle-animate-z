@@ -436,6 +436,25 @@ function topologyChangeBattleFixture() {
   return battle;
 }
 
+function partialTopologyChangeBattleFixture() {
+  const battle = topologyChangeBattleFixture();
+  for (const [index, snapshot] of battle.frontline_snapshots.entries()) {
+    snapshot.front_lines.push({
+      id: "stable_front",
+      geometry: { type: "LineString", coordinates: [[index, 2], [index, 3]] },
+    });
+    snapshot.control_areas.push({
+      id: "stable_area",
+      side_id: "blue",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[[index, 2], [index + 0.5, 2], [index, 2.5], [index, 2]]],
+      },
+    });
+  }
+  return battle;
+}
+
 function setup() {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
@@ -1021,6 +1040,49 @@ test("incompatible frontline playback crossfades old and new nodes for 500ms", (
   assert.equal(newLine.classList.contains("is-front-entering"), false);
   assert.equal(newArea.classList.contains("is-front-entering"), false);
   assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
+test("partial topology changes preserve stable keyed geometry through the crossfade", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(partialTopologyChangeBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const stableLine = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:stable_front");
+  const stableArea = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "area:stable_area");
+  const initialLinePath = stableLine.getAttribute("d");
+
+  controller.renderAt(500, { mode: "playback" });
+  assert.notEqual(stableLine.getAttribute("d"), initialLinePath);
+  controller.renderAt(1000, { mode: "playback" });
+
+  assert.equal(stableLine.classList.contains("is-front-entering"), false);
+  assert.equal(stableLine.classList.contains("is-front-exiting"), false);
+  assert.equal(stableArea.classList.contains("is-front-entering"), false);
+  assert.equal(stableArea.classList.contains("is-front-exiting"), false);
+  clock.flushTimeouts();
+  assert.equal(stableLine.parentNode !== null, true);
+  assert.equal(stableArea.parentNode !== null, true);
+});
+
+test("a playback frame jump across an incompatible keyframe still crossfades", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(topologyChangeBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const oldLine = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front");
+
+  controller.renderAt(1000, { mode: "playback" });
+
+  const newLine = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:split_front");
+  assert.equal(oldLine.classList.contains("is-front-exiting"), true);
+  assert.equal(newLine.classList.contains("is-front-entering"), true);
+  assert.equal(controller._frontTransitionTimers.size, 1);
 });
 
 test("frontline seek replaces topology immediately and backward seek is deterministic", () => {
