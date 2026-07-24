@@ -8,7 +8,18 @@ import unittest
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+from typing import Literal, NotRequired, get_type_hints
 
+from battle_animation.types import (
+    BattleAnimationDocument,
+    ControlArea,
+    DateValue,
+    FrontLine,
+    FrontlineSnapshot,
+    LineString,
+    Polygon,
+    Precision,
+)
 from battle_animation.validator import (
     ACTOR_ICON_TOKENS,
     validate_document,
@@ -624,19 +635,75 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertEqual(validate_document(frontline_document()), [])
 
     def test_python_types_declare_v040_frontlines(self):
-        source = (ROOT / "battle_animation" / "types.py").read_text(encoding="utf-8")
+        self.assertEqual(FrontLine.__required_keys__, frozenset({"id", "geometry"}))
+        self.assertEqual(FrontLine.__optional_keys__, frozenset())
+        self.assertEqual(
+            get_type_hints(FrontLine, include_extras=True),
+            {"id": str, "geometry": LineString},
+        )
 
-        self.assertIn("class FrontLine(TypedDict):", source)
-        self.assertIn("class ControlArea(TypedDict):", source)
-        self.assertIn("class FrontlineSnapshot(TypedDict):", source)
-        self.assertIn("time: DateValue", source)
-        self.assertIn("event_id: NotRequired[Identifier]", source)
-        self.assertIn("front_lines: NotRequired[list[FrontLine]]", source)
-        self.assertIn("control_areas: NotRequired[list[ControlArea]]", source)
-        self.assertIn('Literal["0.1.0", "0.2.0", "0.3.0", "0.4.0"]', source)
-        self.assertIn(
-            "frontline_snapshots: NotRequired[list[FrontlineSnapshot]]",
-            source,
+        self.assertEqual(
+            ControlArea.__required_keys__,
+            frozenset({"id", "side_id", "geometry"}),
+        )
+        self.assertEqual(ControlArea.__optional_keys__, frozenset())
+        self.assertEqual(
+            get_type_hints(ControlArea, include_extras=True),
+            {"id": str, "side_id": str, "geometry": Polygon},
+        )
+
+        self.assertEqual(
+            FrontlineSnapshot.__required_keys__,
+            frozenset({"id", "time", "precision", "confidence", "source_ids"}),
+        )
+        self.assertEqual(
+            FrontlineSnapshot.__optional_keys__,
+            frozenset({"event_id", "front_lines", "control_areas"}),
+        )
+        snapshot_hints = get_type_hints(FrontlineSnapshot, include_extras=True)
+        self.assertEqual(
+            snapshot_hints,
+            {
+                "id": str,
+                "time": DateValue,
+                "precision": Precision,
+                "confidence": float,
+                "source_ids": list[str],
+                "event_id": NotRequired[str],
+                "front_lines": NotRequired[list[FrontLine]],
+                "control_areas": NotRequired[list[ControlArea]],
+            },
+        )
+
+        self.assertEqual(
+            BattleAnimationDocument.__required_keys__,
+            frozenset({
+                "schema_version",
+                "metadata",
+                "battle",
+                "sides",
+                "commanders",
+                "actors",
+                "places",
+                "historical_events",
+                "movements",
+                "outcome",
+                "sources",
+                "animation_hints",
+            }),
+        )
+        self.assertEqual(
+            BattleAnimationDocument.__optional_keys__,
+            frozenset({"engagements", "frontline_snapshots"}),
+        )
+        document_hints = get_type_hints(BattleAnimationDocument, include_extras=True)
+        self.assertEqual(
+            document_hints["schema_version"],
+            Literal["0.1.0", "0.2.0", "0.3.0", "0.4.0"],
+        )
+        self.assertEqual(
+            document_hints["frontline_snapshots"],
+            NotRequired[list[FrontlineSnapshot]],
         )
 
     def test_validator_accepts_v030_movement_and_timeline_timing(self):
