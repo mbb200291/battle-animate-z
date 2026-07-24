@@ -379,6 +379,24 @@ button.ghost,
   display: none;
 }
 
+.front-line.is-front-entering,
+.front-control-area.is-front-entering {
+  animation: front-fade-in 500ms ease-out both;
+}
+
+.front-line.is-front-exiting,
+.front-control-area.is-front-exiting {
+  animation: front-fade-out 500ms ease-in both;
+}
+
+@keyframes front-fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes front-fade-out {
+  to { opacity: 0; }
+}
+
 #focus-event-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -737,6 +755,8 @@ button.ghost,
   .movement-path,
   .event-beacon,
   .event-beacon-pulse,
+  .front-line,
+  .front-control-area,
   .unit,
   .engagement-line,
   .confidence-bar {

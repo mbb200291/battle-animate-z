@@ -6,6 +6,7 @@ import { buildFocusPlan } from "./map-view.js";
 import { interpolateFrontlineSnapshots } from "./frontlines.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const FRONT_CROSSFADE_MS = 500;
 
 const DEFAULT_ICONS = {
   advance: "↗",
@@ -1171,15 +1172,46 @@ export function renderBattle(battle, documentRef = document) {
     return element;
   }
 
-  function renderFrontlines(sampled) {
+  function clearFrontTransitions(owner) {
+    for (const timer of owner._frontTransitionTimers.values()) cancelTimeout(timer);
+    owner._frontTransitionTimers.clear();
+    for (const [key, element] of frontlineEls) {
+      if (element.classList.contains("is-front-exiting")) {
+        element.remove();
+        frontlineEls.delete(key);
+      } else {
+        element.classList.remove("is-front-entering");
+      }
+    }
+  }
+
+  function renderFrontlines(sampled, mode = "reproject", previousSampled = null) {
+    if (mode === "seek") clearFrontTransitions(controller);
     const state = sampled.frontline;
     const active = new Set();
     if (state) {
-      const geometry = interpolateFrontlineSnapshots(state.before, state.after, state.progress);
+      const geometry = state.transition === "crossfade"
+        ? interpolateFrontlineSnapshots(state.before, state.before, 0)
+        : interpolateFrontlineSnapshots(state.before, state.after, state.progress);
+      const priorState = previousSampled?.frontline;
+      const crossing = mode === "playback" && !reducedMotion
+        && priorState?.transition === "crossfade"
+        && priorState.after === state.before
+        && state.before === state.after;
+      const entering = [];
+      if (crossing) {
+        clearFrontTransitions(controller);
+        for (const element of frontlineEls.values()) {
+          if (element.classList.contains("front-line") || element.classList.contains("front-control-area")) {
+            element.classList.add("is-front-exiting");
+          }
+        }
+      }
       for (const area of geometry.interpolatedAreas) {
         const key = `area:${area.id}`;
         active.add(key);
         const path = keyedFrontlineElement(key, controlAreaLayer, "path", "front-control-area");
+        if (crossing) entering.push(path);
         path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
         path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
         path.classList.toggle("is-inferred", area.precision === "inferred");
@@ -1188,6 +1220,7 @@ export function renderBattle(battle, documentRef = document) {
         const key = `line:${line.id}`;
         active.add(key);
         const path = keyedFrontlineElement(key, frontLineLayer, "path", "front-line is-source-backed");
+        if (crossing) entering.push(path);
         path.setAttribute("d", toFrontlinePath(line.geometry.coordinates));
         path.classList.toggle("is-inferred", line.precision === "inferred");
         let label = frontlineEls.get(`${key}:label`);
@@ -1202,9 +1235,17 @@ export function renderBattle(battle, documentRef = document) {
           label.textContent = `推定 · ${Math.round(line.confidence * 100)}%`;
         }
       }
+      if (crossing) {
+        entering.forEach((element) => element.classList.add("is-front-entering"));
+        const timer = scheduleTimeout(() => {
+          if (controller._frontTransitionTimers.get("topology") !== timer) return;
+          clearFrontTransitions(controller);
+        }, FRONT_CROSSFADE_MS);
+        controller._frontTransitionTimers.set("topology", timer);
+      }
     }
     for (const [key, element] of frontlineEls) {
-      if (!active.has(key)) {
+      if (!active.has(key) && !element.classList.contains("is-front-exiting")) {
         element.remove();
         frontlineEls.delete(key);
       }
@@ -1673,6 +1714,7 @@ export function renderBattle(battle, documentRef = document) {
     _lastFrameTime: null,
     _lastFollowCheck: -Infinity,
     _trailFadeTimers: new Map(),
+    _frontTransitionTimers: new Map(),
     _beaconEls: beaconEls,
     _beaconExitTimers: beaconExitTimers,
     _lastTrailHistoricalMs: null,
@@ -1685,10 +1727,11 @@ export function renderBattle(battle, documentRef = document) {
       if (this._destroyed) return this.sampledState;
       const bounded = Math.min(duration, Math.max(0, Number.isFinite(presentationMs) ? presentationMs : 0));
       this.currentPresentationMs = bounded;
+      const previousSampled = this.sampledState;
       const sampled = sampleTimeline(compiled, bounded);
       this.sampledState = sampled;
       actorPositions = sampled.actorPositions;
-      renderFrontlines(sampled);
+      renderFrontlines(sampled, mode, previousSampled);
       updatePlaybackReadout(sampled, bounded);
 
       for (const [actorId, { g, heading, symbol }] of unitEls) {
@@ -1781,6 +1824,7 @@ export function renderBattle(battle, documentRef = document) {
     setFrontsEnabled(enabled) {
       if (this._destroyed) return this.frontsEnabled;
       this.frontsEnabled = Boolean(enabled) && frontlinesAvailable;
+      if (!this.frontsEnabled) clearFrontTransitions(this);
       if (this.frontsEnabled) frontlineLayer.removeAttribute("hidden");
       else frontlineLayer.setAttribute("hidden", "");
       const button = $("fronts-button");
@@ -1946,6 +1990,7 @@ export function renderBattle(battle, documentRef = document) {
         map.removeLayer(this._modernBordersLayer);
       }
       clearTrailEffects(this);
+      clearFrontTransitions(this);
       frontlineEls.clear();
       for (const key of [...beaconEls.keys()]) removeBeacon(key);
       this.sampledState = null;

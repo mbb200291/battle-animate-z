@@ -200,6 +200,7 @@ class FrameClock {
     this.now = 0;
     this.nextTimeoutId = 0;
     this.timeouts = new Map();
+    this.timeoutDelays = new Map();
     this.clearedTimeouts = [];
     this.window = {
       performance: { now: () => this.now },
@@ -214,15 +215,17 @@ class FrameClock {
         this.cancelled.push(id);
         this.callbacks.delete(id);
       },
-      setTimeout: (callback) => {
+      setTimeout: (callback, delay = 0) => {
         const id = this.nextTimeoutId;
         this.nextTimeoutId += 1;
         this.timeouts.set(id, callback);
+        this.timeoutDelays.set(id, delay);
         return id;
       },
       clearTimeout: (id) => {
         this.clearedTimeouts.push(id);
         this.timeouts.delete(id);
+        this.timeoutDelays.delete(id);
       },
     };
   }
@@ -423,6 +426,13 @@ function frontlineBattleFixture() {
     snapshot("front_0", "2020-01-01T00:00:00Z", 0),
     snapshot("front_1", "2020-01-01T00:00:01Z", 1, "inferred", 0.6),
   ];
+  return battle;
+}
+
+function topologyChangeBattleFixture() {
+  const battle = frontlineBattleFixture();
+  battle.frontline_snapshots[1].front_lines[0].id = "split_front";
+  battle.frontline_snapshots[1].control_areas[0].id = "split_area";
   return battle;
 }
 
@@ -959,6 +969,136 @@ test("frontline geometry updates keyed nodes and inferred snapshots show confide
   assert.notEqual(firstLine.getAttribute("d"), beforePath);
   assert.ok(firstLine.classList.contains("is-inferred"));
   assert.equal(all.find((element) => element.classList.contains("frontline-confidence-label")).textContent, "推定 · 60%");
+});
+
+test("compatible frontline playback keeps keyed nodes while geometry changes continuously", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const line = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  const before = line.getAttribute("d");
+
+  controller.renderAt(500, { mode: "playback" });
+
+  assert.equal(descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front"), line);
+  assert.notEqual(line.getAttribute("d"), before);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
+test("incompatible frontline playback crossfades old and new nodes for 500ms", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(topologyChangeBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const oldLine = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front");
+
+  controller.renderAt(900, { mode: "playback" });
+  controller.renderAt(1000, { mode: "playback" });
+
+  const newLine = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:split_front");
+  const oldArea = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "area:blue_area");
+  const newArea = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "area:split_area");
+  assert.equal(oldLine.classList.contains("is-front-exiting"), true);
+  assert.equal(newLine.classList.contains("is-front-entering"), true);
+  assert.equal(oldArea.classList.contains("is-front-exiting"), true);
+  assert.equal(newArea.classList.contains("is-front-entering"), true);
+  assert.equal(controller._frontTransitionTimers.size, 1);
+  assert.equal(clock.timeoutDelays.get([...controller._frontTransitionTimers.values()][0]), 500);
+  assert.equal(clock.timeouts.size, 2);
+
+  clock.flushTimeouts();
+
+  assert.equal(oldLine.parentNode, null);
+  assert.equal(oldArea.parentNode, null);
+  assert.equal(newLine.classList.contains("is-front-entering"), false);
+  assert.equal(newArea.classList.contains("is-front-entering"), false);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
+test("frontline seek replaces topology immediately and backward seek is deterministic", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(topologyChangeBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.seek(1000);
+  assert.equal(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front"), false);
+  assert.equal(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "line:split_front"), true);
+  assert.equal(descendants(svg).some((element) =>
+    element.classList.contains("is-front-entering") || element.classList.contains("is-front-exiting")), false);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+
+  controller.seek(500);
+  assert.equal(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front"), true);
+  assert.equal(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "line:split_front"), false);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
+test("reduced motion replaces incompatible frontlines without a timeout", () => {
+  const clock = new FrameClock(true);
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(topologyChangeBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(900, { mode: "playback" });
+  controller.renderAt(1000, { mode: "playback" });
+
+  assert.equal(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front"), false);
+  assert.equal(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "line:split_front"), true);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+  assert.equal(clock.timeouts.size, 1);
+});
+
+test("disabling frontlines clears an active topology transition", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(topologyChangeBattleFixture(), document);
+
+  controller.renderAt(900, { mode: "playback" });
+  controller.renderAt(1000, { mode: "playback" });
+  const timer = [...controller._frontTransitionTimers.values()][0];
+  controller.setFrontsEnabled(false);
+
+  assert.equal(controller._frontTransitionTimers.size, 0);
+  assert.ok(clock.clearedTimeouts.includes(timer));
+});
+
+test("destroy and document replacement clear active frontline transition timers", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const first = renderBattle(topologyChangeBattleFixture(), document);
+  first.renderAt(900, { mode: "playback" });
+  first.renderAt(1000, { mode: "playback" });
+  const firstTimer = [...first._frontTransitionTimers.values()][0];
+
+  const second = renderBattle(topologyChangeBattleFixture(), document);
+
+  assert.equal(first._frontTransitionTimers.size, 0);
+  assert.ok(clock.clearedTimeouts.includes(firstTimer));
+  second.renderAt(900, { mode: "playback" });
+  second.renderAt(1000, { mode: "playback" });
+  const secondTimer = [...second._frontTransitionTimers.values()][0];
+  second.destroy();
+  assert.equal(second._frontTransitionTimers.size, 0);
+  assert.ok(clock.clearedTimeouts.includes(secondTimer));
 });
 
 test("frontline SVG paths keep adjacent dateline coordinates on one world copy", () => {
@@ -1789,6 +1929,16 @@ test("reduced-motion CSS disables beacon pulse animation and overlay transitions
   assert.match(media, /\.event-beacon-pulse[\s\S]*animation:\s*none\s*!important/);
   assert.match(media, /\.event-beacon[\s\S]*transition:\s*none\s*!important/);
   assert.match(media, /\.movement-path[\s\S]*transition:\s*none\s*!important/);
+  assert.match(media, /\.front-line[\s\S]*animation:\s*none\s*!important/);
+});
+
+test("frontline topology CSS crossfades entering and exiting geometry for 500ms", () => {
+  const css = readFileSync(new URL("../app/styles.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.front-line\.is-front-entering,[\s\S]*animation:\s*front-fade-in 500ms ease-out both/);
+  assert.match(css, /\.front-line\.is-front-exiting,[\s\S]*animation:\s*front-fade-out 500ms ease-in both/);
+  assert.match(css, /@keyframes front-fade-in/);
+  assert.match(css, /@keyframes front-fade-out/);
 });
 
 test("destroy is idempotent and cancels frames and listeners exactly once", () => {
