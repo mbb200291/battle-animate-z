@@ -6,7 +6,7 @@ The format intentionally avoids military simulation standards such as MSDL or C-
 
 ## Files
 
-- `schemas/battle-animation-schema.json` defines `battle-animation-schema` versions `0.1.0`, `0.2.0`, and `0.3.0`; `0.3.0` adds timed movement tracks and historical-time playback hints.
+- `schemas/battle-animation-schema.json` defines `battle-animation-schema` versions `0.1.0` through `0.4.0`; `0.4.0` adds optional source-backed frontline snapshots.
 - `battle_animation/types.py` provides Python `TypedDict` definitions matching the schema.
 - `examples/battle-of-waterloo.json` and `examples/battle-of-甲午.json` exercise legacy fallback; `examples/battle-of-甲午海戰.json` is the timed, ship-level `0.3.0` demonstration.
 - `battle_animation/validator.py` validates schema fields, internal references, movement timing, controlled icon tokens, and recoverable warnings.
@@ -48,16 +48,16 @@ Geographic fields use a small GeoJSON subset:
 
 Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, disputed, or unknown through `precision` and `confidence`.
 
-## Generate JSON With AI — Battle JSON Prompt 1.0.0
+## Generate JSON With AI — Battle JSON Prompt 1.1.0
 
 Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
 
 ````text
-你是一個歷史資料標準化助理。請根據我提供且你實際可讀取的 Wikipedia、Wikidata 或其他 Wiki 頁面內容，產生一個完全符合 battle-animation-schema 0.3.0 的 JSON，供地圖動畫 app 使用。
+你是一個歷史資料標準化助理。請根據我提供且你實際可讀取的 Wikipedia、Wikidata 或其他 Wiki 頁面內容，產生一個完全符合 battle-animation-schema 0.4.0 的 JSON，供地圖動畫 app 使用。
 
-本提示詞版本是 Battle JSON Prompt 1.0.0。Prompt 版本與 schema 版本是兩件事：
-- schema_version 固定使用字串 "0.3.0"（不要加 v，也不要寫成數字）。
-- metadata.source_system 固定使用字串 "battle_json_prompt_1.0.0"，讓文件保留生成規則的版本。
+本提示詞版本是 Battle JSON Prompt 1.1.0。Prompt 版本與 schema 版本是兩件事：
+- schema_version 固定使用字串 "0.4.0"（不要加 v，也不要寫成數字）。
+- metadata.source_system 固定使用字串 "battle_json_prompt_1.1.0"，讓文件保留生成規則的版本。
 - 不要新增 prompt_version；目前 schema 沒有這個欄位。
 - 0.1.0 與 0.2.0 只供 app 讀取舊文件，不是本提示詞的輸出選項。
 
@@ -67,7 +67,7 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 2. 最外層物件必須包含這 12 個必備 key（名稱與順序如下）：
    schema_version, metadata, battle, sides, commanders, actors, places,
    historical_events, movements, outcome, sources, animation_hints
-   若提供逐單位交戰細節，可再加 1 個選填 key：engagements。除上述以外不要有其他 key。
+   若有資料，可再加選填 key：engagements、frontline_snapshots。除上述以外不要有其他 key。
 3. 絕對不要輸出 problems / suggested_fixes / corrected_json 這種檢查用包裝物件。
    要直接輸出最終 JSON 本體。
 4. schema_version 與 metadata.source_system 必須使用上方指定的固定字串。
@@ -77,12 +77,13 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 
 ===== 生成原則：資料充分時做深，資料不足時不要猜 =====
 1. 先在內部核對來源涵蓋的單位、事件、時間、位置、交戰與結果，再產生 JSON；不要輸出這份內部核對。
-2. 來源若支持個別軍艦或師／旅等單位、分段時間、代表位置與交戰結果，應使用 schema 0.3.0 的 actors、movements、waypoint_times、engagements 完整表達，不要無故降回粗略層級。
+2. 來源若支持個別軍艦或師／旅等單位、分段時間、代表位置、交戰結果與戰線快照，應使用 schema 0.4.0 的 actors、movements、waypoint_times、engagements、frontline_snapshots 完整表達，不要無故降回粗略層級。
 3. 精細度以來源為上限。低 confidence 不能把臆測變成合法資料。required 欄位不能省略：
    - battle.date 或 historical_events[].time 若只有粗略時間，就以來源支持的 year／month／day／hour／range 粒度填寫；若來源確實未提供時間，使用 label:"時間不詳"、precision:"unknown" 與低 confidence，不要虛構日期。
    - movement.path 既沒有直接來源支持、也不符合下方 inferred 代表性路徑規則時，省略整筆 movement；只有 path 有依據而精確時間不足時，省略選填的 movement.time 與 waypoint_times。
    - engagement 只有在 attacker、target、action 與 result 都有來源支持時才建立；若任何一項缺少來源支持，整筆 engagement 必須省略。
 4. inferred 只能用於來源已確認發生及先後順序的事件之代表性幾何或時間，相關 confidence <= 0.5。
+5. frontline_snapshots 是選填；沒有直接支持該時刻戰線或控制區的來源時，省略 frontline_snapshots，不要從單位點位、戰果敘述或動畫需求反推。
 
 ===== 各物件的「合法欄位」（required 標 *，其餘為選填）=====
 metadata: *id *title *created_at *updated_at *license *source_system, wikidata_qid
@@ -117,6 +118,15 @@ engagements[]（選填；只有來源明確支持「誰打誰、結果如何」�
   - event_id 對應某個 historical_events.id（交火會在該事件顯示）。
   - attacker、target、type 與 result 任一缺少來源支持時，不要建立該 engagement。
   - 當 result 為 sunk / disabled / captured，用 result_actor_id 指出「被擊沉／失能的是哪個 actor」（不填則預設為 target）。
+frontline_snapshots[]（選填）:
+  *id *time *precision *confidence *source_ids, event_id, front_lines, control_areas
+  front_lines[]: *id *geometry
+  control_areas[]: *id *side_id *geometry
+  - 每筆至少提供 front_lines 或 control_areas 其中一項；geometry 分別只能是 LineString 與 Polygon。
+  - source_ids 必須指向直接支持該時刻戰線或控制區的來源；一般戰役敘事、結果或單位曾出現於某地，不足以支持精確戰線。
+  - 只有來源支持戰線存在及大致位置、但幾何由資料員概括時，才可標 precision:"inferred" 且 confidence <= 0.5。
+  - 不得從戰果敘述推導出精確包圍圈、突破口、控制區邊界或戰線形狀。
+  - 同一戰線或控制區跨快照保持相同的戰線與控制區 id；只有實體新增、消失或分裂時才改用新 id。
 outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
   - casualties[] 每項：*side_id *label *confidence, min, max
@@ -128,7 +138,7 @@ animation_hints: *map *style *timeline, camera
   - map: *initial_center *initial_zoom, bounds_padding（initial_center 為 [lon,lat]）
   - style: side_colors, actor_icons, event_icons, movement_line_width
   - timeline: default_event_duration_ms, ordered_event_ids, historical_seconds_per_playback_second, idle_compression_threshold_seconds, idle_compressed_duration_ms（請依時間順序列出所有事件 id）
-    0.3.0 使用連續歷史時間播放；長時間無事件時用 idle 欄位做閒置時間壓縮，不得改寫歷史時間。
+    0.4.0 使用連續歷史時間播放；長時間無事件時用 idle 欄位做閒置時間壓縮，不得改寫歷史時間。
   - camera[] 每項：*event_id *center, zoom（center 為 [lon,lat]）
   - animation_hints 只放渲染提示，不要在裡面放任何史實斷言或 source。
 
@@ -162,6 +172,13 @@ animation_hints: *map *style *timeline, camera
 （例如 <= 0.5）。沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略，
 不得用低 confidence 包裝臆測內容。
 
+===== 輸出前品質檢查（只在內部執行，不要輸出）=====
+- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.1.0"。
+- required 欄位、受控 enum、id 參照、GeoJSON 座標順序及 additionalProperties:false 是否全部符合。
+- movement、engagement、actor 分類與 result 是否都有相應來源，推估是否只限代表性幾何與時間且 confidence <= 0.5。
+- 若輸出 frontline_snapshots，每筆是否有直接支持該時刻戰線或控制區的來源、至少一種合法幾何，且同一實體跨快照使用穩定 id。
+- 是否避免由結果敘述、勝負、包圍或突破等概括文字生成精確戰線或控制區。
+
 ===== 資料正確性 =====
 - 不要編造來源中沒有的細節。資料不精確時用 precision（approximate/inferred/disputed/unknown）與 confidence（0~1）標記。
 - `inferred` 只表達來源支持事件之代表性位置、路徑或時間，不代表可以推造未記載的單位、交戰、結果或分類。
@@ -170,8 +187,8 @@ animation_hints: *map *style *timeline, camera
 
 ===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
 {
-  "schema_version": "0.3.0",
-  "metadata": { "id": "battle_example", "title": "範例戰役", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0", "source_system": "battle_json_prompt_1.0.0" },
+  "schema_version": "0.4.0",
+  "metadata": { "id": "battle_example", "title": "範例戰役", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0", "source_system": "battle_json_prompt_1.1.0" },
   "battle": { "id": "battle_example", "name": "範例戰役", "also_known_as": ["別名"], "part_of": "某場戰爭", "date": { "label": "1894-09-15", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "summary": "一句話說明這場戰役。", "confidence": 0.85 },
   "sides": [
     { "id": "side_a", "name": "甲方", "color": "#2f6fb5", "belligerents": [{ "id": "bel_a", "name": "甲國" }] },
@@ -193,8 +210,11 @@ animation_hints: *map *style *timeline, camera
   "movements": [
     { "id": "mov_b_advance", "event_id": "evt_advance", "actor_id": "actor_b_army", "from_place_id": "place_harbor", "to_place_id": "place_ridge", "path": { "type": "LineString", "coordinates": [[122.1, 39.0], [122.7, 38.8], [123.4, 38.6]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1894-09-16 08:00–09:00", "start": "1894-09-16T08:00:00", "end": "1894-09-16T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1894-09-16T08:00:00", "1894-09-16T08:30:00", "1894-09-16T09:00:00"] }
   ],
+  "frontline_snapshots": [
+    { "id": "front_advance", "time": { "label": "1894-09-16 09:00", "start": "1894-09-16T09:00:00", "precision": "hour", "confidence": 0.5 }, "event_id": "evt_advance", "front_lines": [{ "id": "front_main", "geometry": { "type": "LineString", "coordinates": [[123.1, 38.4], [123.2, 38.9]] } }], "control_areas": [{ "id": "area_b", "side_id": "side_b", "geometry": { "type": "Polygon", "coordinates": [[[122.9, 38.3], [123.2, 38.3], [123.2, 38.9], [122.9, 38.3]]] } }], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_wiki"] }
+  ],
   "outcome": { "summary": "乙方獲勝。", "winner_side_ids": ["side_b"], "casualties": [{ "side_id": "side_a", "label": "約 500 人", "min": 400, "max": 600, "confidence": 0.6 }], "confidence": 0.85, "source_ids": ["src_wiki"] },
-  "sources": [ { "id": "src_wiki", "title": "維基百科條目", "url": "https://zh.wikipedia.org/wiki/...", "retrieved_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0" } ],
+  "sources": [ { "id": "src_wiki", "title": "維基百科條目（含 09:00 戰線圖）", "url": "https://zh.wikipedia.org/wiki/...", "retrieved_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0", "note": "範本中此來源直接支持 09:00 的大致戰線；實際生成時必須替換為真正有此內容的來源。" } ],
   "animation_hints": {
     "map": { "initial_center": [122.8, 38.8], "initial_zoom": 7, "bounds_padding": 0.05 },
     "style": {
@@ -261,7 +281,7 @@ Open:
 http://localhost:8000/app/
 ```
 
-Version `0.3.0` uses continuous historical-time playback（連續歷史時間播放）to interpolate each actor along timed waypoints instead of jumping between events. Long inactive gaps use idle compression（閒置時間壓縮）without changing the historical clock. The transport provides play/pause, a continuous scrubber, `0.5×`/`1×`/`2×`/`4×` speed controls, follow-camera control, and keyboard controls (arrow keys / space).
+Versions `0.3.0` and `0.4.0` use continuous historical-time playback（連續歷史時間播放）to interpolate each actor along timed waypoints instead of jumping between events. Long inactive gaps use idle compression（閒置時間壓縮）without changing the historical clock. The transport provides play/pause, a continuous scrubber, `0.5×`/`1×`/`2×`/`4×` speed controls, follow-camera control, and keyboard controls (arrow keys / space).
 
 地圖疊加效果保持短暫且可控：航跡預設關閉，關閉時不顯示 movement 路徑；開啟後只顯示當前 movement，逐步揭示路徑，完成後淡出。事件使用 active-only 脈衝信標，相近事件會合併顯示數量。系統偏好減少動態效果時，完成的航跡與結束的信標會立即移除。
 
@@ -277,13 +297,13 @@ The basemap is Esri World Hillshade. The app deliberately does not load a road o
 
 The optional borders use the public-domain Natural Earth 1:50m Admin 0 Countries data, credited in the app as “Made with Natural Earth.” The asset was downloaded from the [official raw source at commit `ca96624a56bd078437bca8184e78163e5039ad19`](https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_admin_0_countries.geojson), then transformed to retain only each feature's `type` and `geometry` with empty `properties`.
 
-Actor icons are controlled SVG tokens rendered as clear, top-down naval silhouettes or standard land/air symbols. A `0.3.0` document should provide only catalog tokens. Legacy `0.1.0` and `0.2.0` documents remain supported: missing historical timing receives a deterministic synthetic animation timeline, while missing or legacy icon values fall back by actor kind to a controlled SVG symbol.
+Actor icons are controlled SVG tokens rendered as clear, top-down naval silhouettes or standard land/air symbols. A `0.3.0` or `0.4.0` document should provide only catalog tokens. Legacy `0.1.0` and `0.2.0` documents remain supported: missing historical timing receives a deterministic synthetic animation timeline, while missing or legacy icon values fall back by actor kind to a controlled SVG symbol.
 
 To animate your own data, load a different document with the **Load JSON file** button, the **Paste JSON…** dialog, or by dragging a `.json` file onto the map. The document is validated in the browser first; reference or schema errors are listed inline instead of rendering.
 
 ## Format Boundaries and Unit Granularity
 
-This format is designed for extraction and animation, not simulation. Across versions `0.1.0`, `0.2.0`, and `0.3.0`:
+This format is designed for extraction and animation, not simulation. Across versions `0.1.0` through `0.4.0`:
 
 - naval battles should use ship-level actors（船艦級）for important vessels where sources permit;
 - land battles should use division- or brigade-level actors（師／旅級）and representative positions where sources permit, rather than being restricted to coarse army-level markers;

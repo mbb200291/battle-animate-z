@@ -461,10 +461,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
-    def test_readme_prompt_v1_teaches_v030_provenance_evidence_and_tokens(self):
+    def test_readme_prompt_v11_teaches_v040_frontlines(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         prompt_match = re.search(
-            r"## Generate JSON With AI — Battle JSON Prompt 1\.0\.0.*?"
+            r"## Generate JSON With AI — Battle JSON Prompt 1\.1\.0.*?"
             r"````text\n(?P<prompt>.*?)\n````",
             readme,
             re.DOTALL,
@@ -473,9 +473,9 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         prompt = prompt_match.group("prompt")
 
         for required in (
-            "Battle JSON Prompt 1.0.0",
-            'schema_version 固定使用字串 "0.3.0"',
-            'metadata.source_system 固定使用字串 "battle_json_prompt_1.0.0"',
+            "Battle JSON Prompt 1.1.0",
+            'schema_version 固定使用字串 "0.4.0"',
+            'metadata.source_system 固定使用字串 "battle_json_prompt_1.1.0"',
             "只輸出「一個 JSON 物件」",
             "唯一例外",
             "不要新增 prompt_version",
@@ -491,7 +491,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增",
             "不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱",
             'precision:"inferred"',
-            '"schema_version": "0.3.0"',
+            '"schema_version": "0.4.0"',
             '"historical_seconds_per_playback_second": 120',
             '"idle_compression_threshold_seconds": 900',
             '"idle_compressed_duration_ms": 1200',
@@ -503,6 +503,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "推估僅限於代表性幾何與時間",
             "來源已確認事件確實發生及先後順序",
             "沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略",
+            "frontline_snapshots[]（選填）",
+            "*id *time *precision *confidence *source_ids, event_id, front_lines, control_areas",
+            "front_lines[]: *id *geometry",
+            "control_areas[]: *id *side_id *geometry",
+            "直接支持該時刻戰線或控制區的來源",
+            "不得從戰果敘述推導出精確包圍圈",
+            "跨快照保持相同的戰線與控制區 id",
         ):
             self.assertIn(required, prompt)
         for obsolete in (
@@ -514,6 +521,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             self.assertNotIn(obsolete, prompt)
         self.assertNotIn('"prompt_version"', prompt)
         self.assertEqual(set(re.findall(r"confidence <= (0\.\d+)", prompt)), {"0.5"})
+        self.assertRegex(
+            prompt,
+            r"frontline_snapshots.*選填.*沒有直接支持.*省略",
+        )
         token_paragraph = re.search(
             r"actor_icons 只能使用以下 21 個受控名稱：\n(?P<tokens>.*?unit_generic。)",
             prompt,
@@ -530,7 +541,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         for stale_emoji in ("🚢", "⛵", "🪖", "🐎", "💥", "🛡️", "✈️", "🏰", "🚩"):
             self.assertNotIn(stale_emoji, prompt)
 
-    def test_readme_embedded_v030_sample_validates_in_python_and_browser(self):
+    def test_readme_embedded_v040_sample_validates_in_python_and_browser(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         sample_match = re.search(
             r"===== 輸出格式範本.*?=====\n(?P<json>\{.*?\n\})\n\n===== 資料來源 =====",

@@ -146,6 +146,7 @@ class FakeDocument {
       "follow-button", "trails-button", "event-card-stack", "speed-controls",
       "reset-button", "prev-button", "next-button", "focus-event-button",
       "modern-borders-button", "fronts-button", "validation-warnings", "error-banner",
+      "frontline-status", "frontline-summary", "frontline-sources",
     ]) {
       this.elements.set(id, new FakeElement(id === "battle-map" ? "div" : "span", id));
     }
@@ -155,6 +156,7 @@ class FakeDocument {
     this.elements.get("fronts-button").textContent = "Fronts: off";
     this.elements.get("fronts-button").setAttribute("aria-pressed", "false");
     this.elements.get("fronts-button").disabled = true;
+    this.elements.get("frontline-status").hidden = true;
     const speeds = this.elements.get("speed-controls");
     for (const rate of [0.5, 1, 2, 4]) {
       const button = new FakeElement("button");
@@ -415,12 +417,13 @@ function frontlineBattleFixture() {
   const battle = battleFixture();
   battle.schema_version = "0.4.0";
   battle.sides[0].color = "#2468ac";
-  const snapshot = (id, start, shift, precision = "approximate", confidence = 0.8) => ({
+  const snapshot = (id, start, shift, precision = "exact", confidence = 0.8) => ({
     id,
     time: { label: id, start, precision, confidence },
     precision,
     confidence,
-    source_ids: [],
+    event_id: "opening",
+    source_ids: ["front-source"],
     front_lines: [{
       id: "main_front",
       geometry: { type: "LineString", coordinates: [[shift, -0.5], [shift, 0.5]] },
@@ -438,6 +441,13 @@ function frontlineBattleFixture() {
     snapshot("front_0", "2020-01-01T00:00:00Z", 0),
     snapshot("front_1", "2020-01-01T00:00:01Z", 1, "inferred", 0.6),
   ];
+  battle.sources = [{
+    id: "front-source",
+    title: "<Front source>",
+    url: "https://example.test/front",
+    retrieved_at: "2026-07-25",
+    license: "CC BY 4.0",
+  }];
   return battle;
 }
 
@@ -1034,6 +1044,79 @@ test("source-backed frontlines render in fixed order and toggle independently", 
     historicalTime: document.getElementById("historical-time").textContent,
     unitTransform: unit.getAttribute("transform"),
   }, before);
+});
+
+test("frontline inspector shows source-backed provenance and interpolation safely", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const battle = frontlineBattleFixture();
+  const controller = renderBattle(battle, document);
+  assert.match(document.getElementById("frontline-summary").textContent, /exact.*Interpolated/);
+  controller.seek(500);
+
+  const status = document.getElementById("frontline-status");
+  const summary = document.getElementById("frontline-summary");
+  const sources = document.getElementById("frontline-sources");
+  assert.equal(status.hidden, false);
+  assert.match(summary.textContent, /front_0 → front_1/);
+  assert.match(summary.textContent, /inferred/);
+  assert.match(summary.textContent, /60%/);
+  assert.match(summary.textContent, /Opening/);
+  assert.match(summary.textContent, /Interpolated/);
+  assert.equal(sources.children.length, 1);
+  const anchor = sources.children[0].children[0];
+  assert.equal(anchor.tagName, "A");
+  assert.equal(anchor.textContent, "<Front source>");
+  assert.equal(anchor.getAttribute("href"), "https://example.test/front");
+  assert.equal(sources.innerHTML, "");
+});
+
+test("frontline inspector labels topology crossfade", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(topologyChangeBattleFixture(), document);
+  controller.seek(500);
+  assert.match(document.getElementById("frontline-summary").textContent, /Crossfade/);
+});
+
+test("frontline inspector does not link unsafe source URLs", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const battle = frontlineBattleFixture();
+  battle.sources[0].url = "javascript:alert(1)";
+  renderBattle(battle, document);
+  const anchor = document.getElementById("frontline-sources").children[0].children[0];
+  assert.equal(anchor.getAttribute("href"), null);
+});
+
+test("frontline inspector warns for fallback without inventing a source", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(frontlineFallbackBattleFixture(), document);
+
+  const status = document.getElementById("frontline-status");
+  assert.equal(status.hidden, false);
+  assert.equal(document.getElementById("frontline-summary").textContent, "Not a source-backed frontline");
+  assert.equal(document.getElementById("frontline-sources").children.length, 0);
+});
+
+test("frontline inspector is hidden when fronts are off or unavailable", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineBattleFixture(), document);
+  assert.equal(document.getElementById("frontline-status").hidden, false);
+  controller.setFrontsEnabled(false);
+  assert.equal(document.getElementById("frontline-status").hidden, true);
+
+  const otherDocument = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battleFixture(), otherDocument);
+  assert.equal(otherDocument.getElementById("frontline-status").hidden, true);
 });
 
 test("land fallback defaults on and renders only eligible influences with a derived line", () => {

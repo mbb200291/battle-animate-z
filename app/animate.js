@@ -925,6 +925,10 @@ export function resetBattleUI(documentRef = document) {
     fronts.setAttribute("aria-pressed", "false");
     fronts.disabled = true;
   }
+  const frontlineStatus = documentRef.getElementById("frontline-status");
+  if (frontlineStatus) frontlineStatus.hidden = true;
+  setText(documentRef, "frontline-summary", "");
+  documentRef.getElementById("frontline-sources")?.replaceChildren();
   const focus = documentRef.getElementById("focus-event-button");
   if (focus) focus.disabled = true;
   setTransportEnabled(documentRef, false);
@@ -982,6 +986,8 @@ export function renderBattle(battle, documentRef = document) {
   const sides = new Map(battle.sides.map((side) => [side.id, side]));
   const actors = new Map(battle.actors.map((actor) => [actor.id, actor]));
   const places = new Map(battle.places.map((place) => [place.id, place]));
+  const sources = new Map(battle.sources.map((source) => [source.id, source]));
+  const events = new Map(battle.historical_events.map((event) => [event.id, event]));
   const compiled = compileTimeline(battle);
   const initialSample = sampleTimeline(compiled, 0);
   const fallbackAvailable = battle.schema_version === "0.4.0"
@@ -1277,7 +1283,9 @@ export function renderBattle(battle, documentRef = document) {
     if (mode === "seek") clearFrontTransitions(controller);
     const state = sampled.frontline;
     const active = new Set();
+    controller._frontlineStatus = null;
     if (state) {
+      controller._frontlineStatus = { kind: "source", state };
       const crossedGeometries = mode === "playback" && !reducedMotion
         ? crossedIncompatibleKeyframes(previousSampled, sampled)
         : [];
@@ -1394,12 +1402,67 @@ export function renderBattle(battle, documentRef = document) {
         label.setAttribute("y", point.y - 7);
         label.textContent = `${fallback.label} · ≤${Math.round(fallback.confidence * 100)}%`;
       }
+      if (fallback.influences.length) controller._frontlineStatus = { kind: "fallback" };
     }
     for (const [key, element] of frontlineEls) {
       if (!active.has(key) && !element.classList.contains("is-front-exiting")) {
         element.remove();
         frontlineEls.delete(key);
       }
+    }
+  }
+
+  function updateFrontlineInspector(owner) {
+    const section = $("frontline-status");
+    const summary = $("frontline-summary");
+    const sourceList = $("frontline-sources");
+    if (!section || !summary || !sourceList) return;
+    sourceList.replaceChildren();
+    const status = owner.frontsEnabled ? owner._frontlineStatus : null;
+    section.hidden = !status;
+    if (!status) {
+      summary.textContent = "";
+      return;
+    }
+    if (status.kind === "fallback") {
+      summary.textContent = "Not a source-backed frontline";
+      return;
+    }
+
+    const { before, after, transition } = status.state;
+    const snapshots = before === after ? [before] : [before, after];
+    const time = snapshots.map((snapshot) => snapshot.time?.label || snapshot.id).join(" → ");
+    const precision = snapshots.some((snapshot) => snapshot.precision === "inferred")
+      ? "inferred"
+      : snapshots.map((snapshot) => snapshot.precision).filter(Boolean).join(" → ");
+    const confidence = Math.min(...snapshots.map((snapshot) => snapshot.confidence));
+    const linkedEvents = [...new Set(snapshots
+      .map((snapshot) => events.get(snapshot.event_id)?.title)
+      .filter(Boolean))];
+    const transitionLabel = transition === "crossfade" ? "Crossfade" : "Interpolated";
+    const parts = [
+      time,
+      precision,
+      `${Math.round(confidence * 100)}% confidence`,
+      ...linkedEvents.map((title) => `Event: ${title}`),
+      transitionLabel,
+    ].filter(Boolean);
+    summary.textContent = parts.join(" · ");
+
+    const sourceIds = [...new Set(snapshots.flatMap((snapshot) => snapshot.source_ids || []))];
+    for (const sourceId of sourceIds) {
+      const source = sources.get(sourceId);
+      if (!source) continue;
+      const item = documentRef.createElement("li");
+      const link = documentRef.createElement("a");
+      link.textContent = source.title;
+      if (/^https?:\/\//i.test(source.url)) {
+        link.setAttribute("href", source.url);
+        link.setAttribute("target", "_blank");
+        link.setAttribute("rel", "noopener noreferrer");
+      }
+      item.append(link);
+      sourceList.append(item);
     }
   }
 
@@ -1884,6 +1947,7 @@ export function renderBattle(battle, documentRef = document) {
       this.sampledState = sampled;
       actorPositions = sampled.actorPositions;
       renderFrontlines(sampled, mode, previousSampled);
+      updateFrontlineInspector(this);
       updatePlaybackReadout(sampled, bounded);
 
       for (const [actorId, { g, heading, symbol }] of unitEls) {
@@ -1985,6 +2049,7 @@ export function renderBattle(battle, documentRef = document) {
         button.setAttribute("aria-pressed", String(this.frontsEnabled));
         button.textContent = `Fronts: ${this.frontsEnabled ? "on" : "off"}`;
       }
+      updateFrontlineInspector(this);
       return this.frontsEnabled;
     },
 
