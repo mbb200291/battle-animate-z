@@ -288,11 +288,12 @@ def _validate_references(document: Any, errors: list[ValidationError]) -> None:
                         )
             source_values = snapshot.get("source_ids", [])
             if isinstance(source_values, list):
-                for source_id in source_values:
+                for source_index, source_id in enumerate(source_values):
                     if isinstance(source_id, str) and source_id not in source_ids:
                         errors.append(
                             ValidationError(
-                                f"{path}.source_ids", f"unknown source id {source_id!r}"
+                                f"{path}.source_ids[{source_index}]",
+                                f"unknown source id {source_id!r}",
                             )
                         )
 

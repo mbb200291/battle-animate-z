@@ -666,7 +666,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ),
             (
                 lambda snapshot: snapshot.__setitem__("source_ids", ["missing-source"]),
-                "$.frontline_snapshots[0].source_ids",
+                "$.frontline_snapshots[0].source_ids[0]",
                 "unknown source id 'missing-source'",
             ),
         )
