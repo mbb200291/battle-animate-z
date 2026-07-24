@@ -158,6 +158,19 @@ test("one mutual pair creates a short perpendicular contact segment", () => {
   assert.ok(derived.contactLine[1][1] > 0);
 });
 
+test("coincident opposing units retain influences without a contact line", () => {
+  const derived = deriveFrontlineFallback({
+    actors: [
+      { id: "a", side_id: "a", kind: "army" },
+      { id: "b", side_id: "b", kind: "army" },
+    ],
+    positions: new Map([["a", [1, 1]], ["b", [1, 1]]]),
+    maxPairDistance: 10,
+  });
+  assert.equal(derived.influences.length, 2);
+  assert.equal(derived.contactLine, null);
+});
+
 test("one side or over-distance enemies retain influences without a contact line", () => {
   const oneSide = deriveFrontlineFallback({
     actors: actors.slice(0, 2),

@@ -249,7 +249,7 @@ export function deriveFrontlineFallback({ actors = [], positions = new Map(), ma
     const latitudeSpan = Math.max(...midpoints.map(([, value]) => value)) - Math.min(...midpoints.map(([, value]) => value));
     const axis = longitudeSpan >= latitudeSpan ? 0 : 1;
     contactLine = midpoints.sort((left, right) => left[axis] - right[axis]).map((point) => [...point]);
-  } else if (pairs.length === 1) {
+  } else if (pairs.length === 1 && pairs[0].distance > 0) {
     const pair = pairs[0];
     const [left, right] = pair.positions;
     const dx = deltaLongitude(left[0], right[0]);
