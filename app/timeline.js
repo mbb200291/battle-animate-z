@@ -416,13 +416,13 @@ function compatibleStableIds(before, after) {
 function sampleFrontline(timeline, historicalMs) {
   const keyframes = array(timeline?.frontlineKeyframes);
   if (!keyframes.length) return null;
+  if (historicalMs <= keyframes[0].historicalMs) {
+    const snapshot = keyframes[0].snapshot;
+    return { before: snapshot, after: snapshot, progress: 0, transition: "interpolate" };
+  }
   const afterIndex = keyframes.findIndex((keyframe) => keyframe.historicalMs > historicalMs);
   if (afterIndex < 0) {
     const snapshot = keyframes.at(-1).snapshot;
-    return { before: snapshot, after: snapshot, progress: 0, transition: "interpolate" };
-  }
-  if (afterIndex === 0) {
-    const snapshot = keyframes[0].snapshot;
     return { before: snapshot, after: snapshot, progress: 0, transition: "interpolate" };
   }
   const before = keyframes[afterIndex - 1];

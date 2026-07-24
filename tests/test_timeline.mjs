@@ -126,6 +126,21 @@ test("one frontline snapshot persists and missing-start snapshots are excluded",
   }
 });
 
+test("frontline sampling clamps to the first and last snapshots outside a multi-keyframe range", () => {
+  const timeline = compileTimeline(frontlineBattle());
+
+  for (const [presentationMs, expectedId] of [
+    [-1, "front_0"],
+    [timeline.presentationDurationMs + 1, "front_20"],
+  ]) {
+    const frontline = sampleTimeline(timeline, presentationMs).frontline;
+    assert.equal(frontline.before.id, expectedId);
+    assert.equal(frontline.after.id, expectedId);
+    assert.equal(frontline.before, frontline.after);
+    assert.equal(frontline.progress, 0);
+  }
+});
+
 test("frontline keyframes use source order to break equal-time ties", () => {
   const timeline = compileTimeline(frontlineBattle([
     frontlineSnapshot("later_source", 10),
