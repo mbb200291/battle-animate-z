@@ -61,12 +61,325 @@ function fixture(version = "0.3.0") {
   return battle;
 }
 
+function frontlineBattle() {
+  const battle = fixture();
+  battle.schema_version = "0.4.0";
+  battle.frontline_snapshots = [{
+    id: "front_day_1",
+    time: {
+      label: "1942-11-19T08:00:00Z",
+      start: "1942-11-19T08:00:00Z",
+      precision: "hour",
+      confidence: 0.9,
+    },
+    event_id: "event-a",
+    front_lines: [{
+      id: "front_main",
+      geometry: {
+        type: "LineString",
+        coordinates: [[43.1, 49.2], [44.0, 48.9]],
+      },
+    }],
+    control_areas: [{
+      id: "area_a",
+      side_id: "side-a",
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [42.5, 49.8],
+          [44.0, 49.5],
+          [44.0, 48.9],
+          [42.5, 49.0],
+          [42.5, 49.8],
+        ]],
+      },
+    }],
+    precision: "approximate",
+    confidence: 0.8,
+    source_ids: ["source-a"],
+  }];
+  return battle;
+}
+
 function messages(result, kind) {
   return result[kind].join("\n");
 }
 
 test("valid v0.3 document has structured empty diagnostics", () => {
   assert.deepEqual(validateBattle(fixture()), { errors: [], warnings: [] });
+});
+
+test("valid v0.4 frontline document has structured empty diagnostics", () => {
+  assert.deepEqual(validateBattle(frontlineBattle()), { errors: [], warnings: [] });
+});
+
+test("frontline snapshot without a start warns but remains valid", () => {
+  const battle = frontlineBattle();
+  delete battle.frontline_snapshots[0].time.start;
+  assert.deepEqual(validateBattle(battle), {
+    errors: [],
+    warnings: [
+      "$.frontline_snapshots[0].time: snapshot without time.start is excluded from animation",
+    ],
+  });
+});
+
+test("frontline containers and members reject malformed shapes without throwing", () => {
+  const cases = [
+    ["container object", (battle) => { battle.frontline_snapshots = {}; }, /\$\.frontline_snapshots.*expected array/i],
+    ["null snapshot", (battle) => { battle.frontline_snapshots[0] = null; }, /\$\.frontline_snapshots\[0\].*expected object/i],
+    ["null front line", (battle) => { battle.frontline_snapshots[0].front_lines[0] = null; }, /\$\.frontline_snapshots\[0\]\.front_lines\[0\].*expected object/i],
+    ["null control area", (battle) => { battle.frontline_snapshots[0].control_areas[0] = null; }, /\$\.frontline_snapshots\[0\]\.control_areas\[0\].*expected object/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle);
+    let result;
+    assert.doesNotThrow(() => { result = validateBattle(battle); }, label);
+    assert.equal(result.errors.length, 1, `${label}: ${result.errors.join("\n")}`);
+    assert.match(result.errors[0], expected, label);
+  }
+});
+
+test("frontline snapshot, line, and area objects allow only schema properties", () => {
+  const cases = [
+    ["snapshot", (battle) => { battle.frontline_snapshots[0].note = "extra"; }, /\$\.frontline_snapshots\[0\]\.note.*additional property/i],
+    ["front line", (battle) => { battle.frontline_snapshots[0].front_lines[0].note = "extra"; }, /\$\.frontline_snapshots\[0\]\.front_lines\[0\]\.note.*additional property/i],
+    ["control area", (battle) => { battle.frontline_snapshots[0].control_areas[0].note = "extra"; }, /\$\.frontline_snapshots\[0\]\.control_areas\[0\]\.note.*additional property/i],
+    ["line geometry", (battle) => { battle.frontline_snapshots[0].front_lines[0].geometry.note = "extra"; }, /\$\.frontline_snapshots\[0\]\.front_lines\[0\]\.geometry\.note.*additional property/i],
+    ["area geometry", (battle) => { battle.frontline_snapshots[0].control_areas[0].geometry.note = "extra"; }, /\$\.frontline_snapshots\[0\]\.control_areas\[0\]\.geometry\.note.*additional property/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle);
+    const errors = validateBattle(battle).errors;
+    assert.equal(errors.length, 1, `${label}: ${errors.join("\n")}`);
+    assert.match(errors[0], expected, label);
+  }
+});
+
+test("frontline snapshot, line, and area required fields are enforced", () => {
+  const cases = [
+    ["snapshot id", (snapshot) => { delete snapshot.id; }, /\$\.frontline_snapshots\[0\]\.id.*required/i],
+    ["snapshot time", (snapshot) => { delete snapshot.time; }, /\$\.frontline_snapshots\[0\]\.time.*required/i],
+    ["snapshot precision", (snapshot) => { delete snapshot.precision; }, /\$\.frontline_snapshots\[0\]\.precision.*required/i],
+    ["snapshot confidence", (snapshot) => { delete snapshot.confidence; }, /\$\.frontline_snapshots\[0\]\.confidence.*required/i],
+    ["snapshot sources", (snapshot) => { delete snapshot.source_ids; }, /\$\.frontline_snapshots\[0\]\.source_ids.*required/i],
+    ["line id", (snapshot) => { delete snapshot.front_lines[0].id; }, /\$\.frontline_snapshots\[0\]\.front_lines\[0\]\.id.*required/i],
+    ["line geometry", (snapshot) => { delete snapshot.front_lines[0].geometry; }, /\$\.frontline_snapshots\[0\]\.front_lines\[0\]\.geometry.*required/i],
+    ["area id", (snapshot) => { delete snapshot.control_areas[0].id; }, /\$\.frontline_snapshots\[0\]\.control_areas\[0\]\.id.*required/i],
+    ["area side", (snapshot) => { delete snapshot.control_areas[0].side_id; }, /\$\.frontline_snapshots\[0\]\.control_areas\[0\]\.side_id.*required/i],
+    ["area geometry", (snapshot) => { delete snapshot.control_areas[0].geometry; }, /\$\.frontline_snapshots\[0\]\.control_areas\[0\]\.geometry.*required/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle.frontline_snapshots[0]);
+    assert.match(messages(validateBattle(battle), "errors"), expected, label);
+  }
+});
+
+test("frontline scalar and source shapes follow the v0.4 schema", () => {
+  const cases = [
+    ["snapshot id", (snapshot) => { snapshot.id = "1 bad"; }, /\.id.*identifier/i],
+    ["event id", (snapshot) => { snapshot.event_id = []; }, /\.event_id.*expected identifier/i],
+    ["precision", (snapshot) => { snapshot.precision = "certain"; }, /\.precision.*expected one of/i],
+    ["confidence", (snapshot) => { snapshot.confidence = 1.1; }, /\.confidence.*expected value <= 1/i],
+    ["sources container", (snapshot) => { snapshot.source_ids = {}; }, /\.source_ids.*expected array/i],
+    ["sources minimum", (snapshot) => { snapshot.source_ids = []; }, /\.source_ids.*expected at least 1 item/i],
+    ["source id", (snapshot) => { snapshot.source_ids = ["1 bad"]; }, /\.source_ids\[0\].*identifier/i],
+    ["line id", (snapshot) => { snapshot.front_lines[0].id = ""; }, /\.front_lines\[0\]\.id.*identifier/i],
+    ["area id", (snapshot) => { snapshot.control_areas[0].id = ""; }, /\.control_areas\[0\]\.id.*identifier/i],
+    ["side id", (snapshot) => { snapshot.control_areas[0].side_id = {}; }, /\.side_id.*expected identifier/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle.frontline_snapshots[0]);
+    let result;
+    assert.doesNotThrow(() => { result = validateBattle(battle); }, label);
+    assert.match(messages(result, "errors"), expected, label);
+  }
+});
+
+test("frontline collections must contain at least one shape when present", () => {
+  for (const collection of ["front_lines", "control_areas"]) {
+    const battle = frontlineBattle();
+    battle.frontline_snapshots[0][collection] = [];
+    assert.match(
+      messages(validateBattle(battle), "errors"),
+      new RegExp(`frontline_snapshots\\[0\\]\\.${collection}.*expected at least 1 item`, "i"),
+      collection,
+    );
+  }
+});
+
+test("frontline LineString geometry requires exact keys and at least two coordinate pairs", () => {
+  const cases = [
+    ["type", (geometry) => { geometry.type = "Polygon"; }, /\.geometry\.type.*expected "LineString"/i],
+    ["coordinates container", (geometry) => { geometry.coordinates = {}; }, /\.geometry\.coordinates.*expected array/i],
+    ["minimum", (geometry) => { geometry.coordinates = [[0, 0]]; }, /\.geometry\.coordinates.*expected at least 2 item/i],
+    ["position", (geometry) => { geometry.coordinates[1] = [0]; }, /\.geometry\.coordinates\[1\].*coordinate pair/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle.frontline_snapshots[0].front_lines[0].geometry);
+    assert.match(messages(validateBattle(battle), "errors"), expected, label);
+  }
+  for (const field of ["type", "coordinates"]) {
+    const battle = frontlineBattle();
+    delete battle.frontline_snapshots[0].front_lines[0].geometry[field];
+    assert.match(
+      messages(validateBattle(battle), "errors"),
+      new RegExp(`geometry\\.${field}.*required`, "i"),
+      field,
+    );
+  }
+});
+
+test("frontline Polygon geometry follows existing schema ring rules", () => {
+  const cases = [
+    ["geometry object", (area) => { area.geometry = null; }, /\.geometry.*expected object/i],
+    ["type", (area) => { area.geometry.type = "LineString"; }, /\.geometry\.type.*expected "Polygon"/i],
+    ["coordinates container", (area) => { area.geometry.coordinates = {}; }, /\.geometry\.coordinates.*expected array/i],
+    ["rings minimum", (area) => { area.geometry.coordinates = []; }, /\.geometry\.coordinates.*expected at least 1 item/i],
+    ["ring container", (area) => { area.geometry.coordinates = [null]; }, /\.geometry\.coordinates\[0\].*expected array/i],
+    ["ring minimum", (area) => { area.geometry.coordinates = [[[0, 0], [1, 1], [0, 0]]]; }, /\.geometry\.coordinates\[0\].*expected at least 4 item/i],
+    ["position", (area) => { area.geometry.coordinates[0][1] = [0]; }, /\.geometry\.coordinates\[0\]\[1\].*coordinate pair/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle.frontline_snapshots[0].control_areas[0]);
+    assert.match(messages(validateBattle(battle), "errors"), expected, label);
+  }
+});
+
+test("frontline BattleTime enforces exact shape, required values, and lexical time", () => {
+  const cases = [
+    ["object", (snapshot) => { snapshot.time = null; }, /\.time.*expected object/i],
+    ["extra", (snapshot) => { snapshot.time.note = "extra"; }, /\.time\.note.*additional property/i],
+    ["label missing", (snapshot) => { delete snapshot.time.label; }, /\.time\.label.*required/i],
+    ["precision missing", (snapshot) => { delete snapshot.time.precision; }, /\.time\.precision.*required/i],
+    ["confidence missing", (snapshot) => { delete snapshot.time.confidence; }, /\.time\.confidence.*required/i],
+    ["label type", (snapshot) => { snapshot.time.label = 1; }, /\.time\.label.*expected string/i],
+    ["precision enum", (snapshot) => { snapshot.time.precision = "minute"; }, /\.time\.precision.*expected one of/i],
+    ["confidence range", (snapshot) => { snapshot.time.confidence = -0.1; }, /\.time\.confidence.*expected value >= 0/i],
+    ["start type", (snapshot) => { snapshot.time.start = 1; }, /\.time\.start.*expected string/i],
+    ["start lexical", (snapshot) => { snapshot.time.start = "not-a-date"; }, /\.time\.start.*invalid ISO battle time/i],
+    ["end lexical", (snapshot) => { snapshot.time.end = "1942-13-01"; }, /\.time\.end.*invalid ISO battle time/i],
+    ["reversed", (snapshot) => { snapshot.time.end = "1942-11-19T07:59:00Z"; }, /\.time.*end must not be before start/i],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle.frontline_snapshots[0]);
+    assert.match(messages(validateBattle(battle), "errors"), expected, label);
+  }
+});
+
+test("frontline snapshot requires a line or control area collection", () => {
+  const battle = frontlineBattle();
+  delete battle.frontline_snapshots[0].front_lines;
+  delete battle.frontline_snapshots[0].control_areas;
+  assert.deepEqual(validateBattle(battle).errors, [
+    "$.frontline_snapshots[0]: must include front_lines or control_areas",
+  ]);
+});
+
+test("frontline references report exact indexed paths", () => {
+  const cases = [
+    [
+      (snapshot) => { snapshot.event_id = "missing-event"; },
+      '$.frontline_snapshots[0].event_id: unknown id "missing-event"',
+    ],
+    [
+      (snapshot) => { snapshot.control_areas[0].side_id = "missing-side"; },
+      '$.frontline_snapshots[0].control_areas[0].side_id: unknown id "missing-side"',
+    ],
+    [
+      (snapshot) => { snapshot.source_ids = ["missing-source"]; },
+      '$.frontline_snapshots[0].source_ids[0]: unknown source id "missing-source"',
+    ],
+  ];
+  for (const [mutate, expected] of cases) {
+    const battle = frontlineBattle();
+    mutate(battle.frontline_snapshots[0]);
+    assert.deepEqual(validateBattle(battle).errors, [expected]);
+  }
+});
+
+test("frontline ids are unique at their Python-defined scopes", () => {
+  const duplicateSnapshot = frontlineBattle();
+  const later = structuredClone(duplicateSnapshot.frontline_snapshots[0]);
+  later.time.start = "1942-11-19T09:00:00Z";
+  duplicateSnapshot.frontline_snapshots.push(later);
+  assert.match(
+    messages(validateBattle(duplicateSnapshot), "errors"),
+    /\$\.frontline_snapshots\[1\]\.id: duplicate id "front_day_1"/,
+  );
+
+  for (const collection of ["front_lines", "control_areas"]) {
+    const battle = frontlineBattle();
+    battle.frontline_snapshots[0][collection].push(
+      structuredClone(battle.frontline_snapshots[0][collection][0]),
+    );
+    assert.match(
+      messages(validateBattle(battle), "errors"),
+      new RegExp(`\\$\\.frontline_snapshots\\[0\\]\\.${collection}\\[1\\]\\.id: duplicate id`),
+      collection,
+    );
+  }
+
+  const stable = frontlineBattle();
+  const next = structuredClone(stable.frontline_snapshots[0]);
+  next.id = "front_day_2";
+  next.time.start = "1942-11-19T09:00:00Z";
+  stable.frontline_snapshots.push(next);
+  assert.deepEqual(validateBattle(stable).errors, []);
+});
+
+test("frontline starts must be strictly increasing", () => {
+  for (const start of ["1942-11-19T08:00:00Z", "1942-11-19T07:59:00Z"]) {
+    const battle = frontlineBattle();
+    const later = structuredClone(battle.frontline_snapshots[0]);
+    later.id = "front_day_2";
+    later.time.start = start;
+    battle.frontline_snapshots.push(later);
+    assert.match(
+      messages(validateBattle(battle), "errors"),
+      /\$\.frontline_snapshots\[1\]\.time\.start: values must be strictly increasing/,
+      start,
+    );
+  }
+});
+
+test("missing frontline start does not reset the last valid ordering baseline", () => {
+  for (const finalStart of ["1942-11-19T08:00:00Z", "1942-11-19T07:59:00Z"]) {
+    const battle = frontlineBattle();
+    const missing = structuredClone(battle.frontline_snapshots[0]);
+    missing.id = "front_day_2";
+    delete missing.time.start;
+    const final = structuredClone(battle.frontline_snapshots[0]);
+    final.id = "front_day_3";
+    final.time.start = finalStart;
+    battle.frontline_snapshots.push(missing, final);
+    const result = validateBattle(battle);
+    assert.match(
+      messages(result, "errors"),
+      /\$\.frontline_snapshots\[2\]\.time\.start: values must be strictly increasing/,
+      finalStart,
+    );
+    assert.deepEqual(result.warnings, [
+      "$.frontline_snapshots[1].time: snapshot without time.start is excluded from animation",
+    ]);
+  }
+});
+
+test("malformed frontline start is an error and never a missing-start warning", () => {
+  const battle = frontlineBattle();
+  battle.frontline_snapshots[0].time.start = "not-a-date";
+  const result = validateBattle(battle);
+  assert.deepEqual(result.errors, [
+    "$.frontline_snapshots[0].time.start: invalid ISO battle time",
+  ]);
+  assert.deepEqual(result.warnings, []);
 });
 
 test("non-object input returns structured errors", () => {
@@ -353,6 +666,43 @@ function fakeDocument() {
   };
   return documentRef;
 }
+
+test("frontline validation blocks fatal rendering but permits warning-only documents", () => {
+  const documentRef = fakeDocument();
+  const rendered = [];
+  let destroyed = 0;
+  const render = (battle) => {
+    rendered.push(battle);
+    return { destroy() { destroyed += 1; } };
+  };
+  const warned = frontlineBattle();
+  delete warned.frontline_snapshots[0].time.start;
+  const controller = animate.setBattleDocument(warned, {
+    documentRef,
+    render,
+    wireControls() {},
+  });
+  assert.ok(controller);
+  assert.equal(rendered.length, 1);
+  assert.equal(documentRef.elements.get("validation-warnings").hidden, false);
+  assert.match(
+    documentRef.elements.get("validation-warnings").textContent,
+    /snapshot without time\.start is excluded from animation/,
+  );
+
+  const invalid = frontlineBattle();
+  invalid.frontline_snapshots[0].front_lines = [];
+  const result = animate.setBattleDocument(invalid, {
+    documentRef,
+    render,
+    wireControls() {},
+    previousController: controller,
+  });
+  assert.equal(result, undefined);
+  assert.equal(rendered.length, 1);
+  assert.equal(destroyed, 1);
+  assert.equal(documentRef.elements.get("error-banner").hidden, false);
+});
 
 test("warnings render safely without blocking and clear on replacement; fatal input destroys prior map", () => {
   const { setBattleDocument } = animate;

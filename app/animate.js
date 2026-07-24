@@ -158,8 +158,8 @@ export function validateBattle(battle) {
   }
   const rendererShapesValid = validateRendererShapes(battle, errors);
 
-  if ("schema_version" in battle && !["0.1.0", "0.2.0", "0.3.0"].includes(battle.schema_version)) {
-    errors.push(`schema_version must be "0.1.0", "0.2.0", or "0.3.0", got ${JSON.stringify(battle.schema_version)}`);
+  if ("schema_version" in battle && !["0.1.0", "0.2.0", "0.3.0", "0.4.0"].includes(battle.schema_version)) {
+    errors.push(`schema_version must be "0.1.0", "0.2.0", "0.3.0", or "0.4.0", got ${JSON.stringify(battle.schema_version)}`);
   }
   if (!rendererShapesValid) return { errors, warnings };
 
@@ -230,6 +230,7 @@ export function validateBattle(battle) {
     array(outcome.source_ids).forEach((id) => check(id, sourceIds, "outcome.source_ids"));
   }
 
+  validateFrontlineSemantics(battle, eventIds, sideIds, sourceIds, errors, warnings);
   validateTiming(battle, errors, warnings);
   validateMovementOverlaps(battle, errors, warnings);
   validateActorIconTokens(battle, warnings);
@@ -251,6 +252,163 @@ function validateCoordinatePair(value, path, errors) {
   return true;
 }
 
+function validateExactObject(value, path, allowed, required, errors) {
+  if (!isObject(value)) {
+    errors.push(`${path}: expected object`);
+    return false;
+  }
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) errors.push(`${path}.${key}: additional property is not allowed`);
+  }
+  for (const key of required) {
+    if (!(key in value)) errors.push(`${path}.${key}: required property`);
+  }
+  return true;
+}
+
+function validateIdentifier(value, path, errors) {
+  if (typeof value !== "string" || !/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(value)) {
+    errors.push(`${path}: expected identifier`);
+    return false;
+  }
+  return true;
+}
+
+function validateConfidence(value, path, errors) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    errors.push(`${path}: expected finite number`);
+  } else if (value < 0) {
+    errors.push(`${path}: expected value >= 0`);
+  } else if (value > 1) {
+    errors.push(`${path}: expected value <= 1`);
+  }
+}
+
+function validateDateValueShape(value, path, errors) {
+  if (!validateExactObject(
+    value,
+    path,
+    ["label", "start", "end", "precision", "confidence"],
+    ["label", "precision", "confidence"],
+    errors,
+  )) return;
+  if ("label" in value && typeof value.label !== "string") errors.push(`${path}.label: expected string`);
+  for (const field of ["start", "end"]) {
+    if (field in value && typeof value[field] !== "string") {
+      errors.push(`${path}.${field}: expected string`);
+    }
+  }
+  if ("precision" in value
+      && !["year", "month", "day", "hour", "range", "unknown"].includes(value.precision)) {
+    errors.push(`${path}.precision: expected one of ["year","month","day","hour","range","unknown"]`);
+  }
+  if ("confidence" in value) validateConfidence(value.confidence, `${path}.confidence`, errors);
+}
+
+function validateLineStringShape(value, path, errors) {
+  if (!validateExactObject(value, path, ["type", "coordinates"], ["type", "coordinates"], errors)) return;
+  if ("type" in value && value.type !== "LineString") {
+    errors.push(`${path}.type: expected "LineString", got ${JSON.stringify(value.type)}`);
+  }
+  if (!("coordinates" in value)) return;
+  if (!Array.isArray(value.coordinates)) {
+    errors.push(`${path}.coordinates: expected array`);
+    return;
+  }
+  if (value.coordinates.length < 2) errors.push(`${path}.coordinates: expected at least 2 items`);
+  value.coordinates.forEach((position, index) => {
+    validateCoordinatePair(position, `${path}.coordinates[${index}]`, errors);
+  });
+}
+
+function validatePolygonShape(value, path, errors) {
+  if (!validateExactObject(value, path, ["type", "coordinates"], ["type", "coordinates"], errors)) return;
+  if ("type" in value && value.type !== "Polygon") {
+    errors.push(`${path}.type: expected "Polygon", got ${JSON.stringify(value.type)}`);
+  }
+  if (!("coordinates" in value)) return;
+  if (!Array.isArray(value.coordinates)) {
+    errors.push(`${path}.coordinates: expected array`);
+    return;
+  }
+  if (value.coordinates.length < 1) errors.push(`${path}.coordinates: expected at least 1 item`);
+  value.coordinates.forEach((ring, ringIndex) => {
+    const ringPath = `${path}.coordinates[${ringIndex}]`;
+    if (!Array.isArray(ring)) {
+      errors.push(`${ringPath}: expected array`);
+      return;
+    }
+    if (ring.length < 4) errors.push(`${ringPath}: expected at least 4 items`);
+    ring.forEach((position, positionIndex) => {
+      validateCoordinatePair(position, `${ringPath}[${positionIndex}]`, errors);
+    });
+  });
+}
+
+function validateFrontlineShapes(battle, errors) {
+  if (!Array.isArray(battle.frontline_snapshots)) return;
+  battle.frontline_snapshots.forEach((snapshot, snapshotIndex) => {
+    const path = `$.frontline_snapshots[${snapshotIndex}]`;
+    if (!validateExactObject(
+      snapshot,
+      path,
+      ["id", "time", "event_id", "front_lines", "control_areas", "precision", "confidence", "source_ids"],
+      ["id", "time", "precision", "confidence", "source_ids"],
+      errors,
+    )) return;
+    if ("id" in snapshot) validateIdentifier(snapshot.id, `${path}.id`, errors);
+    if ("time" in snapshot) validateDateValueShape(snapshot.time, `${path}.time`, errors);
+    if ("event_id" in snapshot) validateIdentifier(snapshot.event_id, `${path}.event_id`, errors);
+    if ("precision" in snapshot
+        && !["exact", "approximate", "inferred", "disputed", "unknown"].includes(snapshot.precision)) {
+      errors.push(`${path}.precision: expected one of ["exact","approximate","inferred","disputed","unknown"]`);
+    }
+    if ("confidence" in snapshot) validateConfidence(snapshot.confidence, `${path}.confidence`, errors);
+    if (!("front_lines" in snapshot) && !("control_areas" in snapshot)) {
+      errors.push(`${path}: must include front_lines or control_areas`);
+    }
+
+    for (const collectionName of ["front_lines", "control_areas"]) {
+      if (!(collectionName in snapshot)) continue;
+      const collectionPath = `${path}.${collectionName}`;
+      const collection = snapshot[collectionName];
+      if (!Array.isArray(collection)) {
+        errors.push(`${collectionPath}: expected array`);
+        continue;
+      }
+      if (collection.length < 1) errors.push(`${collectionPath}: expected at least 1 item`);
+      collection.forEach((shape, shapeIndex) => {
+        const shapePath = `${collectionPath}[${shapeIndex}]`;
+        const required = collectionName === "front_lines"
+          ? ["id", "geometry"] : ["id", "side_id", "geometry"];
+        if (!validateExactObject(shape, shapePath, required, required, errors)) return;
+        if ("id" in shape) validateIdentifier(shape.id, `${shapePath}.id`, errors);
+        if ("side_id" in shape) validateIdentifier(shape.side_id, `${shapePath}.side_id`, errors);
+        if ("geometry" in shape) {
+          if (collectionName === "front_lines") {
+            validateLineStringShape(shape.geometry, `${shapePath}.geometry`, errors);
+          } else {
+            validatePolygonShape(shape.geometry, `${shapePath}.geometry`, errors);
+          }
+        }
+      });
+    }
+
+    if ("source_ids" in snapshot) {
+      if (!Array.isArray(snapshot.source_ids)) {
+        errors.push(`${path}.source_ids: expected array`);
+      } else {
+        if (snapshot.source_ids.length < 1) {
+          errors.push(`${path}.source_ids: expected at least 1 item`);
+        }
+        snapshot.source_ids.forEach((sourceId, sourceIndex) => {
+          validateIdentifier(sourceId, `${path}.source_ids[${sourceIndex}]`, errors);
+        });
+      }
+    }
+  });
+}
+
 function validateRendererShapes(battle, errors) {
   const initialErrorCount = errors.length;
   const arrayKeys = [
@@ -262,6 +420,7 @@ function validateRendererShapes(battle, errors) {
     "movements",
     "sources",
     "engagements",
+    "frontline_snapshots",
   ];
   for (const key of arrayKeys) {
     if (key in battle && !Array.isArray(battle[key])) errors.push(`$.${key}: expected array`);
@@ -272,7 +431,14 @@ function validateRendererShapes(battle, errors) {
     }
   }
 
-  const objectItemCollections = ["sides", "actors", "places", "historical_events", "movements", "engagements"];
+  const objectItemCollections = [
+    "sides",
+    "actors",
+    "places",
+    "historical_events",
+    "movements",
+    "engagements",
+  ];
   for (const key of objectItemCollections) {
     if (!Array.isArray(battle[key])) continue;
     battle[key].forEach((item, index) => {
@@ -354,6 +520,7 @@ function validateRendererShapes(battle, errors) {
       }
     });
   }
+  validateFrontlineShapes(battle, errors);
   if (isObject(battle.animation_hints)) {
     for (const field of ["map", "style", "timeline"]) {
       if (field in battle.animation_hints && !isObject(battle.animation_hints[field])) {
@@ -439,9 +606,60 @@ function validateTimeRange(value, path, errors) {
   return parsed;
 }
 
+function validateUniqueIds(items, path, errors) {
+  const seen = new Set();
+  items.forEach((item, index) => {
+    if (!isObject(item) || typeof item.id !== "string") return;
+    if (seen.has(item.id)) errors.push(`${path}[${index}].id: duplicate id ${JSON.stringify(item.id)}`);
+    seen.add(item.id);
+  });
+}
+
+function validateFrontlineSemantics(battle, eventIds, sideIds, sourceIds, errors, warnings) {
+  const snapshots = Array.isArray(battle.frontline_snapshots) ? battle.frontline_snapshots : [];
+  validateUniqueIds(snapshots, "$.frontline_snapshots", errors);
+  let previousStart = null;
+  snapshots.forEach((snapshot, snapshotIndex) => {
+    if (!isObject(snapshot)) return;
+    const path = `$.frontline_snapshots[${snapshotIndex}]`;
+    for (const collectionName of ["front_lines", "control_areas"]) {
+      validateUniqueIds(snapshot[collectionName] || [], `${path}.${collectionName}`, errors);
+    }
+    if ("event_id" in snapshot && !eventIds.has(snapshot.event_id)) {
+      errors.push(`${path}.event_id: unknown id ${JSON.stringify(snapshot.event_id)}`);
+    }
+    (snapshot.control_areas || []).forEach((area, areaIndex) => {
+      if (!sideIds.has(area.side_id)) {
+        errors.push(
+          `${path}.control_areas[${areaIndex}].side_id: unknown id ${JSON.stringify(area.side_id)}`,
+        );
+      }
+    });
+    snapshot.source_ids.forEach((sourceId, sourceIndex) => {
+      if (!sourceIds.has(sourceId)) {
+        errors.push(
+          `${path}.source_ids[${sourceIndex}]: unknown source id ${JSON.stringify(sourceId)}`,
+        );
+      }
+    });
+
+    const timePath = `${path}.time`;
+    if (!("start" in snapshot.time)) {
+      warnings.push(`${timePath}: snapshot without time.start is excluded from animation`);
+      return;
+    }
+    const start = parseBattleTime(snapshot.time.start);
+    if (start === null) return;
+    if (previousStart !== null && start <= previousStart) {
+      errors.push(`${timePath}.start: values must be strictly increasing`);
+    }
+    previousStart = start;
+  });
+}
+
 function timingValues(battle) {
   const values = [];
-  for (const collectionName of ["historical_events", "movements", "engagements"]) {
+  for (const collectionName of ["historical_events", "movements", "engagements", "frontline_snapshots"]) {
     const collection = Array.isArray(battle[collectionName]) ? battle[collectionName] : [];
     collection.forEach((item, index) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return;
@@ -474,7 +692,7 @@ function validateOffsetStyles(battle, errors) {
 
 function validateTiming(battle, errors, warnings) {
   validateOffsetStyles(battle, errors);
-  for (const collectionName of ["historical_events", "engagements"]) {
+  for (const collectionName of ["historical_events", "engagements", "frontline_snapshots"]) {
     const collection = Array.isArray(battle[collectionName]) ? battle[collectionName] : [];
     collection.forEach((item, index) => {
       if (item && typeof item === "object" && !Array.isArray(item) && "time" in item) {
