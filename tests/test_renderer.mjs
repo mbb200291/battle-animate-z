@@ -1100,7 +1100,10 @@ test("frontline inspector warns for fallback without inventing a source", () => 
 
   const status = document.getElementById("frontline-status");
   assert.equal(status.hidden, false);
-  assert.equal(document.getElementById("frontline-summary").textContent, "Not a source-backed frontline");
+  const summary = document.getElementById("frontline-summary").textContent;
+  assert.match(summary, /^Not a source-backed frontline\./);
+  assert.match(summary, /Low-confidence influence\/contact line derived from land unit positions/);
+  assert.match(summary, /not a source-backed historical fact/);
   assert.equal(document.getElementById("frontline-sources").children.length, 0);
 });
 

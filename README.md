@@ -59,7 +59,7 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 - schema_version 固定使用字串 "0.4.0"（不要加 v，也不要寫成數字）。
 - metadata.source_system 固定使用字串 "battle_json_prompt_1.1.0"，讓文件保留生成規則的版本。
 - 不要新增 prompt_version；目前 schema 沒有這個欄位。
-- 0.1.0 與 0.2.0 只供 app 讀取舊文件，不是本提示詞的輸出選項。
+- 0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件；本提示詞只輸出 0.4.0。
 
 ===== 最重要的輸出規則（違反任何一條都算失敗）=====
 1. 資料與來源資訊足以生成時，只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
@@ -126,6 +126,7 @@ frontline_snapshots[]（選填）:
   - source_ids 必須指向直接支持該時刻戰線或控制區的來源；一般戰役敘事、結果或單位曾出現於某地，不足以支持精確戰線。
   - 只有來源支持戰線存在及大致位置、但幾何由資料員概括時，才可標 precision:"inferred" 且 confidence <= 0.5。
   - 不得從戰果敘述推導出精確包圍圈、突破口、控制區邊界或戰線形狀。
+  - 不得從 casualties、strength 或 outcome 推算 control_areas 或其他控制區幾何。
   - 同一戰線或控制區跨快照保持相同的戰線與控制區 id；只有實體新增、消失或分裂時才改用新 id。
 outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - winner_side_ids 是陣列（不要用 winner_side_id 單數）。

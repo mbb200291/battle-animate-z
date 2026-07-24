@@ -510,6 +510,9 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "直接支持該時刻戰線或控制區的來源",
             "不得從戰果敘述推導出精確包圍圈",
             "跨快照保持相同的戰線與控制區 id",
+            "不得從 casualties、strength 或 outcome 推算 control_areas",
+            "0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件",
+            "本提示詞只輸出 0.4.0",
         ):
             self.assertIn(required, prompt)
         for obsolete in (

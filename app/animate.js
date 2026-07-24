@@ -1425,7 +1425,7 @@ export function renderBattle(battle, documentRef = document) {
       return;
     }
     if (status.kind === "fallback") {
-      summary.textContent = "Not a source-backed frontline";
+      summary.textContent = "Not a source-backed frontline. Low-confidence influence/contact line derived from land unit positions; not a source-backed historical fact.";
       return;
     }
 
