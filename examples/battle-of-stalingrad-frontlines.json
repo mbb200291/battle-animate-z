@@ -5,7 +5,7 @@
     "title": "Battle of Stalingrad: frontline demonstration",
     "created_at": "2026-07-25",
     "updated_at": "2026-07-25",
-    "license": "Source summaries are CC BY-SA 4.0 compatible; map-derived geometry follows each cited file-page license",
+    "license": "CC BY-SA 4.0; includes public-domain source material",
     "source_system": "battle_json_prompt_1.1.0",
     "wikidata_qid": "Q42741"
   },
@@ -241,27 +241,6 @@
       },
       "precision": "inferred",
       "confidence": 0.45
-    },
-    {
-      "id": "movement_axis_contraction",
-      "event_id": "event_encirclement_established",
-      "actor_id": "actor_axis_stalingrad",
-      "from_place_id": "place_kalach",
-      "to_place_id": "place_stalingrad",
-      "time": {
-        "label": "late November – 12 December 1942",
-        "start": "1942-11-24",
-        "end": "1942-12-12",
-        "precision": "range",
-        "confidence": 0.45
-      },
-      "waypoint_times": ["1942-11-24", "1942-12-03", "1942-12-12"],
-      "path": {
-        "type": "LineString",
-        "coordinates": [[43.538, 48.691], [44.0, 48.67], [44.516, 48.709]]
-      },
-      "precision": "inferred",
-      "confidence": 0.4
     }
   ],
   "frontline_snapshots": [
@@ -436,20 +415,6 @@
               [43.55, 48.62]
             ]]
           }
-        },
-        {
-          "id": "area_soviet_encirclement",
-          "side_id": "side_soviet",
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [42.7, 49.25],
-              [44.8, 49.15],
-              [44.8, 48.2],
-              [42.8, 48.15],
-              [42.7, 49.25]
-            ]]
-          }
         }
       ],
       "precision": "inferred",
@@ -485,8 +450,8 @@
       "title": "File:Stalingrad - Preparations for Operation Uranus.png",
       "url": "https://commons.wikimedia.org/wiki/File:Stalingrad_-_Preparations_for_Operation_Uranus.png",
       "retrieved_at": "2026-07-25",
-      "license": "CC BY-SA 3.0",
-      "note": "Direct operational map source for Axis and Soviet unit locations on 18 November 1942; the file page warns that line thicknesses characterize strength and that the base-map projection is unknown."
+      "license": "CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)",
+      "note": "Map creator: Josullivan.59. Direct operational map source for Axis and Soviet unit locations on 18 November 1942. Adapted and geometry-coarsened for this example; the file page warns that line thicknesses characterize strength and that the base-map projection is unknown."
     }
   ],
   "animation_hints": {

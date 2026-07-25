@@ -180,6 +180,36 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             }),
             2,
         )
+        self.assertEqual(
+            {
+                area["side_id"]
+                for area in snapshots[-1].get("control_areas", [])
+            },
+            {"side_axis"},
+        )
+        self.assertNotIn(
+            "movement_axis_contraction",
+            {movement["id"] for movement in battle["movements"]},
+        )
+        axis_event = events["event_pocket_isolated"]
+        self.assertEqual(axis_event["actor_ids"], ["actor_axis_stalingrad"])
+        self.assertEqual(axis_event["place_ids"][0], "place_stalingrad")
+
+        sources = {source["id"]: source for source in battle["sources"]}
+        preparation_map = sources["source_map_uranus_preparations"]
+        self.assertIn("Josullivan.59", preparation_map["note"])
+        self.assertIn(
+            "https://creativecommons.org/licenses/by-sa/3.0/",
+            preparation_map["license"],
+        )
+        self.assertRegex(
+            preparation_map["note"],
+            r"(?i)(adapted|coarsened)",
+        )
+        self.assertEqual(
+            battle["metadata"]["license"],
+            "CC BY-SA 4.0; includes public-domain source material",
+        )
         self.assertTrue(
             all(
                 any(source_id.startswith("source_map_") for source_id in snapshot["source_ids"])
