@@ -1454,9 +1454,10 @@ export function renderBattle(battle, documentRef = document) {
       const source = sources.get(sourceId);
       if (!source) continue;
       const item = documentRef.createElement("li");
-      const link = documentRef.createElement("a");
+      const safeUrl = /^https?:\/\//i.test(source.url);
+      const link = documentRef.createElement(safeUrl ? "a" : "span");
       link.textContent = source.title;
-      if (/^https?:\/\//i.test(source.url)) {
+      if (safeUrl) {
         link.setAttribute("href", source.url);
         link.setAttribute("target", "_blank");
         link.setAttribute("rel", "noopener noreferrer");
@@ -2209,6 +2210,8 @@ export function renderBattle(battle, documentRef = document) {
       clearTrailEffects(this);
       clearFrontTransitions(this);
       frontlineEls.clear();
+      this.frontsEnabled = false;
+      updateFrontlineInspector(this);
       for (const key of [...beaconEls.keys()]) removeBeacon(key);
       this.sampledState = null;
       this._lastTrailHistoricalMs = null;

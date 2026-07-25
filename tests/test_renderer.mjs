@@ -1088,8 +1088,10 @@ test("frontline inspector does not link unsafe source URLs", () => {
   const battle = frontlineBattleFixture();
   battle.sources[0].url = "javascript:alert(1)";
   renderBattle(battle, document);
-  const anchor = document.getElementById("frontline-sources").children[0].children[0];
-  assert.equal(anchor.getAttribute("href"), null);
+  const label = document.getElementById("frontline-sources").children[0].children[0];
+  assert.equal(label.tagName, "SPAN");
+  assert.equal(label.textContent, "<Front source>");
+  assert.equal(label.getAttribute("href"), null);
 });
 
 test("frontline inspector warns for fallback without inventing a source", () => {
@@ -2414,6 +2416,25 @@ test("destroy is idempotent and cancels frames and listeners exactly once", () =
   assert.equal(document.listeners.get("keydown")?.size ?? 0, 0);
   assert.equal(maps[0].offCount, 1);
   assert.equal(maps[0].removeCount, 1);
+});
+
+test("destroy clears the public frontline inspector state", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineBattleFixture(), document);
+  const status = document.getElementById("frontline-status");
+  const summary = document.getElementById("frontline-summary");
+  const sources = document.getElementById("frontline-sources");
+  assert.equal(status.hidden, false);
+  assert.notEqual(summary.textContent, "");
+  assert.notEqual(sources.children.length, 0);
+
+  controller.destroy();
+
+  assert.equal(status.hidden, true);
+  assert.equal(summary.textContent, "");
+  assert.equal(sources.children.length, 0);
 });
 
 test("destroy tears down owned controls and timeline handlers and blocks public re-entry", () => {
