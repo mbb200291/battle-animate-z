@@ -94,6 +94,20 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["frontline_snapshots"]
+      },
+      "then": {
+        "properties": {
+          "schema_version": {
+            "const": "0.4.0"
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "Identifier": {
       "type": "string",

@@ -165,28 +165,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertTrue({"front_north", "front_south"} <= final_line_ids)
         self.assertNotIn("front_main", final_line_ids)
 
-        first_area_ids = {
-            area["id"] for area in snapshots[0].get("control_areas", [])
-        }
-        second_area_ids = {
-            area["id"] for area in snapshots[1].get("control_areas", [])
-        }
-        self.assertTrue(first_area_ids & second_area_ids)
-        self.assertGreaterEqual(
-            len({
-                area["side_id"]
-                for snapshot in snapshots
-                for area in snapshot.get("control_areas", [])
-            }),
-            2,
-        )
-        self.assertEqual(
-            {
-                area["side_id"]
-                for area in snapshots[-1].get("control_areas", [])
-            },
-            {"side_axis"},
-        )
+        self.assertTrue(all("control_areas" not in snapshot for snapshot in snapshots))
         self.assertNotIn(
             "movement_axis_contraction",
             {movement["id"] for movement in battle["movements"]},
@@ -206,6 +185,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             preparation_map["note"],
             r"(?i)(adapted|coarsened)",
         )
+        front_map = sources["source_map_stalingrad_three_dates"]
+        self.assertRegex(front_map["note"], r"(?i)does not support control-area polygons")
         self.assertEqual(
             battle["metadata"]["license"],
             "CC BY-SA 4.0; includes public-domain source material",
@@ -734,6 +715,17 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertIn("0.4.0", schema["properties"]["schema_version"]["enum"])
         snapshots = schema["properties"]["frontline_snapshots"]
         self.assertEqual(snapshots["items"]["$ref"], "#/$defs/FrontlineSnapshot")
+        self.assertIn(
+            {
+                "if": {"required": ["frontline_snapshots"]},
+                "then": {
+                    "properties": {
+                        "schema_version": {"const": "0.4.0"},
+                    },
+                },
+            },
+            schema["allOf"],
+        )
 
         front_line = schema["$defs"]["FrontLine"]
         self.assertFalse(front_line["additionalProperties"])
@@ -1369,6 +1361,33 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         self.assertEqual(errors, [])
         self.assertTrue(any("unknown actor icon token" in warning.message for warning in warnings))
+
+    def test_frontline_snapshots_require_v040(self):
+        for version in ("0.1.0", "0.2.0", "0.3.0"):
+            with self.subTest(version=version):
+                document = frontline_document()
+                document["schema_version"] = version
+                errors = validate_document(document)
+                self.assertTrue(any(
+                    error.path == "$.frontline_snapshots"
+                    and error.message == "requires schema_version '0.4.0'"
+                    for error in errors
+                ))
+        self.assertFalse(any(
+            error.path == "$.frontline_snapshots"
+            for error in validate_document(frontline_document())
+        ))
+
+    def test_unknown_v040_actor_icon_token_is_warning_only(self):
+        document = frontline_document()
+        document["animation_hints"]["style"]["actor_icons"] = {
+            document["actors"][0]["id"]: "army"
+        }
+
+        errors, warnings = validate_document_with_warnings(document)
+
+        self.assertEqual(errors, [])
+        self.assertTrue(any("unknown actor icon token 'army'" in warning.message for warning in warnings))
 
     def test_inferred_movement_high_time_confidence_is_warning_only(self):
         document = self._minimal_timed_document()

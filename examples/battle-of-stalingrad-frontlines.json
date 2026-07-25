@@ -271,36 +271,6 @@
           }
         }
       ],
-      "control_areas": [
-        {
-          "id": "area_axis_west",
-          "side_id": "side_axis",
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [41.8, 49.6],
-              [44.7, 49.05],
-              [44.55, 47.7],
-              [41.8, 47.7],
-              [41.8, 49.6]
-            ]]
-          }
-        },
-        {
-          "id": "area_soviet_east",
-          "side_id": "side_soviet",
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [44.7, 49.1],
-              [45.0, 49.1],
-              [45.0, 47.7],
-              [44.55, 47.7],
-              [44.7, 49.1]
-            ]]
-          }
-        }
-      ],
       "precision": "inferred",
       "confidence": 0.45,
       "source_ids": ["source_map_stalingrad_three_dates", "source_map_uranus_preparations"]
@@ -329,36 +299,6 @@
               [43.75, 48.05],
               [43.15, 47.55]
             ]
-          }
-        }
-      ],
-      "control_areas": [
-        {
-          "id": "area_axis_west",
-          "side_id": "side_axis",
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [41.8, 49.6],
-              [44.6, 48.95],
-              [43.1, 47.5],
-              [41.8, 47.5],
-              [41.8, 49.6]
-            ]]
-          }
-        },
-        {
-          "id": "area_soviet_east",
-          "side_id": "side_soviet",
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [44.6, 49.0],
-              [45.0, 49.0],
-              [45.0, 47.5],
-              [43.1, 47.5],
-              [44.6, 49.0]
-            ]]
           }
         }
       ],
@@ -401,22 +341,6 @@
           }
         }
       ],
-      "control_areas": [
-        {
-          "id": "area_axis_pocket",
-          "side_id": "side_axis",
-          "geometry": {
-            "type": "Polygon",
-            "coordinates": [[
-              [43.55, 48.62],
-              [43.9, 48.98],
-              [44.62, 48.88],
-              [44.5, 48.55],
-              [43.55, 48.62]
-            ]]
-          }
-        }
-      ],
       "precision": "inferred",
       "confidence": 0.45,
       "source_ids": ["source_map_stalingrad_three_dates"]
@@ -443,7 +367,7 @@
       "url": "https://commons.wikimedia.org/wiki/File:Battle_of_Stalingrad.png",
       "retrieved_at": "2026-07-25",
       "license": "Public domain (file page states CGSC public-information permission and PD-self)",
-      "note": "Direct operational map source showing German fronts for 19 November, 12 December, and 24 December 1942. Snapshot geometry is a coarse visual approximation because the map does not state a projection."
+      "note": "Direct operational map source showing German fronts for 19 November, 12 December, and 24 December 1942. Snapshot line geometry is a coarse visual approximation because the map does not state a projection. The source does not support control-area polygons, so this example intentionally omits them."
     },
     {
       "id": "source_map_uranus_preparations",
@@ -466,9 +390,9 @@
         "side_soviet": "#2f6fb5"
       },
       "actor_icons": {
-        "actor_axis_stalingrad": "army",
-        "actor_soviet_north": "army",
-        "actor_soviet_south": "army"
+        "actor_axis_stalingrad": "infantry",
+        "actor_soviet_north": "infantry",
+        "actor_soviet_south": "infantry"
       },
       "event_icons": {
         "attack": "burst",

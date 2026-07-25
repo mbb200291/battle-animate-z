@@ -188,6 +188,9 @@ export function validateBattle(battle) {
   if ("schema_version" in battle && !["0.1.0", "0.2.0", "0.3.0", "0.4.0"].includes(battle.schema_version)) {
     errors.push(`schema_version must be "0.1.0", "0.2.0", "0.3.0", or "0.4.0", got ${JSON.stringify(battle.schema_version)}`);
   }
+  if ("frontline_snapshots" in battle && battle.schema_version !== "0.4.0") {
+    errors.push('$.frontline_snapshots: requires schema_version "0.4.0"');
+  }
   if (!rendererShapesValid) return { errors, warnings };
 
   const array = (value) => Array.isArray(value) ? value : [];
@@ -810,7 +813,7 @@ function validateMovementOverlaps(battle, errors, warnings) {
 }
 
 function validateActorIconTokens(battle, warnings) {
-  if (battle.schema_version !== "0.3.0") return;
+  if (!["0.3.0", "0.4.0"].includes(battle.schema_version)) return;
   const actorIcons = battle.animation_hints?.style?.actor_icons;
   if (!actorIcons || typeof actorIcons !== "object" || Array.isArray(actorIcons)) return;
   const allowed = new Set(ACTOR_ICON_TOKENS);

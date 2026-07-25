@@ -569,6 +569,29 @@ test("old v0.2 emoji actor icons remain allowed without warnings", () => {
   assert.deepEqual(validateBattle(battle).warnings, []);
 });
 
+test("frontline snapshots require schema version 0.4.0", () => {
+  for (const version of ["0.1.0", "0.2.0", "0.3.0"]) {
+    const battle = frontlineBattle();
+    battle.schema_version = version;
+    assert.match(
+      messages(validateBattle(battle), "errors"),
+      /\$\.frontline_snapshots: requires schema_version "0\.4\.0"/,
+    );
+  }
+  assert.doesNotMatch(
+    messages(validateBattle(frontlineBattle()), "errors"),
+    /\$\.frontline_snapshots: requires schema_version/,
+  );
+});
+
+test("v0.4 unknown actor icons use the controlled-token warning", () => {
+  const battle = frontlineBattle();
+  battle.animation_hints.style.actor_icons["actor-a"] = "army";
+  const result = validateBattle(battle);
+  assert.deepEqual(result.errors, []);
+  assert.match(messages(result, "warnings"), /actor_icons\.actor-a.*unknown actor icon token "army"/i);
+});
+
 test("disconnected overlapping movements are fatal", () => {
   const battle = fixture();
   const later = structuredClone(battle.movements[0]);

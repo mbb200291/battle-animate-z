@@ -68,6 +68,38 @@ test("matching stable IDs interpolate compatible lines and polygon rings", () =>
   assert.equal(result.interpolatedAreas[0].confidence, 0.4);
 });
 
+test("equivalent reversed lines retain their shape during interpolation", () => {
+  const from = { front_lines: [line("main", [[179, 0], [-179, 0], [-178, 1]])] };
+  const to = { front_lines: [line("main", [[-178, 1], [-179, 0], [179, 0]])] };
+  const before = JSON.stringify([from, to]);
+
+  const coordinates = interpolateFrontlineSnapshots(from, to, 0.5)
+    .interpolatedLines[0].geometry.coordinates;
+
+  assert.equal(coordinates.length, 48);
+  assert.ok(coordinates.some((point) => Math.abs(point[1] - 1) < 0.01));
+  assert.ok(coordinates.every(([longitude]) => Math.abs(longitude) > 170));
+  assert.equal(JSON.stringify([from, to]), before);
+});
+
+test("equivalent rotated and reversed rings retain their shape during interpolation", () => {
+  const square = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]];
+  const rotatedReversed = [[4, 4], [4, 0], [0, 0], [0, 4], [4, 4]];
+  const from = { control_areas: [area("held", "blue", [square])] };
+  const to = { control_areas: [area("held", "blue", [rotatedReversed])] };
+  const before = JSON.stringify([from, to]);
+
+  const ring = interpolateFrontlineSnapshots(from, to, 0.5)
+    .interpolatedAreas[0].geometry.coordinates[0];
+
+  assert.equal(ring.length, 65);
+  assert.deepEqual(ring.at(-1), ring[0]);
+  assert.notEqual(ring.at(-1), ring[0]);
+  assert.ok(Math.max(...ring.map(([x]) => x)) - Math.min(...ring.map(([x]) => x)) > 3.9);
+  assert.ok(Math.max(...ring.map(([, y]) => y)) - Math.min(...ring.map(([, y]) => y)) > 3.9);
+  assert.equal(JSON.stringify([from, to]), before);
+});
+
 test("unmatched IDs and incompatible polygon ring counts crossfade", () => {
   const outer = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]];
   const hole = [[1, 1], [2, 1], [2, 2], [1, 2], [1, 1]];

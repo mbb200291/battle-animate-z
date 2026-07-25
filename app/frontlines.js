@@ -95,6 +95,34 @@ function interpolatePoint(left, right, progress) {
   ];
 }
 
+const correspondenceCost = (left, right) => left.reduce(
+  (total, point, index) =>
+    total + deltaLongitude(point[0], right[index][0]) ** 2 + (point[1] - right[index][1]) ** 2,
+  0,
+);
+
+function alignLine(from, to) {
+  const reversed = [...to].reverse();
+  return correspondenceCost(from, reversed) < correspondenceCost(from, to) ? reversed : to;
+}
+
+function alignRing(from, to) {
+  const unique = to.slice(0, -1);
+  let best = unique;
+  let bestCost = Infinity;
+  for (const direction of [unique, [...unique].reverse()]) {
+    for (let offset = 0; offset < direction.length; offset += 1) {
+      const candidate = direction.slice(offset).concat(direction.slice(0, offset));
+      const cost = correspondenceCost(from.slice(0, -1), candidate);
+      if (cost < bestCost) {
+        best = candidate;
+        bestCost = cost;
+      }
+    }
+  }
+  return best.concat([[...best[0]]]);
+}
+
 const metadata = (fromSnapshot, toSnapshot, fromItem, toItem) => ({
   precision: lessCertain(
     fromItem.precision ?? fromSnapshot.precision,
@@ -124,11 +152,12 @@ function interpolateLines(fromSnapshot, toSnapshot, progress, output) {
       continue;
     }
     matched.add(oldLine.id);
+    const alignedNewPoints = alignLine(oldPoints, newPoints);
     output.interpolatedLines.push({
       id: oldLine.id,
       geometry: {
         type: "LineString",
-        coordinates: oldPoints.map((point, index) => interpolatePoint(point, newPoints[index], progress)),
+        coordinates: oldPoints.map((point, index) => interpolatePoint(point, alignedNewPoints[index], progress)),
       },
       ...metadata(fromSnapshot, toSnapshot, oldLine, newLine),
     });
@@ -154,12 +183,13 @@ function interpolateAreas(fromSnapshot, toSnapshot, progress, output) {
       continue;
     }
     matched.add(oldArea.id);
+    const alignedNewRing = alignRing(oldRing, newRing);
     output.interpolatedAreas.push({
       id: oldArea.id,
       sideId: oldArea.side_id,
       geometry: {
         type: "Polygon",
-        coordinates: [oldRing.map((point, index) => interpolatePoint(point, newRing[index], progress))],
+        coordinates: [oldRing.map((point, index) => interpolatePoint(point, alignedNewRing[index], progress))],
       },
       ...metadata(fromSnapshot, toSnapshot, oldArea, newArea),
     });

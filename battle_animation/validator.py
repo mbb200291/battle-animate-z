@@ -79,12 +79,24 @@ def validate_document_with_warnings(
     errors: list[ValidationError] = []
     warnings: list[ValidationWarning] = []
     _validate(document, schema, schema, "$", errors)
+    _validate_versioned_fields(document, errors)
     _validate_references(document, errors)
     _validate_timing(document, errors, warnings)
     _validate_frontline_timing(document, errors, warnings)
     _validate_movement_overlaps(document, errors, warnings)
     _validate_icon_tokens(document, warnings)
     return errors, warnings
+
+
+def _validate_versioned_fields(document: Any, errors: list[ValidationError]) -> None:
+    if (
+        isinstance(document, dict)
+        and "frontline_snapshots" in document
+        and document.get("schema_version") != "0.4.0"
+    ):
+        errors.append(
+            ValidationError("$.frontline_snapshots", "requires schema_version '0.4.0'")
+        )
 
 
 def _parse_battle_time(value: str) -> float:
@@ -595,7 +607,7 @@ def _movement_coordinates(movement: dict[str, Any]) -> list[Any] | None:
 
 
 def _validate_icon_tokens(document: Any, warnings: list[ValidationWarning]) -> None:
-    if not isinstance(document, dict) or document.get("schema_version") != "0.3.0":
+    if not isinstance(document, dict) or document.get("schema_version") not in {"0.3.0", "0.4.0"}:
         return
     animation_hints = document.get("animation_hints")
     style = animation_hints.get("style") if isinstance(animation_hints, dict) else None
