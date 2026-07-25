@@ -135,6 +135,14 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             battle["metadata"]["source_system"],
             "battle_json_prompt_1.1.0",
         )
+        events = {
+            event["id"]: event
+            for event in battle["historical_events"]
+        }
+        self.assertEqual(
+            events["event_encirclement_established"]["time"]["start"],
+            "1942-11-23",
+        )
         self.assertGreaterEqual(len(snapshots), 3)
         starts = [
             datetime.fromisoformat(snapshot["time"]["start"])

@@ -167,12 +167,12 @@
       "type": "capture",
       "title": "Encirclement established",
       "time": {
-        "label": "23 November 1942; frontline snapshot shown for 12 December",
-        "start": "1942-12-12",
+        "label": "23 November 1942",
+        "start": "1942-11-23",
         "precision": "day",
-        "confidence": 0.8
+        "confidence": 0.95
       },
-      "description": "The Soviet spearheads had met at Kalach on 23 November, sealing the ring; the 12 December snapshot shows the resulting operational front.",
+      "description": "The Soviet spearheads met at Kalach on 23 November, sealing the ring around Stalingrad.",
       "actor_ids": ["actor_soviet_north", "actor_soviet_south"],
       "target_actor_ids": ["actor_axis_stalingrad"],
       "place_ids": ["place_kalach", "place_stalingrad"],
