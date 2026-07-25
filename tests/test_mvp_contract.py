@@ -30,6 +30,7 @@ from battle_animation.validator import (
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "battle-of-waterloo.json"
 YALU_EXAMPLE = ROOT / "examples" / "battle-of-甲午海戰.json"
+STALINGRAD_EXAMPLE = ROOT / "examples" / "battle-of-stalingrad-frontlines.json"
 SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
 MAX_INFERRED_WITHDRAWAL_SPEED_KMH = 18
 
@@ -124,6 +125,85 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("valid", result.stdout)
+
+    def test_stalingrad_v040_frontline_example(self):
+        battle = json.loads(STALINGRAD_EXAMPLE.read_text(encoding="utf-8"))
+        snapshots = battle["frontline_snapshots"]
+
+        self.assertEqual(battle["schema_version"], "0.4.0")
+        self.assertEqual(
+            battle["metadata"]["source_system"],
+            "battle_json_prompt_1.1.0",
+        )
+        self.assertGreaterEqual(len(snapshots), 3)
+        starts = [
+            datetime.fromisoformat(snapshot["time"]["start"])
+            for snapshot in snapshots
+        ]
+        self.assertTrue(
+            all(earlier < later for earlier, later in zip(starts, starts[1:]))
+        )
+
+        first_line_ids = {
+            line["id"] for line in snapshots[0].get("front_lines", [])
+        }
+        second_line_ids = {
+            line["id"] for line in snapshots[1].get("front_lines", [])
+        }
+        final_line_ids = {
+            line["id"] for line in snapshots[-1].get("front_lines", [])
+        }
+        self.assertIn("front_main", first_line_ids & second_line_ids)
+        self.assertTrue({"front_north", "front_south"} <= final_line_ids)
+        self.assertNotIn("front_main", final_line_ids)
+
+        first_area_ids = {
+            area["id"] for area in snapshots[0].get("control_areas", [])
+        }
+        second_area_ids = {
+            area["id"] for area in snapshots[1].get("control_areas", [])
+        }
+        self.assertTrue(first_area_ids & second_area_ids)
+        self.assertGreaterEqual(
+            len({
+                area["side_id"]
+                for snapshot in snapshots
+                for area in snapshot.get("control_areas", [])
+            }),
+            2,
+        )
+        self.assertTrue(
+            all(
+                any(source_id.startswith("source_map_") for source_id in snapshot["source_ids"])
+                for snapshot in snapshots
+            )
+        )
+        self.assertTrue(
+            all(
+                snapshot["precision"] in {"approximate", "inferred"}
+                and snapshot["confidence"] <= 0.5
+                for snapshot in snapshots
+            )
+        )
+        errors, warnings = validate_document_with_warnings(battle)
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+        script = """
+            import fs from "node:fs";
+            import { validateBattle } from "./app/animate.js";
+            const battle = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            console.log(JSON.stringify(validateBattle(battle)));
+        """
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script, str(STALINGRAD_EXAMPLE)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"errors": [], "warnings": []})
 
     def test_modern_border_asset_is_geometry_only_natural_earth(self):
         path = ROOT / "app" / "data" / "modern-borders-50m.geojson"

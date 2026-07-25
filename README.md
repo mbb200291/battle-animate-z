@@ -8,7 +8,7 @@ The format intentionally avoids military simulation standards such as MSDL or C-
 
 - `schemas/battle-animation-schema.json` defines `battle-animation-schema` versions `0.1.0` through `0.4.0`; `0.4.0` adds optional source-backed frontline snapshots.
 - `battle_animation/types.py` provides Python `TypedDict` definitions matching the schema.
-- `examples/battle-of-waterloo.json` and `examples/battle-of-甲午.json` exercise legacy fallback; `examples/battle-of-甲午海戰.json` is the timed, ship-level `0.3.0` demonstration.
+- `examples/battle-of-waterloo.json` and `examples/battle-of-甲午.json` exercise legacy fallback; `examples/battle-of-甲午海戰.json` is the timed, ship-level `0.3.0` demonstration; `examples/battle-of-stalingrad-frontlines.json` demonstrates source-backed `0.4.0` frontline interpolation and topology crossfade.
 - `battle_animation/validator.py` validates schema fields, internal references, movement timing, controlled icon tokens, and recoverable warnings.
 - `app/timeline.js` compiles historical timestamps, idle compression, and legacy synthetic timing into a deterministic presentation timeline.
 - `app/symbols.js` owns the controlled SVG unit-symbol catalog and kind-based legacy fallback.
@@ -258,6 +258,7 @@ Run the validator against all bundled examples:
 python3 -m battle_animation.validator examples/battle-of-waterloo.json
 python3 -m battle_animation.validator examples/battle-of-甲午.json
 python3 -m battle_animation.validator examples/battle-of-甲午海戰.json
+python3 -m battle_animation.validator examples/battle-of-stalingrad-frontlines.json
 ```
 
 Each command should print `valid:`. The canonical timed Yalu example should produce no warnings.
@@ -291,6 +292,8 @@ Versions `0.3.0` and `0.4.0` use continuous historical-time playback（連續歷
 **Focus event** frames every currently active event and its related units in one click. If no event is active it falls back to the selected event. When a single event has usable geography, a matching camera hint with both `center` and `zoom` takes priority. Focus is not Follow: it does not enable camera tracking or change playback, Trails, or the historical time. With reduced motion enabled, Focus moves the map without a fly animation.
 
 **Modern borders** are off by default and reset to off whenever a document is loaded. They are optional modern de facto reference boundaries, not historical borders, and contain no country names, roads, or labels.
+
+**Fronts** is available when a `0.4.0` document contains timed, source-backed `frontline_snapshots`, or when opposing land-unit positions permit a conservative fallback. Source-backed fronts use solid lines and list their cited sources in the inspector. The fallback is dashed, explicitly labeled low-confidence, and exists only in the renderer: it is never written back to the battle JSON. Turning Fronts off hides both forms without changing playback or unit positions.
 
 ### Map background
 

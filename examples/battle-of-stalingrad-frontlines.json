@@ -1,0 +1,544 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "id": "battle_stalingrad_frontlines",
+    "title": "Battle of Stalingrad: frontline demonstration",
+    "created_at": "2026-07-25",
+    "updated_at": "2026-07-25",
+    "license": "Source summaries are CC BY-SA 4.0 compatible; map-derived geometry follows each cited file-page license",
+    "source_system": "battle_json_prompt_1.1.0",
+    "wikidata_qid": "Q42741"
+  },
+  "battle": {
+    "id": "battle_stalingrad",
+    "name": "Battle of Stalingrad",
+    "also_known_as": ["Stalingrad"],
+    "part_of": "Eastern Front of World War II",
+    "date": {
+      "label": "23 August 1942 – 2 February 1943",
+      "start": "1942-08-23",
+      "end": "1943-02-02",
+      "precision": "day",
+      "confidence": 0.95
+    },
+    "summary": "Axis forces fought the Soviet Union for Stalingrad; Operation Uranus encircled the German Sixth Army and shifted the campaign to a siege.",
+    "confidence": 0.9
+  },
+  "sides": [
+    {
+      "id": "side_axis",
+      "name": "Axis",
+      "color": "#b84a3a",
+      "belligerents": [
+        {
+          "id": "belligerent_germany",
+          "name": "Nazi Germany",
+          "wikidata_qid": "Q7318"
+        },
+        {
+          "id": "belligerent_romania",
+          "name": "Kingdom of Romania",
+          "wikidata_qid": "Q203493"
+        }
+      ]
+    },
+    {
+      "id": "side_soviet",
+      "name": "Soviet Union",
+      "color": "#2f6fb5",
+      "belligerents": [
+        {
+          "id": "belligerent_soviet_union",
+          "name": "Soviet Union",
+          "wikidata_qid": "Q15180"
+        }
+      ]
+    }
+  ],
+  "commanders": [
+    {
+      "id": "commander_paulus",
+      "name": "Friedrich Paulus",
+      "side_id": "side_axis",
+      "rank_or_role": "Commander of the German Sixth Army",
+      "wikidata_qid": "Q57280",
+      "confidence": 0.95
+    },
+    {
+      "id": "commander_zhukov",
+      "name": "Georgy Zhukov",
+      "side_id": "side_soviet",
+      "rank_or_role": "Soviet strategic planner",
+      "wikidata_qid": "Q189266",
+      "confidence": 0.9
+    }
+  ],
+  "actors": [
+    {
+      "id": "actor_axis_stalingrad",
+      "name": "German Sixth Army and Axis flank forces",
+      "side_id": "side_axis",
+      "kind": "army",
+      "commander_ids": ["commander_paulus"],
+      "confidence": 0.8
+    },
+    {
+      "id": "actor_soviet_north",
+      "name": "Soviet northern counter-offensive forces",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "commander_ids": ["commander_zhukov"],
+      "confidence": 0.75
+    },
+    {
+      "id": "actor_soviet_south",
+      "name": "Soviet southern counter-offensive forces",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "commander_ids": ["commander_zhukov"],
+      "confidence": 0.75
+    }
+  ],
+  "places": [
+    {
+      "id": "place_stalingrad",
+      "name": "Stalingrad",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [44.516, 48.709]
+      },
+      "precision": "approximate",
+      "confidence": 0.9,
+      "wikidata_qid": "Q914"
+    },
+    {
+      "id": "place_kalach",
+      "name": "Kalach-on-Don",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [43.538, 48.691]
+      },
+      "precision": "approximate",
+      "confidence": 0.85,
+      "wikidata_qid": "Q145415"
+    },
+    {
+      "id": "place_serafimovich",
+      "name": "Serafimovich",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [42.736, 49.579]
+      },
+      "precision": "approximate",
+      "confidence": 0.8
+    },
+    {
+      "id": "place_kotelnikovo",
+      "name": "Kotelnikovo",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [43.146, 47.631]
+      },
+      "precision": "approximate",
+      "confidence": 0.8
+    }
+  ],
+  "historical_events": [
+    {
+      "id": "event_uranus_begins",
+      "type": "attack",
+      "title": "Operation Uranus begins",
+      "time": {
+        "label": "19 November 1942",
+        "start": "1942-11-19",
+        "precision": "day",
+        "confidence": 0.95
+      },
+      "description": "Soviet forces began a two-pronged counterattack against the Romanian-protected Axis flanks around Stalingrad.",
+      "actor_ids": ["actor_soviet_north", "actor_soviet_south"],
+      "target_actor_ids": ["actor_axis_stalingrad"],
+      "place_ids": ["place_serafimovich", "place_stalingrad"],
+      "precision": "approximate",
+      "confidence": 0.9,
+      "source_ids": ["source_wikipedia_stalingrad", "source_map_uranus_preparations"]
+    },
+    {
+      "id": "event_encirclement_established",
+      "type": "capture",
+      "title": "Encirclement established",
+      "time": {
+        "label": "23 November 1942; frontline snapshot shown for 12 December",
+        "start": "1942-12-12",
+        "precision": "day",
+        "confidence": 0.8
+      },
+      "description": "The Soviet spearheads had met at Kalach on 23 November, sealing the ring; the 12 December snapshot shows the resulting operational front.",
+      "actor_ids": ["actor_soviet_north", "actor_soviet_south"],
+      "target_actor_ids": ["actor_axis_stalingrad"],
+      "place_ids": ["place_kalach", "place_stalingrad"],
+      "precision": "approximate",
+      "confidence": 0.8,
+      "source_ids": ["source_wikipedia_stalingrad", "source_map_stalingrad_three_dates"]
+    },
+    {
+      "id": "event_pocket_isolated",
+      "type": "defend",
+      "title": "Stalingrad pocket remains isolated",
+      "time": {
+        "label": "24 December 1942",
+        "start": "1942-12-24",
+        "precision": "day",
+        "confidence": 0.85
+      },
+      "description": "By 24 December the mapped German front had contracted into the Stalingrad pocket while Soviet-held territory separated it from Axis forces to the southwest.",
+      "actor_ids": ["actor_axis_stalingrad"],
+      "target_actor_ids": ["actor_soviet_north", "actor_soviet_south"],
+      "place_ids": ["place_stalingrad", "place_kotelnikovo"],
+      "precision": "approximate",
+      "confidence": 0.75,
+      "source_ids": ["source_wikipedia_stalingrad", "source_map_stalingrad_three_dates"]
+    }
+  ],
+  "movements": [
+    {
+      "id": "movement_soviet_north",
+      "event_id": "event_uranus_begins",
+      "actor_id": "actor_soviet_north",
+      "from_place_id": "place_serafimovich",
+      "to_place_id": "place_kalach",
+      "time": {
+        "label": "19–23 November 1942",
+        "start": "1942-11-19",
+        "end": "1942-11-23",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": ["1942-11-19", "1942-11-21", "1942-11-23"],
+      "path": {
+        "type": "LineString",
+        "coordinates": [[42.736, 49.579], [42.95, 49.05], [43.538, 48.691]]
+      },
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "movement_soviet_south",
+      "event_id": "event_uranus_begins",
+      "actor_id": "actor_soviet_south",
+      "from_place_id": "place_kotelnikovo",
+      "to_place_id": "place_kalach",
+      "time": {
+        "label": "20–23 November 1942",
+        "start": "1942-11-20",
+        "end": "1942-11-23",
+        "precision": "range",
+        "confidence": 0.5
+      },
+      "waypoint_times": ["1942-11-20", "1942-11-22", "1942-11-23"],
+      "path": {
+        "type": "LineString",
+        "coordinates": [[43.146, 47.631], [43.4, 48.2], [43.538, 48.691]]
+      },
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "movement_axis_contraction",
+      "event_id": "event_encirclement_established",
+      "actor_id": "actor_axis_stalingrad",
+      "from_place_id": "place_kalach",
+      "to_place_id": "place_stalingrad",
+      "time": {
+        "label": "late November – 12 December 1942",
+        "start": "1942-11-24",
+        "end": "1942-12-12",
+        "precision": "range",
+        "confidence": 0.45
+      },
+      "waypoint_times": ["1942-11-24", "1942-12-03", "1942-12-12"],
+      "path": {
+        "type": "LineString",
+        "coordinates": [[43.538, 48.691], [44.0, 48.67], [44.516, 48.709]]
+      },
+      "precision": "inferred",
+      "confidence": 0.4
+    }
+  ],
+  "frontline_snapshots": [
+    {
+      "id": "snapshot_1942_11_19",
+      "time": {
+        "label": "German front, 19 November 1942",
+        "start": "1942-11-19",
+        "precision": "day",
+        "confidence": 0.8
+      },
+      "event_id": "event_uranus_begins",
+      "front_lines": [
+        {
+          "id": "front_main",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [41.9, 49.55],
+              [42.7, 49.48],
+              [43.25, 49.2],
+              [44.15, 49.03],
+              [44.62, 48.88],
+              [44.68, 48.55],
+              [44.62, 48.15],
+              [44.55, 47.75]
+            ]
+          }
+        }
+      ],
+      "control_areas": [
+        {
+          "id": "area_axis_west",
+          "side_id": "side_axis",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [41.8, 49.6],
+              [44.7, 49.05],
+              [44.55, 47.7],
+              [41.8, 47.7],
+              [41.8, 49.6]
+            ]]
+          }
+        },
+        {
+          "id": "area_soviet_east",
+          "side_id": "side_soviet",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [44.7, 49.1],
+              [45.0, 49.1],
+              [45.0, 47.7],
+              [44.55, 47.7],
+              [44.7, 49.1]
+            ]]
+          }
+        }
+      ],
+      "precision": "inferred",
+      "confidence": 0.45,
+      "source_ids": ["source_map_stalingrad_three_dates", "source_map_uranus_preparations"]
+    },
+    {
+      "id": "snapshot_1942_12_12",
+      "time": {
+        "label": "German front, 12 December 1942",
+        "start": "1942-12-12",
+        "precision": "day",
+        "confidence": 0.8
+      },
+      "event_id": "event_encirclement_established",
+      "front_lines": [
+        {
+          "id": "front_main",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [41.9, 49.52],
+              [42.45, 49.35],
+              [42.65, 48.8],
+              [43.25, 48.43],
+              [43.95, 48.55],
+              [44.55, 48.9],
+              [43.75, 48.05],
+              [43.15, 47.55]
+            ]
+          }
+        }
+      ],
+      "control_areas": [
+        {
+          "id": "area_axis_west",
+          "side_id": "side_axis",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [41.8, 49.6],
+              [44.6, 48.95],
+              [43.1, 47.5],
+              [41.8, 47.5],
+              [41.8, 49.6]
+            ]]
+          }
+        },
+        {
+          "id": "area_soviet_east",
+          "side_id": "side_soviet",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [44.6, 49.0],
+              [45.0, 49.0],
+              [45.0, 47.5],
+              [43.1, 47.5],
+              [44.6, 49.0]
+            ]]
+          }
+        }
+      ],
+      "precision": "inferred",
+      "confidence": 0.45,
+      "source_ids": ["source_map_stalingrad_three_dates"]
+    },
+    {
+      "id": "snapshot_1942_12_24",
+      "time": {
+        "label": "German front, 24 December 1942",
+        "start": "1942-12-24",
+        "precision": "day",
+        "confidence": 0.8
+      },
+      "event_id": "event_pocket_isolated",
+      "front_lines": [
+        {
+          "id": "front_north",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [43.55, 48.82],
+              [43.9, 48.98],
+              [44.35, 49.0],
+              [44.62, 48.88]
+            ]
+          }
+        },
+        {
+          "id": "front_south",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [44.62, 48.88],
+              [44.5, 48.55],
+              [44.0, 48.42],
+              [43.55, 48.62]
+            ]
+          }
+        }
+      ],
+      "control_areas": [
+        {
+          "id": "area_axis_pocket",
+          "side_id": "side_axis",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [43.55, 48.62],
+              [43.9, 48.98],
+              [44.62, 48.88],
+              [44.5, 48.55],
+              [43.55, 48.62]
+            ]]
+          }
+        },
+        {
+          "id": "area_soviet_encirclement",
+          "side_id": "side_soviet",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+              [42.7, 49.25],
+              [44.8, 49.15],
+              [44.8, 48.2],
+              [42.8, 48.15],
+              [42.7, 49.25]
+            ]]
+          }
+        }
+      ],
+      "precision": "inferred",
+      "confidence": 0.45,
+      "source_ids": ["source_map_stalingrad_three_dates"]
+    }
+  ],
+  "outcome": {
+    "summary": "Soviet victory; the German Sixth Army was destroyed and the Axis 1942 summer offensive ended.",
+    "winner_side_ids": ["side_soviet"],
+    "confidence": 0.9,
+    "source_ids": ["source_wikipedia_stalingrad"]
+  },
+  "sources": [
+    {
+      "id": "source_wikipedia_stalingrad",
+      "title": "Battle of Stalingrad",
+      "url": "https://en.wikipedia.org/wiki/Battle_of_Stalingrad",
+      "retrieved_at": "2026-07-25",
+      "license": "CC BY-SA 4.0",
+      "note": "Supports broad chronology, participants, Operation Uranus, encirclement at Kalach, and the battle outcome; it is not the sole support for snapshot geometry."
+    },
+    {
+      "id": "source_map_stalingrad_three_dates",
+      "title": "File:Battle of Stalingrad.png",
+      "url": "https://commons.wikimedia.org/wiki/File:Battle_of_Stalingrad.png",
+      "retrieved_at": "2026-07-25",
+      "license": "Public domain (file page states CGSC public-information permission and PD-self)",
+      "note": "Direct operational map source showing German fronts for 19 November, 12 December, and 24 December 1942. Snapshot geometry is a coarse visual approximation because the map does not state a projection."
+    },
+    {
+      "id": "source_map_uranus_preparations",
+      "title": "File:Stalingrad - Preparations for Operation Uranus.png",
+      "url": "https://commons.wikimedia.org/wiki/File:Stalingrad_-_Preparations_for_Operation_Uranus.png",
+      "retrieved_at": "2026-07-25",
+      "license": "CC BY-SA 3.0",
+      "note": "Direct operational map source for Axis and Soviet unit locations on 18 November 1942; the file page warns that line thicknesses characterize strength and that the base-map projection is unknown."
+    }
+  ],
+  "animation_hints": {
+    "map": {
+      "initial_center": [43.55, 48.65],
+      "initial_zoom": 7,
+      "bounds_padding": 0.2
+    },
+    "style": {
+      "side_colors": {
+        "side_axis": "#b84a3a",
+        "side_soviet": "#2f6fb5"
+      },
+      "actor_icons": {
+        "actor_axis_stalingrad": "army",
+        "actor_soviet_north": "army",
+        "actor_soviet_south": "army"
+      },
+      "event_icons": {
+        "attack": "burst",
+        "capture": "flag",
+        "defend": "shield"
+      },
+      "movement_line_width": 3
+    },
+    "timeline": {
+      "default_event_duration_ms": 1800,
+      "historical_seconds_per_playback_second": 86400,
+      "idle_compression_threshold_seconds": 259200,
+      "idle_compressed_duration_ms": 1200,
+      "ordered_event_ids": [
+        "event_uranus_begins",
+        "event_encirclement_established",
+        "event_pocket_isolated"
+      ]
+    },
+    "camera": [
+      {
+        "event_id": "event_uranus_begins",
+        "center": [43.2, 48.8],
+        "zoom": 7
+      },
+      {
+        "event_id": "event_encirclement_established",
+        "center": [43.8, 48.7],
+        "zoom": 8
+      },
+      {
+        "event_id": "event_pocket_isolated",
+        "center": [44.1, 48.75],
+        "zoom": 9
+      }
+    ]
+  }
+}
