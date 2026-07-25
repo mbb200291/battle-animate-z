@@ -157,7 +157,7 @@
       "description": "Soviet forces began a two-pronged counterattack against the Romanian-protected Axis flanks around Stalingrad.",
       "actor_ids": ["actor_soviet_north", "actor_soviet_south"],
       "target_actor_ids": ["actor_axis_stalingrad"],
-      "place_ids": ["place_serafimovich", "place_stalingrad"],
+      "place_ids": ["place_stalingrad", "place_serafimovich"],
       "precision": "approximate",
       "confidence": 0.9,
       "source_ids": ["source_wikipedia_stalingrad", "source_map_uranus_preparations"]

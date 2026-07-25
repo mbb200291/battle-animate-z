@@ -230,8 +230,12 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         script = """
             import fs from "node:fs";
             import { validateBattle } from "./app/animate.js";
+            import { compileTimeline } from "./app/timeline.js";
             const battle = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-            console.log(JSON.stringify(validateBattle(battle)));
+            console.log(JSON.stringify({
+                diagnostics: validateBattle(battle),
+                axisStart: compileTimeline(battle).startingPositions.get("actor_axis_stalingrad"),
+            }));
         """
         result = subprocess.run(
             ["node", "--input-type=module", "-e", script, str(STALINGRAD_EXAMPLE)],
@@ -241,7 +245,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout), {"errors": [], "warnings": []})
+        self.assertEqual(
+            json.loads(result.stdout),
+            {
+                "diagnostics": {"errors": [], "warnings": []},
+                "axisStart": [44.516, 48.709],
+            },
+        )
 
     def test_modern_border_asset_is_geometry_only_natural_earth(self):
         path = ROOT / "app" / "data" / "modern-borders-50m.geojson"
