@@ -451,6 +451,17 @@ function frontlineBattleFixture() {
   return battle;
 }
 
+function enclosureBattleFixture({ inferred = false } = {}) {
+  const battle = frontlineBattleFixture();
+  battle.frontline_snapshots[0].front_lines[0].geometry.coordinates = [[0, -1], [0, 1]];
+  battle.frontline_snapshots[1].front_lines[0].geometry.coordinates = [
+    [1, -1], [2, 0], [1, 1], [1, -1],
+  ];
+  battle.frontline_snapshots[1].precision = inferred ? "inferred" : "exact";
+  battle.frontline_snapshots[1].confidence = inferred ? 0.6 : 0.8;
+  return battle;
+}
+
 function frontlineFallbackBattleFixture() {
   const battle = battleFixture();
   battle.schema_version = "0.4.0";
@@ -1322,6 +1333,129 @@ test("compatible frontline playback keeps keyed nodes while geometry changes con
     element.getAttribute("data-frontline-key") === "line:main_front"), line);
   assert.notEqual(line.getAttribute("d"), before);
   assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
+test("enclosure interpolation holds the open geometry until playback crosses its boundary", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(enclosureBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const line = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  const open = line.getAttribute("d");
+
+  controller.renderAt(500, { mode: "playback" });
+
+  assert.equal(line.getAttribute("d"), open);
+  assert.equal(controller._frontTransitionTimers.has("enclosure"), false);
+});
+
+test("enclosure playback reveals the final line with a mask and delayed control area", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(enclosureBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const line = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  const open = line.getAttribute("d");
+  controller.renderAt(500, { mode: "playback" });
+  controller.renderAt(1000, { mode: "playback" });
+
+  const all = descendants(svg);
+  const masks = all.filter((element) => element.tagName === "MASK" &&
+    element.children[0]?.classList.contains("front-enclosure-mask-path"));
+  const exiting = all.find((element) => element.classList.contains("is-enclosure-exiting"));
+  const area = all.find((element) => element.getAttribute("data-frontline-key") === "area:blue_area");
+  assert.equal(masks.length, 1);
+  assert.equal(exiting.getAttribute("d"), open);
+  assert.notEqual(line.getAttribute("d"), open);
+  assert.match(line.getAttribute("mask"), /^url\(#front-enclosure-/);
+  assert.equal(masks[0].children[0].getAttribute("d"), line.getAttribute("d"));
+  assert.equal(masks[0].children[0].getAttribute("pathLength"), "1");
+  assert.equal(area.classList.contains("is-enclosure-area-entering"), true);
+  assert.equal(clock.timeoutDelays.get(controller._frontTransitionTimers.get("enclosure")), 900);
+
+  clock.flushTimeouts();
+  assert.equal(line.getAttribute("mask"), null);
+  assert.equal(descendants(svg).some((element) =>
+    element.classList.contains("front-enclosure-mask-path")), false);
+  assert.equal(exiting.parentNode, null);
+  assert.equal(area.classList.contains("is-enclosure-area-entering"), false);
+});
+
+test("enclosure reveal preserves inferred styling and is immediate for seek or reduced motion", () => {
+  for (const reduced of [false, true]) {
+    const clock = new FrameClock(reduced);
+    const document = new FakeDocument(clock.window);
+    installLeaflet();
+    const controller = renderBattle(enclosureBattleFixture({ inferred: true }), document);
+    controller.renderAt(1000, { mode: reduced ? "playback" : "seek" });
+    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+    const line = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+    assert.equal(line.classList.contains("is-inferred"), true);
+    assert.equal(line.getAttribute("mask"), null);
+    assert.equal(controller._frontTransitionTimers.has("enclosure"), false);
+  }
+});
+
+test("a multi-keyframe playback jump reveals the last enclosure present in the final snapshot", () => {
+  const battle = enclosureBattleFixture();
+  const middle = structuredClone(battle.frontline_snapshots[1]);
+  middle.id = "front_2";
+  middle.time = { ...middle.time, label: "front_2", start: "2020-01-01T00:00:02Z" };
+  middle.front_lines.push({ id: "last_front", geometry: { type: "LineString", coordinates: [[2, -1], [2, 1]] } });
+  const final = structuredClone(middle);
+  final.id = "front_3";
+  final.time = { ...final.time, label: "front_3", start: "2020-01-01T00:00:03Z" };
+  final.front_lines.find(({ id }) => id === "last_front").geometry.coordinates = [[2, -1], [3, 0], [2, 1], [2, -1]];
+  battle.frontline_snapshots.push(middle, final);
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+
+  controller.renderAt(3000, { mode: "playback" });
+
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const target = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:last_front");
+  assert.match(target.getAttribute("mask"), /^url\(#front-enclosure-/);
+  assert.equal(controller._frontTransitionTimers.has("enclosure"), true);
+});
+
+test("enclosure artifacts clear on reprojection, fronts off, replacement, and destroy", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const start = () => {
+    const controller = renderBattle(enclosureBattleFixture(), document);
+    controller.renderAt(1000, { mode: "playback" });
+    return controller;
+  };
+  const clean = (controller) => {
+    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+    assert.equal(controller._frontTransitionTimers.size, 0);
+    assert.equal(descendants(svg).some((element) => element.classList.contains("front-enclosure-mask-path") ||
+      element.classList.contains("is-enclosure-exiting") ||
+      element.classList.contains("is-enclosure-area-entering")), false);
+  };
+  let controller = start();
+  const firstMaskId = descendants(document.getElementById("battle-map")).find((element) =>
+    element.children[0]?.classList.contains("front-enclosure-mask-path"))?.getAttribute("id");
+  maps.at(-1).fire("move");
+  clean(controller);
+  controller = start();
+  const replacementMaskId = descendants(document.getElementById("battle-map")).find((element) =>
+    element.children[0]?.classList.contains("front-enclosure-mask-path"))?.getAttribute("id");
+  assert.notEqual(replacementMaskId, firstMaskId);
+  controller.setFrontsEnabled(false);
+  clean(controller);
+  controller = start();
+  const replaced = renderBattle(frontlineBattleFixture(), document);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+  controller = start();
+  controller.destroy();
+  assert.equal(controller._frontTransitionTimers.size, 0);
+  replaced.destroy();
 });
 
 test("incompatible frontline playback crossfades old and new nodes for 500ms", () => {
@@ -2403,6 +2537,16 @@ test("frontline topology CSS crossfades entering and exiting geometry for 500ms"
   assert.match(css, /\.front-line\.is-front-exiting,[\s\S]*animation:\s*front-fade-out 500ms ease-in both/);
   assert.match(css, /@keyframes front-fade-in/);
   assert.match(css, /@keyframes front-fade-out/);
+});
+
+test("frontline enclosure CSS reveals normalized masks and delays source-opacity areas", () => {
+  const css = readFileSync(new URL("../app/styles.css", import.meta.url), "utf8");
+  const media = css.match(/@media \(prefers-reduced-motion: reduce\)\s*\{(?<body>[\s\S]*?)\n\}/)?.groups?.body || "";
+
+  assert.match(css, /\.front-line\.is-enclosure-exiting\s*\{[\s\S]*animation:\s*front-fade-out 350ms ease-in both/);
+  assert.match(css, /\.front-enclosure-mask-path\s*\{[\s\S]*stroke-dasharray:\s*1;[\s\S]*stroke-dashoffset:\s*1;[\s\S]*animation:\s*front-enclosure-reveal 900ms ease-out both/);
+  assert.match(css, /\.front-control-area\.is-enclosure-area-entering\s*\{[\s\S]*animation:\s*front-fade-in 360ms ease-out 540ms both/);
+  assert.match(media, /\.front-enclosure-mask-path[\s\S]*animation:\s*none\s*!important/);
 });
 
 test("destroy is idempotent and cancels frames and listeners exactly once", () => {

@@ -403,12 +403,30 @@ button.ghost,
   animation: front-fade-out 500ms ease-in both;
 }
 
+.front-line.is-enclosure-exiting {
+  animation: front-fade-out 350ms ease-in both;
+}
+
+.front-enclosure-mask-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: front-enclosure-reveal 900ms ease-out both;
+}
+
+.front-control-area.is-enclosure-area-entering {
+  animation: front-fade-in 360ms ease-out 540ms both;
+}
+
 @keyframes front-fade-in {
   from { opacity: 0; }
 }
 
 @keyframes front-fade-out {
   to { opacity: 0; }
+}
+
+@keyframes front-enclosure-reveal {
+  to { stroke-dashoffset: 0; }
 }
 
 #focus-event-button:disabled {
@@ -769,6 +787,7 @@ button.ghost,
   .movement-path,
   .event-beacon,
   .event-beacon-pulse,
+  .front-enclosure-mask-path,
   .front-line,
   .front-control-area,
   .unit,

@@ -3,12 +3,14 @@ import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } fro
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
 import { buildFocusPlan } from "./map-view.js";
-import { deriveFrontlineFallback, interpolateFrontlineSnapshots } from "./frontlines.js";
+import { deriveFrontlineFallback, enclosureLineIds, interpolateFrontlineSnapshots } from "./frontlines.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const FRONT_CROSSFADE_MS = 500;
+const FRONT_ENCLOSURE_REVEAL_MS = 900;
 const FRONT_INFLUENCE_RADIUS = 28;
 const FRONT_PAIR_MAX_PX = 160;
+let frontEnclosureSequence = 0;
 
 function fallbackPairDistance(project, influences, zoom) {
   let pixelsPerDegree = 0;
@@ -1223,10 +1225,15 @@ export function renderBattle(battle, documentRef = document) {
       } else {
         element.classList.remove("is-front-entering");
       }
+      element.classList.remove("is-enclosure-area-entering");
+      element.removeAttribute("mask");
     }
   }
 
   function frontlineGeometry(state) {
+    if (state.transition === "enclosure" && state.before !== state.after) {
+      return interpolateFrontlineSnapshots(state.before, state.before, 0);
+    }
     const geometry = interpolateFrontlineSnapshots(state.before, state.after, state.progress);
     if (state.before === state.after) {
       const lineIds = new Set(geometry.interpolatedLines.map(({ id }) => id));
@@ -1263,6 +1270,21 @@ export function renderBattle(battle, documentRef = document) {
     return geometry;
   }
 
+  function crossedEnclosure(previousSampled, sampled) {
+    if (!previousSampled || sampled.historicalMs <= previousSampled.historicalMs) return null;
+    const finalIds = new Set((sampled.frontline?.after?.front_lines || []).map(({ id }) => id));
+    let result = null;
+    for (let index = 1; index < compiled.frontlineKeyframes.length; index += 1) {
+      const current = compiled.frontlineKeyframes[index];
+      if (current.historicalMs > sampled.historicalMs) break;
+      if (current.historicalMs <= previousSampled.historicalMs) continue;
+      const previous = compiled.frontlineKeyframes[index - 1];
+      const ids = enclosureLineIds(previous.snapshot, current.snapshot).filter((id) => finalIds.has(id));
+      if (ids.length) result = { ids, before: previous.snapshot, snapshot: current.snapshot };
+    }
+    return result;
+  }
+
   function crossedIncompatibleKeyframes(previousSampled, sampled) {
     if (!previousSampled || sampled.historicalMs <= previousSampled.historicalMs) return [];
     const crossed = [];
@@ -1289,18 +1311,29 @@ export function renderBattle(battle, documentRef = document) {
     controller._frontlineStatus = null;
     if (state) {
       controller._frontlineStatus = { kind: "source", state };
-      const crossedGeometries = mode === "playback" && !reducedMotion
+      const enclosure = mode === "playback" && !reducedMotion
+        ? crossedEnclosure(previousSampled, sampled)
+        : null;
+      const crossedGeometries = mode === "playback" && !reducedMotion && !enclosure
         ? crossedIncompatibleKeyframes(previousSampled, sampled)
         : [];
       const crossing = crossedGeometries.length > 0;
-      const geometry = frontlineGeometry(state);
+      const enclosureId = enclosure
+        ? [...enclosure.ids].reverse().find((id) =>
+          (enclosure.snapshot.front_lines || []).some((line) => line.id === id))
+        : null;
+      const enclosureOld = enclosureId ? frontlineEls.get(`line:${enclosureId}`)?.cloneNode(true) : null;
+      const geometry = enclosure
+        ? frontlineGeometry({ before: enclosure.snapshot, after: enclosure.snapshot, transition: "interpolate" })
+        : frontlineGeometry(state);
+      if (enclosure) controller._frontlineStatus.state = { ...state, transition: "enclosure" };
       const targetKeys = new Set([
         ...geometry.interpolatedAreas.map((area) => `area:${area.id}`),
         ...geometry.interpolatedLines.map((line) => `line:${line.id}`),
       ]);
       const entering = [];
+      if (crossing || enclosure) clearFrontTransitions(controller);
       if (crossing) {
-        clearFrontTransitions(controller);
         const sameKeyCrossfades = new Set();
         for (const [prefix, exitField, enterField] of [
           ["line", "exitingLines", "enteringLines"],
@@ -1337,6 +1370,9 @@ export function renderBattle(battle, documentRef = document) {
         path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
         path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
         path.classList.toggle("is-inferred", area.precision === "inferred");
+        if (enclosure && (enclosure.snapshot.control_areas || []).some(({ id }) => id === area.id)) {
+          path.classList.add("is-enclosure-area-entering");
+        }
       }
       for (const line of geometry.interpolatedLines) {
         const key = `line:${line.id}`;
@@ -1356,6 +1392,40 @@ export function renderBattle(battle, documentRef = document) {
           label.setAttribute("x", point.x + 7);
           label.setAttribute("y", point.y - 7);
           label.textContent = `推定 · ${Math.round(line.confidence * 100)}%`;
+        }
+      }
+      if (enclosure) {
+        const target = enclosureId ? frontlineEls.get(`line:${enclosureId}`) : null;
+        const oldLine = enclosure.before.front_lines?.find(({ id }) => id === enclosureId);
+        const old = enclosureOld || (target && oldLine ? target.cloneNode(true) : null);
+        if (target?.parentNode && old) {
+          if (!enclosureOld) old.setAttribute("d", toFrontlinePath(oldLine.geometry.coordinates));
+          old.removeAttribute("mask");
+          old.classList.add("is-enclosure-exiting");
+          target.parentNode.append(old);
+          transientFrontlineEls.add(old);
+          const maskId = `front-enclosure-${++frontEnclosureSequence}`;
+          const mask = svgEl(documentRef, "mask", { id: maskId });
+          const reveal = svgEl(documentRef, "path", {
+            class: "front-enclosure-mask-path",
+            d: target.getAttribute("d"),
+            pathLength: "1",
+            stroke: "white",
+            "stroke-width": 12,
+            "stroke-dasharray": "1",
+            "stroke-dashoffset": "1",
+          });
+          mask.append(reveal);
+          defs.append(mask);
+          transientFrontlineEls.add(mask);
+          target.setAttribute("mask", `url(#${maskId})`);
+          const timer = scheduleTimeout(() => {
+            if (controller._frontTransitionTimers.get("enclosure") !== timer) return;
+            clearFrontTransitions(controller);
+          }, FRONT_ENCLOSURE_REVEAL_MS);
+          controller._frontTransitionTimers.set("enclosure", timer);
+        } else {
+          clearFrontTransitions(controller);
         }
       }
       if (crossing) {
@@ -1442,7 +1512,9 @@ export function renderBattle(battle, documentRef = document) {
     const linkedEvents = [...new Set(snapshots
       .map((snapshot) => events.get(snapshot.event_id)?.title)
       .filter(Boolean))];
-    const transitionLabel = transition === "crossfade" ? "Crossfade" : "Interpolated";
+    const transitionLabel = transition === "crossfade"
+      ? "Crossfade"
+      : transition === "enclosure" ? "Enclosure reveal" : "Interpolated";
     const parts = [
       time,
       precision,
