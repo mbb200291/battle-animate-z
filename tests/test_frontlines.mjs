@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   deriveFrontlineFallback,
+  enclosureLineIds,
   interpolateFrontlineSnapshots,
+  isClosedFrontline,
   resampleLine,
   resampleRing,
 } from "../app/frontlines.js";
@@ -17,6 +19,63 @@ const area = (id, sideId, coordinates) => ({
   id,
   side_id: sideId,
   geometry: { type: "Polygon", coordinates },
+});
+
+test("isClosedFrontline recognizes closed rings and rejects open lines", () => {
+  assert.equal(isClosedFrontline([[0, 0], [2, 0], [1, 1], [0, 0]]), true);
+  assert.equal(isClosedFrontline([[0, 0], [2, 0], [1, 1], [0, 1]]), false);
+});
+
+test("isClosedFrontline uses inclusive tolerance and wrapped longitude", () => {
+  assert.equal(isClosedFrontline([[0, 0], [2, 0], [1, 1], [0.000001, 0.000001]]), true);
+  assert.equal(isClosedFrontline([[0, 0], [2, 0], [1, 1], [0.0000011, 0]]), false);
+  assert.equal(isClosedFrontline([[180, 0], [170, 1], [-170, 1], [-180, 0]]), true);
+});
+
+test("isClosedFrontline rejects degenerate and malformed coordinates without mutation", () => {
+  const valid = [[0, 0], [2, 0], [1, 1], [0, 0]];
+  const before = JSON.stringify(valid);
+  assert.equal(isClosedFrontline([[0, 0], [1, 1], [0, 0]]), false);
+  assert.equal(isClosedFrontline([[0, 0], [1, 1], null, [0, 0]]), false);
+  assert.equal(isClosedFrontline(null), false);
+  assert.equal(isClosedFrontline(valid), true);
+  assert.equal(JSON.stringify(valid), before);
+});
+
+test("enclosureLineIds returns stable open-to-closed IDs in source order", () => {
+  const before = {
+    front_lines: [
+      line("second", [[10, 0], [11, 1], [10, 1], [10, 2]]),
+      line("first", [[0, 0], [2, 0], [1, 1], [0, 1]]),
+      line("reopened", [[20, 0], [22, 0], [21, 1], [20, 0]]),
+      line(undefined, [[30, 0], [32, 0], [31, 1], [30, 1]]),
+    ],
+  };
+  const after = {
+    front_lines: [
+      line("first", [[0, 0], [2, 0], [1, 1], [0, 0]]),
+      line("second", [[10, 0], [11, 1], [10, 1], [10, 0]]),
+      line("reopened", [[20, 0], [22, 0], [21, 1], [20, 2]]),
+      line(undefined, [[30, 0], [32, 0], [31, 1], [30, 0]]),
+    ],
+  };
+  const inputs = JSON.stringify([before, after]);
+
+  const ids = enclosureLineIds(before, after);
+
+  assert.deepEqual(ids, ["second", "first"]);
+  assert.notEqual(ids, enclosureLineIds(before, after));
+  assert.equal(JSON.stringify([before, after]), inputs);
+});
+
+test("enclosureLineIds excludes non-LineStrings and malformed or missing matches", () => {
+  const malformed = { id: "bad", geometry: { type: "LineString", coordinates: null } };
+  const polygon = { id: "polygon", geometry: { type: "Polygon", coordinates: [] } };
+  assert.deepEqual(enclosureLineIds(
+    { front_lines: [malformed, polygon, line("missing", [[0, 0], [1, 0], [1, 1], [0, 1]])] },
+    { front_lines: [line("bad", [[0, 0], [2, 0], [1, 1], [0, 0]]), polygon] },
+  ), []);
+  assert.deepEqual(enclosureLineIds(null, null), []);
 });
 
 test("resampleLine includes endpoints and returns fresh coordinates", () => {

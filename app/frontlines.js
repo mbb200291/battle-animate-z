@@ -220,6 +220,33 @@ function deltaLongitude(left, right) {
   return delta;
 }
 
+export function isClosedFrontline(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 4 || !coordinates.every(isPoint)) return false;
+  const first = coordinates[0];
+  const last = coordinates.at(-1);
+  return Math.abs(deltaLongitude(first[0], last[0])) <= 1e-6 &&
+    Math.abs(first[1] - last[1]) <= 1e-6;
+}
+
+export function enclosureLineIds(beforeSnapshot, afterSnapshot) {
+  const before = Array.isArray(beforeSnapshot?.front_lines) ? beforeSnapshot.front_lines : [];
+  const after = Array.isArray(afterSnapshot?.front_lines) ? afterSnapshot.front_lines : [];
+  const afterById = new Map(after.map((line) => [line?.id, line]));
+  return before.flatMap((line) => {
+    const next = afterById.get(line?.id);
+    return typeof line?.id === "string" &&
+      line.geometry?.type === "LineString" &&
+      next?.geometry?.type === "LineString" &&
+      Array.isArray(line.geometry.coordinates) &&
+      line.geometry.coordinates.length >= 2 &&
+      line.geometry.coordinates.every(isPoint) &&
+      !isClosedFrontline(line.geometry.coordinates) &&
+      isClosedFrontline(next.geometry.coordinates)
+      ? [line.id]
+      : [];
+  });
+}
+
 const distance = (left, right) =>
   Math.hypot(deltaLongitude(left[0], right[0]), right[1] - left[1]);
 
