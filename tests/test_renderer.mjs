@@ -1383,6 +1383,59 @@ test("enclosure playback reveals the final line with a mask and delayed control 
   assert.equal(area.classList.contains("is-enclosure-area-entering"), false);
 });
 
+test("enclosure crossing recreates a detached keyed target and settles without reveal artifacts", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(enclosureBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const stale = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  controller.renderAt(500, { mode: "playback" });
+  stale.remove();
+
+  controller.renderAt(1000, { mode: "playback" });
+
+  const target = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  assert.ok(target?.parentNode);
+  assert.notEqual(target, stale);
+  assert.equal(target.getAttribute("mask"), null);
+  assert.equal(controller._frontTransitionTimers.has("enclosure"), false);
+  assert.equal(descendants(svg).some((element) => element.classList.contains("front-enclosure-mask-path")), false);
+});
+
+test("high-speed enclosure inspector uses the crossed snapshots provenance", () => {
+  const battle = enclosureBattleFixture();
+  battle.sources.push({
+    id: "closed-source", title: "Closure source", url: "https://example.test/closure",
+    retrieved_at: "2026-08-03", license: "CC BY 4.0",
+  });
+  battle.frontline_snapshots[1].source_ids = ["closed-source"];
+  battle.frontline_snapshots[1].event_id = "finish";
+  battle.frontline_snapshots[1].confidence = 0.55;
+  const later = structuredClone(battle.frontline_snapshots[1]);
+  later.id = "front_2";
+  later.time = { ...later.time, label: "later", start: "2020-01-01T00:00:02Z" };
+  later.source_ids = ["front-source"];
+  later.event_id = "opening";
+  later.confidence = 0.95;
+  battle.frontline_snapshots.push(later);
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+
+  controller.renderAt(2000, { mode: "playback" });
+
+  const summary = document.getElementById("frontline-summary").textContent;
+  const sources = document.getElementById("frontline-sources");
+  assert.match(summary, /front_0 → front_1/);
+  assert.match(summary, /55% confidence/);
+  assert.match(summary, /Opening/);
+  assert.match(summary, /Finish/);
+  assert.match(summary, /Enclosure reveal/);
+  assert.deepEqual(sources.children.map((item) => item.children[0].textContent), ["<Front source>", "Closure source"]);
+});
+
 test("enclosure reveal preserves inferred styling and is immediate for seek or reduced motion", () => {
   for (const reduced of [false, true]) {
     const clock = new FrameClock(reduced);
@@ -1398,12 +1451,37 @@ test("enclosure reveal preserves inferred styling and is immediate for seek or r
   }
 });
 
+test("initial render, scrub, reset, and previous-next navigation settle enclosure immediately", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(enclosureBattleFixture(), document);
+  wirePlaybackControls(controller, document);
+  const artifacts = () => descendants(document.getElementById("battle-map")).filter((element) =>
+    element.classList.contains("front-enclosure-mask-path") ||
+    element.classList.contains("is-enclosure-exiting") ||
+    element.classList.contains("is-enclosure-area-entering"));
+  assert.equal(artifacts().length, 0);
+  document.getElementById("event-scrubber").oninput({ target: { value: "1000" } });
+  assert.equal(artifacts().length, 0);
+  document.getElementById("reset-button").onclick();
+  assert.equal(artifacts().length, 0);
+  document.getElementById("next-button").onclick();
+  assert.equal(artifacts().length, 0);
+  document.getElementById("prev-button").onclick();
+  assert.equal(artifacts().length, 0);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
 test("a multi-keyframe playback jump reveals the last enclosure present in the final snapshot", () => {
   const battle = enclosureBattleFixture();
+  battle.frontline_snapshots[0].front_lines.push({
+    id: "last_front", geometry: { type: "LineString", coordinates: [[2, -1], [2, 1]] },
+  });
   const middle = structuredClone(battle.frontline_snapshots[1]);
   middle.id = "front_2";
   middle.time = { ...middle.time, label: "front_2", start: "2020-01-01T00:00:02Z" };
-  middle.front_lines.push({ id: "last_front", geometry: { type: "LineString", coordinates: [[2, -1], [2, 1]] } });
+  middle.front_lines.push(structuredClone(battle.frontline_snapshots[0].front_lines[1]));
   const final = structuredClone(middle);
   final.id = "front_3";
   final.time = { ...final.time, label: "front_3", start: "2020-01-01T00:00:03Z" };
@@ -1420,6 +1498,60 @@ test("a multi-keyframe playback jump reveals the last enclosure present in the f
   const target = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:last_front");
   assert.match(target.getAttribute("mask"), /^url\(#front-enclosure-/);
   assert.equal(controller._frontTransitionTimers.has("enclosure"), true);
+});
+
+test("a later enclosure transition clears every artifact owned by the prior reveal", () => {
+  const battle = enclosureBattleFixture();
+  battle.frontline_snapshots[0].front_lines.push({
+    id: "second_front", geometry: { type: "LineString", coordinates: [[3, -1], [3, 1]] },
+  });
+  battle.frontline_snapshots[1].front_lines.push(structuredClone(battle.frontline_snapshots[0].front_lines[1]));
+  const final = structuredClone(battle.frontline_snapshots[1]);
+  final.id = "front_2";
+  final.time = { ...final.time, label: "front_2", start: "2020-01-01T00:00:02Z" };
+  final.front_lines[1].geometry.coordinates = [[3, -1], [4, 0], [3, 1], [3, -1]];
+  battle.frontline_snapshots.push(final);
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  controller.renderAt(1000, { mode: "playback" });
+  const firstTarget = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  const firstMask = firstTarget.getAttribute("mask");
+
+  controller.renderAt(2000, { mode: "playback" });
+
+  const artifacts = descendants(svg);
+  const secondTarget = artifacts.find((element) => element.getAttribute("data-frontline-key") === "line:second_front");
+  assert.equal(firstTarget.getAttribute("mask"), null);
+  assert.notEqual(secondTarget.getAttribute("mask"), firstMask);
+  assert.equal(artifacts.filter((element) => element.classList.contains("front-enclosure-mask-path")).length, 1);
+  assert.equal(artifacts.filter((element) => element.classList.contains("is-enclosure-exiting")).length, 1);
+  assert.equal(controller._frontTransitionTimers.size, 1);
+});
+
+test("replacement and destroy remove enclosure nodes, classes, masks, clones, and timers", () => {
+  for (const replace of [true, false]) {
+    const clock = new FrameClock();
+    const document = new FakeDocument(clock.window);
+    installLeaflet();
+    const controller = renderBattle(enclosureBattleFixture(), document);
+    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+    controller.renderAt(1000, { mode: "playback" });
+    const target = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+    const maskPath = descendants(svg).find((element) => element.classList.contains("front-enclosure-mask-path"));
+    const mask = maskPath.parentNode;
+    const old = descendants(svg).find((element) => element.classList.contains("is-enclosure-exiting"));
+    const area = descendants(svg).find((element) => element.classList.contains("is-enclosure-area-entering"));
+    if (replace) renderBattle(frontlineBattleFixture(), document);
+    else controller.destroy();
+    assert.equal(controller._frontTransitionTimers.size, 0);
+    assert.equal(target.getAttribute("mask"), null);
+    assert.equal(mask.parentNode, null);
+    assert.equal(old.parentNode, null);
+    assert.equal(area.classList.contains("is-enclosure-area-entering"), false);
+  }
 });
 
 test("enclosure artifacts clear on reprojection, fronts off, replacement, and destroy", () => {

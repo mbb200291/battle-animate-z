@@ -1202,6 +1202,10 @@ export function renderBattle(battle, documentRef = document) {
 
   function keyedFrontlineElement(key, parent, name, className) {
     let element = frontlineEls.get(key);
+    if (element && !element.parentNode) {
+      frontlineEls.delete(key);
+      element = null;
+    }
     if (!element) {
       element = svgEl(documentRef, name, {
         class: className,
@@ -1322,11 +1326,20 @@ export function renderBattle(battle, documentRef = document) {
         ? [...enclosure.ids].reverse().find((id) =>
           (enclosure.snapshot.front_lines || []).some((line) => line.id === id))
         : null;
-      const enclosureOld = enclosureId ? frontlineEls.get(`line:${enclosureId}`)?.cloneNode(true) : null;
+      const enclosureTarget = enclosureId ? frontlineEls.get(`line:${enclosureId}`) : null;
+      const enclosureOld = enclosureTarget?.parentNode ? enclosureTarget.cloneNode(true) : null;
       const geometry = enclosure
         ? frontlineGeometry({ before: enclosure.snapshot, after: enclosure.snapshot, transition: "interpolate" })
         : frontlineGeometry(state);
-      if (enclosure) controller._frontlineStatus.state = { ...state, transition: "enclosure" };
+      if (enclosure) {
+        controller._frontlineStatus.state = {
+          before: enclosure.before,
+          after: enclosure.snapshot,
+          progress: 1,
+          transition: "enclosure",
+          enclosureLineIds: enclosure.ids,
+        };
+      }
       const targetKeys = new Set([
         ...geometry.interpolatedAreas.map((area) => `area:${area.id}`),
         ...geometry.interpolatedLines.map((line) => `line:${line.id}`),
@@ -1396,10 +1409,8 @@ export function renderBattle(battle, documentRef = document) {
       }
       if (enclosure) {
         const target = enclosureId ? frontlineEls.get(`line:${enclosureId}`) : null;
-        const oldLine = enclosure.before.front_lines?.find(({ id }) => id === enclosureId);
-        const old = enclosureOld || (target && oldLine ? target.cloneNode(true) : null);
+        const old = enclosureOld;
         if (target?.parentNode && old) {
-          if (!enclosureOld) old.setAttribute("d", toFrontlinePath(oldLine.geometry.coordinates));
           old.removeAttribute("mask");
           old.classList.add("is-enclosure-exiting");
           target.parentNode.append(old);
