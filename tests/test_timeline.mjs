@@ -269,6 +269,25 @@ test("settled frontline samples consistently clear enclosure metadata", () => {
   assert.equal(boundary.before.id, "after");
 });
 
+test("exact intermediate enclosure keyframe returns the settled target", () => {
+  const middle = closeFrontline(frontlineSnapshot("middle", 10));
+  const timeline = compileTimeline(frontlineBattle([
+    frontlineSnapshot("before", 0),
+    middle,
+    frontlineSnapshot("after", 20),
+  ]));
+  const frontline = sampleTimeline(
+    timeline,
+    toPresentationTime(timeline, parseBattleTime(iso(10))),
+  ).frontline;
+
+  assert.equal(frontline.before, middle);
+  assert.equal(frontline.after, middle);
+  assert.equal(frontline.progress, 0);
+  assert.equal(frontline.transition, "interpolate");
+  assert.deepEqual(frontline.enclosureLineIds, []);
+});
+
 test("parseBattleTime treats offset-free battle time as UTC-like", () => {
   assert.equal(parseBattleTime("1894-09-17T12:34:56.250"), Date.UTC(1894, 8, 17, 12, 34, 56, 250));
 });
