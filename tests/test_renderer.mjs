@@ -1605,6 +1605,44 @@ test("a multi-keyframe playback jump reveals the last enclosure present in the f
   assert.equal(controller._frontTransitionTimers.has("enclosure"), true);
 });
 
+test("a jump past enclosure reveals the final sampled geometry and later topology", () => {
+  const battle = enclosureBattleFixture();
+  const final = structuredClone(battle.frontline_snapshots[1]);
+  final.id = "front_2";
+  final.time = { ...final.time, label: "front_2", start: "2020-01-01T00:00:02Z" };
+  final.front_lines[0].geometry.coordinates = [[4, -1], [5, 0], [4, 1], [4, -1]];
+  final.front_lines.push({ id: "later_front", geometry: { type: "LineString", coordinates: [[6, -1], [6, 1]] } });
+  final.control_areas[0].geometry.coordinates = [[[3, -1], [5, -1], [5, 1], [3, -1]]];
+  battle.frontline_snapshots.push(final);
+
+  const expectedClock = new FrameClock();
+  const expectedDocument = new FakeDocument(expectedClock.window);
+  installLeaflet();
+  const expectedController = renderBattle(battle, expectedDocument);
+  expectedController.seek(2000);
+  const expectedSvg = expectedDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const expectedLineD = descendants(expectedSvg).find((element) =>
+    element.getAttribute("data-frontline-key") === "line:main_front").getAttribute("d");
+  const expectedAreaD = descendants(expectedSvg).find((element) =>
+    element.getAttribute("data-frontline-key") === "area:blue_area").getAttribute("d");
+
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  controller.renderAt(2000, { mode: "playback" });
+
+  const target = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:main_front");
+  const area = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "area:blue_area");
+  const later = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "line:later_front");
+  assert.equal(target.getAttribute("d"), expectedLineD);
+  assert.equal(area.getAttribute("d"), expectedAreaD);
+  assert.match(target.getAttribute("mask"), /^url\(#front-enclosure-/);
+  assert.equal(later.classList.contains("is-front-entering"), true);
+  assert.match(document.getElementById("frontline-summary").textContent, /front_0 → front_1.*Enclosure reveal/);
+});
+
 test("a later enclosure transition clears every artifact owned by the prior reveal", () => {
   const battle = enclosureBattleFixture();
   battle.frontline_snapshots[0].front_lines.push({

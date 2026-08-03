@@ -1343,13 +1343,14 @@ export function renderBattle(battle, documentRef = document) {
       const crossing = crossedGeometries.length > 0;
       const enclosureIds = enclosure ? new Set(enclosure.ids) : new Set();
       const enclosureOld = new Map();
+      const enclosureOldAreas = new Map((enclosure
+        ? interpolateFrontlineSnapshots(enclosure.before, enclosure.before, 0).interpolatedAreas
+        : []).map((area) => [area.id, area]));
       for (const id of enclosureIds) {
         const target = frontlineEls.get(`line:${id}`);
         if (target?.parentNode) enclosureOld.set(id, target.cloneNode(true));
       }
-      const geometry = enclosure
-        ? frontlineGeometry({ before: enclosure.snapshot, after: enclosure.snapshot, transition: "interpolate" })
-        : frontlineGeometry(state);
+      const geometry = frontlineGeometry(state);
       if (enclosure) {
         controller._frontlineStatus.state = {
           before: enclosure.before,
@@ -1402,11 +1403,10 @@ export function renderBattle(battle, documentRef = document) {
         path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
         path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
         path.classList.toggle("is-inferred", area.precision === "inferred");
-        const oldArea = enclosure?.before.control_areas?.find(({ id }) => id === area.id);
-        const targetArea = enclosure?.snapshot.control_areas?.find(({ id }) => id === area.id);
-        if (targetArea && (!oldArea || oldArea.side_id !== targetArea.side_id ||
-          oldArea.geometry?.type !== targetArea.geometry?.type ||
-          JSON.stringify(oldArea.geometry?.coordinates) !== JSON.stringify(targetArea.geometry?.coordinates))) {
+        const oldArea = enclosureOldAreas.get(area.id);
+        if (enclosure && (!oldArea || oldArea.sideId !== area.sideId ||
+          oldArea.geometry?.type !== area.geometry?.type ||
+          JSON.stringify(oldArea.geometry?.coordinates) !== JSON.stringify(area.geometry?.coordinates))) {
           path.classList.add("is-enclosure-area-entering");
         }
       }
