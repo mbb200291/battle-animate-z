@@ -1405,7 +1405,8 @@ export function renderBattle(battle, documentRef = document) {
         const oldArea = enclosure?.before.control_areas?.find(({ id }) => id === area.id);
         const targetArea = enclosure?.snapshot.control_areas?.find(({ id }) => id === area.id);
         if (targetArea && (!oldArea || oldArea.side_id !== targetArea.side_id ||
-          JSON.stringify(oldArea.geometry) !== JSON.stringify(targetArea.geometry))) {
+          oldArea.geometry?.type !== targetArea.geometry?.type ||
+          JSON.stringify(oldArea.geometry?.coordinates) !== JSON.stringify(targetArea.geometry?.coordinates))) {
           path.classList.add("is-enclosure-area-entering");
         }
       }
@@ -1463,6 +1464,8 @@ export function renderBattle(battle, documentRef = document) {
             settleEnclosureTransition();
           }, FRONT_ENCLOSURE_REVEAL_MS);
           controller._frontTransitionTimers.set("enclosure", timer);
+        } else {
+          settleEnclosureTransition();
         }
       }
       if (crossing) {

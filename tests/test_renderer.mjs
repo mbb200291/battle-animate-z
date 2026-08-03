@@ -1468,6 +1468,25 @@ test("enclosure delays only entering or materially changed target areas", () => 
   assert.equal(unchanged.classList.contains("is-enclosure-area-entering"), false);
 });
 
+test("equivalent area geometry with reordered object keys does not blink", () => {
+  const battle = enclosureBattleFixture();
+  const area = battle.frontline_snapshots[1].control_areas[0];
+  area.geometry = {
+    coordinates: structuredClone(battle.frontline_snapshots[0].control_areas[0].geometry.coordinates),
+    type: "Polygon",
+  };
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(1000, { mode: "playback" });
+
+  const target = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "area:blue_area");
+  assert.equal(target.classList.contains("is-enclosure-area-entering"), false);
+});
+
 test("enclosure crossing recreates a detached keyed target and settles without reveal artifacts", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
@@ -1486,6 +1505,7 @@ test("enclosure crossing recreates a detached keyed target and settles without r
   assert.equal(target.getAttribute("mask"), null);
   assert.equal(controller._frontTransitionTimers.has("enclosure"), false);
   assert.equal(descendants(svg).some((element) => element.classList.contains("front-enclosure-mask-path")), false);
+  assert.equal(descendants(svg).some((element) => element.classList.contains("is-enclosure-area-entering")), false);
 });
 
 test("high-speed enclosure inspector uses the crossed snapshots provenance", () => {
