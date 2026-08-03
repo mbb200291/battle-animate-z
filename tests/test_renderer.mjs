@@ -1383,6 +1383,91 @@ test("enclosure playback reveals the final line with a mask and delayed control 
   assert.equal(area.classList.contains("is-enclosure-area-entering"), false);
 });
 
+test("one enclosure boundary reveals every stable line that closes", () => {
+  const battle = enclosureBattleFixture();
+  battle.frontline_snapshots[0].front_lines.push({
+    id: "second_front", geometry: { type: "LineString", coordinates: [[3, -1], [3, 1]] },
+  });
+  battle.frontline_snapshots[1].front_lines.push({
+    id: "second_front", geometry: { type: "LineString", coordinates: [[3, -1], [4, 0], [3, 1], [3, -1]] },
+  });
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  controller.renderAt(1000, { mode: "playback" });
+
+  const lines = descendants(svg).filter((element) => element.classList.contains("front-line"));
+  const targets = lines.filter((element) => element.getAttribute("data-frontline-key") &&
+    !element.classList.contains("is-enclosure-exiting"));
+  assert.equal(targets.filter((line) => /^url\(#front-enclosure-/.test(line.getAttribute("mask"))).length, 2);
+  assert.equal(new Set(targets.map((line) => line.getAttribute("mask"))).size, 2);
+  assert.equal(lines.filter((line) => line.classList.contains("is-enclosure-exiting")).length, 2);
+  assert.deepEqual(controller._frontlineStatus.state.enclosureLineIds, ["main_front", "second_front"]);
+  clock.flushTimeouts();
+  assert.equal(descendants(svg).filter((element) => element.classList.contains("is-enclosure-exiting")).length, 0);
+  assert.equal(targets.every((line) => line.getAttribute("mask") === null), true);
+});
+
+test("enclosure and unrelated topology changes compose with independent timers", () => {
+  const battle = enclosureBattleFixture();
+  battle.frontline_snapshots[0].front_lines.push({
+    id: "departing", geometry: { type: "LineString", coordinates: [[3, -1], [3, 1]] },
+  });
+  battle.frontline_snapshots[1].front_lines.push({
+    id: "arriving", geometry: { type: "LineString", coordinates: [[4, -1], [4, 1]] },
+  });
+  battle.frontline_snapshots[1].control_areas[0].id = "arriving_area";
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  controller.renderAt(1000, { mode: "playback" });
+
+  const all = descendants(svg);
+  assert.equal(all.filter((element) => element.classList.contains("front-enclosure-mask-path")).length, 1);
+  assert.equal(all.some((element) => element.getAttribute("data-frontline-key") === "line:departing" &&
+    element.classList.contains("is-front-exiting")), true);
+  assert.equal(all.some((element) => element.getAttribute("data-frontline-key") === "line:arriving" &&
+    element.classList.contains("is-front-entering")), true);
+  assert.equal(all.some((element) => element.getAttribute("data-frontline-key") === "area:blue_area" &&
+    element.classList.contains("is-front-exiting")), true);
+  assert.equal(all.some((element) => element.getAttribute("data-frontline-key") === "area:arriving_area" &&
+    element.classList.contains("is-front-entering")), true);
+  assert.equal(clock.timeoutDelays.get(controller._frontTransitionTimers.get("topology")), 500);
+  assert.equal(clock.timeoutDelays.get(controller._frontTransitionTimers.get("enclosure")), 900);
+  const topologyTimer = controller._frontTransitionTimers.get("topology");
+  clock.timeouts.get(topologyTimer)();
+  assert.equal(controller._frontTransitionTimers.has("enclosure"), true);
+  assert.match(all.find((element) => element.getAttribute("data-frontline-key") === "line:main_front").getAttribute("mask"), /^url/);
+  clock.flushTimeouts();
+  assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
+test("enclosure delays only entering or materially changed target areas", () => {
+  const battle = enclosureBattleFixture();
+  for (const snapshot of battle.frontline_snapshots) {
+    snapshot.control_areas.push({
+      id: "unchanged_area", side_id: "red",
+      geometry: { type: "Polygon", coordinates: [[[3, -1], [4, -1], [3, 0], [3, -1]]] },
+    });
+  }
+  battle.frontline_snapshots[1].control_areas[0].geometry.coordinates = [[[0, -1], [2, -1], [2, 1], [0, -1]]];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  controller.renderAt(1000, { mode: "playback" });
+
+  const changed = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "area:blue_area");
+  const unchanged = descendants(svg).find((element) => element.getAttribute("data-frontline-key") === "area:unchanged_area");
+  assert.equal(changed.classList.contains("is-enclosure-area-entering"), true);
+  assert.equal(unchanged.classList.contains("is-enclosure-area-entering"), false);
+});
+
 test("enclosure crossing recreates a detached keyed target and settles without reveal artifacts", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);

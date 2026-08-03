@@ -1217,11 +1217,12 @@ export function renderBattle(battle, documentRef = document) {
     return element;
   }
 
-  function clearFrontTransitions(owner) {
-    for (const timer of owner._frontTransitionTimers.values()) cancelTimeout(timer);
-    owner._frontTransitionTimers.clear();
-    for (const element of transientFrontlineEls) element.remove();
-    transientFrontlineEls.clear();
+  function settleTopologyTransition() {
+    for (const element of [...transientFrontlineEls]) {
+      if (!element.classList.contains("is-front-exiting")) continue;
+      element.remove();
+      transientFrontlineEls.delete(element);
+    }
     for (const [key, element] of frontlineEls) {
       if (element.classList.contains("is-front-exiting")) {
         element.remove();
@@ -1229,9 +1230,27 @@ export function renderBattle(battle, documentRef = document) {
       } else {
         element.classList.remove("is-front-entering");
       }
+    }
+  }
+
+  function settleEnclosureTransition() {
+    for (const element of [...transientFrontlineEls]) {
+      const mask = element.children[0]?.classList.contains("front-enclosure-mask-path");
+      if (!mask && !element.classList.contains("is-enclosure-exiting")) continue;
+      element.remove();
+      transientFrontlineEls.delete(element);
+    }
+    for (const element of frontlineEls.values()) {
       element.classList.remove("is-enclosure-area-entering");
       element.removeAttribute("mask");
     }
+  }
+
+  function clearFrontTransitions(owner) {
+    for (const timer of owner._frontTransitionTimers.values()) cancelTimeout(timer);
+    owner._frontTransitionTimers.clear();
+    settleTopologyTransition();
+    settleEnclosureTransition();
   }
 
   function frontlineGeometry(state) {
@@ -1318,16 +1337,16 @@ export function renderBattle(battle, documentRef = document) {
       const enclosure = mode === "playback" && !reducedMotion
         ? crossedEnclosure(previousSampled, sampled)
         : null;
-      const crossedGeometries = mode === "playback" && !reducedMotion && !enclosure
+      const crossedGeometries = mode === "playback" && !reducedMotion
         ? crossedIncompatibleKeyframes(previousSampled, sampled)
         : [];
       const crossing = crossedGeometries.length > 0;
-      const enclosureId = enclosure
-        ? [...enclosure.ids].reverse().find((id) =>
-          (enclosure.snapshot.front_lines || []).some((line) => line.id === id))
-        : null;
-      const enclosureTarget = enclosureId ? frontlineEls.get(`line:${enclosureId}`) : null;
-      const enclosureOld = enclosureTarget?.parentNode ? enclosureTarget.cloneNode(true) : null;
+      const enclosureIds = enclosure ? new Set(enclosure.ids) : new Set();
+      const enclosureOld = new Map();
+      for (const id of enclosureIds) {
+        const target = frontlineEls.get(`line:${id}`);
+        if (target?.parentNode) enclosureOld.set(id, target.cloneNode(true));
+      }
       const geometry = enclosure
         ? frontlineGeometry({ before: enclosure.snapshot, after: enclosure.snapshot, transition: "interpolate" })
         : frontlineGeometry(state);
@@ -1353,9 +1372,9 @@ export function renderBattle(battle, documentRef = document) {
           ["area", "exitingAreas", "enteringAreas"],
         ]) {
           const exitingIds = new Set(crossedGeometries.flatMap((item) =>
-            item[exitField].map(({ id }) => id)));
+            item[exitField].map(({ id }) => id).filter((id) => prefix !== "line" || !enclosureIds.has(id))));
           const incomingIds = new Set(crossedGeometries.flatMap((item) =>
-            item[enterField].map(({ id }) => id)));
+            item[enterField].map(({ id }) => id).filter((id) => prefix !== "line" || !enclosureIds.has(id))));
           exitingIds.forEach((id) => {
             if (incomingIds.has(id)) sameKeyCrossfades.add(`${prefix}:${id}`);
           });
@@ -1383,7 +1402,10 @@ export function renderBattle(battle, documentRef = document) {
         path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
         path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
         path.classList.toggle("is-inferred", area.precision === "inferred");
-        if (enclosure && (enclosure.snapshot.control_areas || []).some(({ id }) => id === area.id)) {
+        const oldArea = enclosure?.before.control_areas?.find(({ id }) => id === area.id);
+        const targetArea = enclosure?.snapshot.control_areas?.find(({ id }) => id === area.id);
+        if (targetArea && (!oldArea || oldArea.side_id !== targetArea.side_id ||
+          JSON.stringify(oldArea.geometry) !== JSON.stringify(targetArea.geometry))) {
           path.classList.add("is-enclosure-area-entering");
         }
       }
@@ -1408,9 +1430,11 @@ export function renderBattle(battle, documentRef = document) {
         }
       }
       if (enclosure) {
-        const target = enclosureId ? frontlineEls.get(`line:${enclosureId}`) : null;
-        const old = enclosureOld;
-        if (target?.parentNode && old) {
+        let reveals = 0;
+        for (const id of enclosure.ids) {
+          const target = frontlineEls.get(`line:${id}`);
+          const old = enclosureOld.get(id);
+          if (!target?.parentNode || !old) continue;
           old.removeAttribute("mask");
           old.classList.add("is-enclosure-exiting");
           target.parentNode.append(old);
@@ -1430,20 +1454,23 @@ export function renderBattle(battle, documentRef = document) {
           defs.append(mask);
           transientFrontlineEls.add(mask);
           target.setAttribute("mask", `url(#${maskId})`);
+          reveals += 1;
+        }
+        if (reveals) {
           const timer = scheduleTimeout(() => {
             if (controller._frontTransitionTimers.get("enclosure") !== timer) return;
-            clearFrontTransitions(controller);
+            controller._frontTransitionTimers.delete("enclosure");
+            settleEnclosureTransition();
           }, FRONT_ENCLOSURE_REVEAL_MS);
           controller._frontTransitionTimers.set("enclosure", timer);
-        } else {
-          clearFrontTransitions(controller);
         }
       }
       if (crossing) {
         entering.forEach((element) => element.classList.add("is-front-entering"));
         const timer = scheduleTimeout(() => {
           if (controller._frontTransitionTimers.get("topology") !== timer) return;
-          clearFrontTransitions(controller);
+          controller._frontTransitionTimers.delete("topology");
+          settleTopologyTransition();
         }, FRONT_CROSSFADE_MS);
         controller._frontTransitionTimers.set("topology", timer);
       }
