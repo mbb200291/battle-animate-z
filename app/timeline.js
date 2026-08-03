@@ -1,3 +1,5 @@
+import { enclosureLineIds } from "./frontlines.js";
+
 const BATTLE_TIME_RE = /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:(Z)|([+-])(\d{2}):(\d{2}))?)?)?)?$/;
 
 const DEFAULT_EVENT_DURATION_MS = 1800;
@@ -416,22 +418,34 @@ function compatibleStableIds(before, after) {
 function sampleFrontline(timeline, historicalMs) {
   const keyframes = array(timeline?.frontlineKeyframes);
   if (!keyframes.length) return null;
+  const settled = (snapshot) => ({
+    before: snapshot,
+    after: snapshot,
+    progress: 0,
+    transition: "interpolate",
+    enclosureLineIds: [],
+  });
   if (historicalMs <= keyframes[0].historicalMs) {
-    const snapshot = keyframes[0].snapshot;
-    return { before: snapshot, after: snapshot, progress: 0, transition: "interpolate" };
+    return settled(keyframes[0].snapshot);
   }
+  const exact = keyframes.findLast((keyframe) => keyframe.historicalMs === historicalMs);
+  if (exact) return settled(exact.snapshot);
   const afterIndex = keyframes.findIndex((keyframe) => keyframe.historicalMs > historicalMs);
   if (afterIndex < 0) {
-    const snapshot = keyframes.at(-1).snapshot;
-    return { before: snapshot, after: snapshot, progress: 0, transition: "interpolate" };
+    return settled(keyframes.at(-1).snapshot);
   }
   const before = keyframes[afterIndex - 1];
   const after = keyframes[afterIndex];
+  const compatible = compatibleStableIds(before.snapshot, after.snapshot);
+  const enclosed = compatible ? enclosureLineIds(before.snapshot, after.snapshot) : [];
+  const reopened = compatible && enclosureLineIds(after.snapshot, before.snapshot).length > 0;
+  const transition = !compatible || reopened ? "crossfade" : enclosed.length ? "enclosure" : "interpolate";
   return {
     before: before.snapshot,
     after: after.snapshot,
     progress: (historicalMs - before.historicalMs) / (after.historicalMs - before.historicalMs),
-    transition: compatibleStableIds(before.snapshot, after.snapshot) ? "interpolate" : "crossfade",
+    transition,
+    enclosureLineIds: transition === "enclosure" ? enclosed : [],
   };
 }
 

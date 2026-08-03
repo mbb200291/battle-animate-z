@@ -91,6 +91,12 @@ function frontlineBattle(snapshots = [
   });
 }
 
+function closeFrontline(snapshot, lineId = "line") {
+  const line = snapshot.front_lines.find(({ id }) => id === lineId);
+  line.geometry.coordinates = [[0, 0], [1, 0], [1, 1], [0, 0]];
+  return snapshot;
+}
+
 test("frontline snapshots compile into chronological keyframes and interpolate by historical time", () => {
   const timeline = compileTimeline(frontlineBattle());
   assert.equal(timeline.frontlineKeyframes.length, 3);
@@ -202,6 +208,65 @@ test("frontline progress remains historical through idle compression and backwar
 
   sampleTimeline(timeline, timeline.presentationDurationMs);
   assert.deepEqual(sampleTimeline(timeline, atFive).frontline, first);
+});
+
+test("open stable-ID frontlines becoming closed classify as deterministic enclosure", () => {
+  const before = frontlineSnapshot("before", 0, ["bravo", "alpha"]);
+  const after = frontlineSnapshot("after", 10, ["bravo", "alpha"]);
+  closeFrontline(after, "bravo");
+  closeFrontline(after, "alpha");
+  const timeline = compileTimeline(frontlineBattle([before, after]));
+  const atFive = toPresentationTime(timeline, parseBattleTime(iso(5)));
+
+  const sample = sampleTimeline(timeline, atFive).frontline;
+  assert.equal(sample.transition, "enclosure");
+  assert.deepEqual(sample.enclosureLineIds, ["bravo", "alpha"]);
+  assert.equal(sample.progress, 0.5);
+
+  sampleTimeline(timeline, timeline.presentationDurationMs);
+  assert.deepEqual(sampleTimeline(timeline, atFive).frontline, sample);
+});
+
+test("frontline closure transitions distinguish interpolation, enclosure, and crossfade", () => {
+  const transition = (before, after) => {
+    const timeline = compileTimeline(frontlineBattle([before, after]));
+    return sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(5)))).frontline;
+  };
+
+  assert.equal(transition(
+    frontlineSnapshot("before", 0),
+    frontlineSnapshot("after", 10),
+  ).transition, "interpolate");
+
+  const closedBefore = closeFrontline(frontlineSnapshot("before", 0));
+  const openAfter = frontlineSnapshot("after", 10);
+  assert.equal(transition(closedBefore, openAfter).transition, "crossfade");
+
+  const enclosure = transition(
+    frontlineSnapshot("before", 0),
+    closeFrontline(frontlineSnapshot("after", 10)),
+  );
+  assert.equal(enclosure.transition, "enclosure");
+  assert.deepEqual(enclosure.enclosureLineIds, ["line"]);
+});
+
+test("settled frontline samples consistently clear enclosure metadata", () => {
+  const before = frontlineSnapshot("before", 0);
+  const after = closeFrontline(frontlineSnapshot("after", 10));
+  const timeline = compileTimeline(frontlineBattle([before, after]));
+  const boundary = sampleTimeline(timeline, toPresentationTime(timeline, parseBattleTime(iso(10)))).frontline;
+
+  for (const frontline of [
+    sampleTimeline(timeline, -1).frontline,
+    boundary,
+    sampleTimeline(timeline, timeline.presentationDurationMs + 1).frontline,
+    sampleTimeline(compileTimeline(frontlineBattle([after])), 0).frontline,
+  ]) {
+    assert.equal(frontline.before, frontline.after);
+    assert.equal(frontline.transition, "interpolate");
+    assert.deepEqual(frontline.enclosureLineIds, []);
+  }
+  assert.equal(boundary.before.id, "after");
 });
 
 test("parseBattleTime treats offset-free battle time as UTC-like", () => {
