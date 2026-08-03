@@ -295,6 +295,8 @@ Versions `0.3.0` and `0.4.0` use continuous historical-time playback（連續歷
 
 **Fronts** is available when a `0.4.0` document contains timed, source-backed `frontline_snapshots`, or when opposing land-unit positions permit a conservative fallback. Source-backed fronts use solid lines and list their cited sources in the inspector. The fallback is dashed, explicitly labeled low-confidence, and exists only in the renderer: it is never written back to the battle JSON. Turning Fronts off hides both forms without changing playback or unit positions.
 
+當相同穩定 ID 的開放戰線變為閉合包圍圈時，舊線會淡出，目標輪廓則逐步揭示；這只是 renderer 衍生的顯示效果，不表示來源提供了中間合圍路徑，因此不需更改 schema、提示詞或範例資料。其他戰線分裂或合併仍以 crossfade 顯示。拖曳或跳轉時間軸，以及系統偏好減少動態效果時，會立即顯示目標輪廓。
+
 ### Map background
 
 The basemap is Esri World Hillshade. The app deliberately does not load a road or reference layer; tiles require network access, and the app displays the provider attribution.

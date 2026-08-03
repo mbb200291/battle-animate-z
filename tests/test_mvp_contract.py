@@ -1573,6 +1573,16 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertIn(phrase, readme)
 
+    def test_readme_explains_enclosure_reveal_is_display_only(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        for phrase in (
+            "開放戰線變為閉合包圍圈",
+            "不表示來源提供了中間合圍路徑",
+            "減少動態效果",
+        ):
+            self.assertIn(phrase, readme)
+
     def test_readme_documents_map_controls_and_sources(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
