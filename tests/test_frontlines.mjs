@@ -8,6 +8,7 @@ import {
   isClosedFrontline,
   resampleLine,
   resampleRing,
+  selectFrontlineInfluences,
 } from "../app/frontlines.js";
 
 const line = (id, coordinates) => ({
@@ -219,6 +220,44 @@ test("fallback emits eligible influences and fixed uncertainty metadata", () => 
   assert.deepEqual(derived.influences.map(({ actorId }) => actorId), ["a1", "a2", "b1"]);
 });
 
+test("frontline influences select positioned leaf land units", () => {
+  const actors = [
+    { id: "corps", side_id: "a", kind: "corps" },
+    { id: "division", parent_id: "corps", side_id: "a", kind: "division" },
+    { id: "enemy", side_id: "b", kind: "division" },
+  ];
+  const positions = new Map([["corps", [0, 0]], ["division", [1, 0]], ["enemy", [4, 0]]]);
+
+  assert.deepEqual(selectFrontlineInfluences(actors, positions), [
+    { actorId: "division", sideId: "a", position: [1, 0] },
+    { actorId: "enemy", sideId: "b", position: [4, 0] },
+  ]);
+  assert.deepEqual(deriveFrontlineFallback({ actors, positions }).influences.map(({ actorId }) => actorId), [
+    "division", "enemy",
+  ]);
+});
+
+test("fallback is unavailable unless eligible land influences occupy exactly two sides", () => {
+  const oneSide = deriveFrontlineFallback({
+    actors: [{ id: "a", side_id: "a", kind: "division" }],
+    positions: new Map([["a", [0, 0]]]),
+  });
+  const threeSides = deriveFrontlineFallback({
+    actors: ["a", "b", "c"].map((id, index) => ({ id, side_id: id, kind: "division" })),
+    positions: new Map([["a", [0, 0]], ["b", [2, 0]], ["c", [4, 0]]]),
+  });
+
+  for (const derived of [oneSide, threeSides]) {
+    assert.equal(derived.available, false);
+    assert.equal(derived.reason, "requires-two-sides");
+    assert.deepEqual(derived.pairs, []);
+    assert.equal(derived.contactLine, null);
+    assert.deepEqual(derived.contactLines, []);
+  }
+  assert.deepEqual(oneSide.influences.map(({ actorId }) => actorId), ["a"]);
+  assert.deepEqual(threeSides.influences.map(({ actorId }) => actorId), ["a", "b", "c"]);
+});
+
 test("fallback uses mutual-nearest pairs and orders two midpoints by widest axis", () => {
   const derived = deriveFrontlineFallback({
     actors: [
@@ -232,7 +271,10 @@ test("fallback uses mutual-nearest pairs and orders two midpoints by widest axis
     ]),
     maxPairDistance: 5,
   });
+  assert.equal(derived.available, true);
+  assert.equal(derived.reason, null);
   assert.deepEqual(derived.contactLine, [[2, 0], [2, 10]]);
+  assert.deepEqual(derived.contactLines, [derived.contactLine]);
   assert.deepEqual(derived.pairs.map(({ actorIds }) => actorIds), [["a1", "b1"], ["a2", "b2"]]);
 });
 

@@ -257,16 +257,43 @@ function midpoint(left, right) {
   ];
 }
 
-export function deriveFrontlineFallback({ actors = [], positions = new Map(), maxPairDistance = Infinity } = {}) {
-  const influences = actors
+export function selectFrontlineInfluences(actors = [], positions = new Map()) {
+  const positionedParents = new Set(
+    actors.filter(({ parent_id: parentId, id }) =>
+      typeof parentId === "string" && isPoint(positions.get(id)))
+      .map(({ parent_id: parentId }) => parentId),
+  );
+  return actors
     .filter(({ kind, id, side_id: sideId }) =>
-      LAND_KINDS.has(kind) && typeof sideId === "string" && isPoint(positions.get(id)))
+      typeof id === "string" &&
+      LAND_KINDS.has(kind) &&
+      typeof sideId === "string" &&
+      isPoint(positions.get(id)) &&
+      !positionedParents.has(id))
     .map(({ id: actorId, side_id: sideId }) => ({
       actorId,
       sideId,
       position: [...positions.get(actorId)],
     }))
     .sort((left, right) => left.actorId < right.actorId ? -1 : left.actorId > right.actorId ? 1 : 0);
+}
+
+export function deriveFrontlineFallback({ actors = [], positions = new Map(), maxPairDistance = Infinity } = {}) {
+  const influences = selectFrontlineInfluences(actors, positions);
+  const sideCount = new Set(influences.map(({ sideId }) => sideId)).size;
+  if (sideCount !== 2) {
+    return {
+      available: false,
+      reason: "requires-two-sides",
+      influences,
+      pairs: [],
+      contactLine: null,
+      contactLines: [],
+      precision: "inferred",
+      confidence: 0.35,
+      label: "DERIVED FROM UNIT POSITIONS",
+    };
+  }
 
   const nearest = new Map();
   for (const influence of influences) {
@@ -328,9 +355,12 @@ export function deriveFrontlineFallback({ actors = [], positions = new Map(), ma
   }
 
   return {
+    available: contactLine !== null,
+    reason: contactLine ? null : "no-contact-line",
     influences,
     pairs,
     contactLine,
+    contactLines: contactLine ? [contactLine] : [],
     precision: "inferred",
     confidence: 0.35,
     label: "DERIVED FROM UNIT POSITIONS",
