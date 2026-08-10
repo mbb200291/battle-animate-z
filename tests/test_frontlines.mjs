@@ -293,6 +293,50 @@ test("malformed or missing convergence inputs safely crossfade", () => {
   assert.doesNotThrow(() => frontlineGeometry.convergeDerivedFrontlines([[[0, 0], null]], {}, 1));
 });
 
+function assertSafeCrossfade(derivedLines, sourceLines, sourceWeight) {
+  let result;
+  assert.doesNotThrow(() => {
+    result = frontlineGeometry.convergeDerivedFrontlines(
+      derivedLines,
+      { front_lines: sourceLines },
+      sourceWeight,
+    );
+  });
+  assert.deepEqual(result, {
+    derivedLines,
+    front_lines: sourceLines,
+    transition: "crossfade",
+    sourceWeight,
+  });
+}
+
+test("sparse derived line collections safely crossfade", () => {
+  assertSafeCrossfade(Array(1), [line("main", [[2, 0], [2, 2]])], 0.5);
+});
+
+test("sparse source line collections safely crossfade at the source endpoint", () => {
+  assertSafeCrossfade([[[0, 0], [0, 2]]], Array(1), 1);
+});
+
+test("sparse coordinate arrays safely crossfade on either side", () => {
+  const sparseDerived = Array(3);
+  sparseDerived[0] = [0, 0];
+  sparseDerived[2] = [0, 2];
+  assertSafeCrossfade([sparseDerived], [line("main", [[2, 0], [2, 2]])], 0.5);
+
+  const sparseSource = Array(3);
+  sparseSource[0] = [2, 0];
+  sparseSource[2] = [2, 2];
+  assertSafeCrossfade([[[0, 0], [0, 2]]], [line("main", sparseSource)], 0.5);
+});
+
+test("degenerate closed coordinates safely crossfade, including at source weight one", () => {
+  const ring = [[0, 0], [2, 0], [2, 2], [0, 0]];
+  const degenerate = [[1, 1], [1, 1], [1, 1], [1, 1]];
+  assertSafeCrossfade([degenerate], [line("main", ring)], 0.5);
+  assertSafeCrossfade([ring], [line("main", degenerate)], 1);
+});
+
 test("compatible closed fronts morph with exact closure and ring sample count", () => {
   const derivedRing = [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]];
   const sourceRing = [[2, 0], [4, 0], [4, 2], [2, 2], [2, 0]];

@@ -229,10 +229,14 @@ export function isClosedFrontline(coordinates) {
 }
 
 function usableLineCoordinates(coordinates) {
-  if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(isPoint)) return false;
+  if (!Array.isArray(coordinates) || coordinates.length < 2 ||
+    !Array.from({ length: coordinates.length }, (_, index) => isPoint(coordinates[index])).every(Boolean)) {
+    return false;
+  }
   const closes = Math.abs(deltaLongitude(coordinates[0][0], coordinates.at(-1)[0])) <= 1e-6 &&
     Math.abs(coordinates[0][1] - coordinates.at(-1)[1]) <= 1e-6;
-  return closes ? isClosedFrontline(coordinates) : resampleLine(coordinates).length > 0;
+  if (closes && !isClosedFrontline(coordinates)) return false;
+  return (closes ? resampleRing(coordinates) : resampleLine(coordinates)).length > 0;
 }
 
 const hybridLine = (sourceLine, coordinates) => ({
@@ -246,10 +250,15 @@ export function convergeDerivedFrontlines(derivedLines, sourceSnapshot, sourceWe
   const numericWeight = typeof sourceWeight === "number" && !Number.isNaN(sourceWeight) ? sourceWeight : 0;
   const weight = Math.max(0, Math.min(1, numericWeight));
   const sourceLines = sourceSnapshot?.front_lines ?? [];
-  const usableSource = Array.isArray(sourceLines) && sourceLines.length > 0 && sourceLines.every((line) =>
-    typeof line?.id === "string" &&
-    line.geometry?.type === "LineString" &&
-    usableLineCoordinates(line.geometry.coordinates));
+  const usableSource = Array.isArray(sourceLines) && sourceLines.length > 0 && Array.from(
+    { length: sourceLines.length },
+    (_, index) => {
+      const line = sourceLines[index];
+      return typeof line?.id === "string" &&
+        line.geometry?.type === "LineString" &&
+        usableLineCoordinates(line.geometry.coordinates);
+    },
+  ).every(Boolean);
 
   if (weight === 1 && usableSource) {
     return { front_lines: sourceLines, transition: "source", sourceWeight: 1 };
@@ -259,9 +268,11 @@ export function convergeDerivedFrontlines(derivedLines, sourceSnapshot, sourceWe
     Array.isArray(derivedLines) &&
     derivedLines.length === sourceLines.length &&
     derivedLines.length > 0 &&
-    derivedLines.every((coordinates, index) =>
-      usableLineCoordinates(coordinates) &&
-      isClosedFrontline(coordinates) === isClosedFrontline(sourceLines[index].geometry.coordinates));
+    Array.from({ length: derivedLines.length }, (_, index) => {
+      const coordinates = derivedLines[index];
+      return usableLineCoordinates(coordinates) &&
+        isClosedFrontline(coordinates) === isClosedFrontline(sourceLines[index].geometry.coordinates);
+    }).every(Boolean);
   if (!compatible) {
     return { derivedLines, front_lines: sourceLines, transition: "crossfade", sourceWeight: weight };
   }
