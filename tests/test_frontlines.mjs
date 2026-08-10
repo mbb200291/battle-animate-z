@@ -94,6 +94,14 @@ test("resampleLine locally unwraps dateline crossings", () => {
   assert.equal(Math.abs(midpoint), 180);
 });
 
+test("resampleLine accepts ordinary unwrapped longitudes and wraps output locally", () => {
+  assert.deepEqual(resampleLine([[181, 0], [182, 1]], 3), [
+    [-179, 0],
+    [-178.5, 0.5],
+    [-178, 1],
+  ]);
+});
+
 test("resampleLine rejects sparse coordinate arrays without throwing", () => {
   const coordinates = Array(3);
   coordinates[0] = [0, 0];
@@ -412,9 +420,13 @@ test("degenerate closed coordinates safely crossfade, including at source weight
   assertSafeCrossfade([ring], [line("main", degenerate)], 1, true);
 });
 
-test("out-of-range longitude safely crossfades without unwrapping", () => {
+test("huge finite longitude returns promptly without non-finite samples and safely crossfades", () => {
+  const coordinates = [[1e20, 0], [0, 2]];
+  const sampled = resampleLine(coordinates, 3);
+  assert.deepEqual(sampled, []);
+  assert.ok(sampled.flat().every(Number.isFinite));
   assertSafeCrossfade(
-    [[[1e20, 0], [0, 2]]],
+    [coordinates],
     [line("main", [[2, 0], [2, 2]])],
     0.5,
     true,
@@ -422,8 +434,10 @@ test("out-of-range longitude safely crossfades without unwrapping", () => {
 });
 
 test("extreme latitudes safely crossfade without non-finite samples", () => {
+  const coordinates = [[0, 1e308], [0, -1e308]];
+  assert.deepEqual(resampleLine(coordinates, 3), []);
   assertSafeCrossfade(
-    [[[0, 1e308], [0, -1e308]]],
+    [coordinates],
     [line("main", [[2, 0], [2, 2]])],
     0.5,
     true,

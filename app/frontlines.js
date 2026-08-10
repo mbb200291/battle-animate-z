@@ -21,18 +21,29 @@ const isPoint = (point) =>
   Object.hasOwn(point, 0) &&
   Object.hasOwn(point, 1) &&
   Number.isFinite(point[0]) &&
-  point[0] >= -180 &&
-  point[0] <= 180 &&
-  Number.isFinite(point[1]) &&
-  point[1] >= -90 &&
-  point[1] <= 90;
+  Number.isFinite(point[1]);
+
+function normalizeLongitudeDelta(delta) {
+  if (!Number.isFinite(delta)) return delta;
+  const normalized = ((delta + 180) % 360 + 360) % 360 - 180;
+  return normalized === -180 && delta > 0 ? 180 : normalized;
+}
+
+function localLongitude(longitude, reference) {
+  const delta = normalizeLongitudeDelta(longitude - reference);
+  if (!Number.isFinite(delta)) return null;
+  const adjusted = reference + delta;
+  return Number.isFinite(adjusted) && Math.abs(adjusted) <= Number.MAX_SAFE_INTEGER ? adjusted : null;
+}
 
 function unwrap(points) {
   if (!denseEvery(points, isPoint)) return null;
+  if (points.some(([longitude]) => Math.abs(longitude) > Number.MAX_SAFE_INTEGER)) return null;
   const result = points.map(([longitude, latitude]) => [longitude, latitude]);
   for (let index = 1; index < result.length; index += 1) {
-    while (result[index][0] - result[index - 1][0] > 180) result[index][0] -= 360;
-    while (result[index][0] - result[index - 1][0] < -180) result[index][0] += 360;
+    const longitude = localLongitude(result[index][0], result[index - 1][0]);
+    if (longitude === null) return null;
+    result[index][0] = longitude;
   }
   return result;
 }
@@ -53,20 +64,23 @@ function samplePath(points, count, closed) {
   if (path.length < (closed ? 3 : 2)) return [];
   if (closed) {
     const closing = [...path[0]];
-    while (closing[0] - path.at(-1)[0] > 180) closing[0] -= 360;
-    while (closing[0] - path.at(-1)[0] < -180) closing[0] += 360;
+    closing[0] = localLongitude(closing[0], path.at(-1)[0]);
+    if (closing[0] === null) return [];
     path.push(closing);
   }
 
   const cumulative = [0];
   for (let index = 1; index < path.length; index += 1) {
-    cumulative.push(cumulative.at(-1) + Math.hypot(
+    const segmentLength = Math.hypot(
       path[index][0] - path[index - 1][0],
       path[index][1] - path[index - 1][1],
-    ));
+    );
+    const length = cumulative.at(-1) + segmentLength;
+    if (!Number.isFinite(segmentLength) || !Number.isFinite(length)) return [];
+    cumulative.push(length);
   }
   const total = cumulative.at(-1);
-  if (!(total > 0)) return [];
+  if (!Number.isFinite(total) || !(total > 0)) return [];
 
   const sampleCount = closed ? count : count - 1;
   const result = [];
@@ -78,10 +92,12 @@ function samplePath(points, count, closed) {
     const startDistance = cumulative[segment - 1];
     const span = cumulative[segment] - startDistance;
     const progress = span ? (distance - startDistance) / span : 0;
-    result.push([
+    const sample = [
       wrapLongitude(path[segment - 1][0] + (path[segment][0] - path[segment - 1][0]) * progress),
       path[segment - 1][1] + (path[segment][1] - path[segment - 1][1]) * progress,
-    ]);
+    ];
+    if (!sample.every(Number.isFinite)) return [];
+    result.push(sample);
   }
   if (closed) result.push([...result[0]]);
   return result;
@@ -228,10 +244,7 @@ export function interpolateFrontlineSnapshots(fromSnapshot, toSnapshot, progress
 }
 
 function deltaLongitude(left, right) {
-  let delta = right - left;
-  while (delta > 180) delta -= 360;
-  while (delta < -180) delta += 360;
-  return delta;
+  return normalizeLongitudeDelta(right - left);
 }
 
 export function isClosedFrontline(coordinates) {
