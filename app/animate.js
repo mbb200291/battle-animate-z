@@ -3,7 +3,13 @@ import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } fro
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
 import { buildFocusPlan } from "./map-view.js";
-import { deriveFrontlineFallback, enclosureLineIds, interpolateFrontlineSnapshots } from "./frontlines.js";
+import {
+  convergeDerivedFrontlines,
+  deriveFrontlineFallback,
+  enclosureLineIds,
+  interpolateFrontlineSnapshots,
+  selectFrontlineInfluences,
+} from "./frontlines.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const FRONT_CROSSFADE_MS = 500;
@@ -11,6 +17,13 @@ const FRONT_ENCLOSURE_REVEAL_MS = 900;
 const FRONT_INFLUENCE_RADIUS = 28;
 const FRONT_PAIR_MAX_PX = 160;
 let frontEnclosureSequence = 0;
+
+export const FRONTLINE_MODES = Object.freeze(["hybrid", "source", "derived", "off"]);
+
+export function nextFrontlineMode(mode) {
+  const index = FRONTLINE_MODES.indexOf(mode);
+  return FRONTLINE_MODES[(index < 0 ? 0 : index + 1) % FRONTLINE_MODES.length];
+}
 
 function fallbackPairDistance(project, influences, zoom) {
   let pixelsPerDegree = 0;
@@ -144,7 +157,9 @@ export function wirePlaybackControls(controller, documentRef = document) {
   const modernBorders = $("modern-borders-button");
   own(modernBorders, "onclick", () => controller.setModernBordersEnabled(!controller.modernBordersEnabled));
   const fronts = $("fronts-button");
-  own(fronts, "onclick", () => controller.setFrontsEnabled(!controller.frontsEnabled));
+  own(fronts, "onclick", () => controller.nextFrontlineMode
+    ? controller.nextFrontlineMode()
+    : controller.setFrontsEnabled(!controller.frontsEnabled));
   const focus = $("focus-event-button");
   own(focus, "onclick", () => controller.focusActiveEvents());
   const teardown = () => {
@@ -926,7 +941,7 @@ export function resetBattleUI(documentRef = document) {
   }
   const fronts = documentRef.getElementById("fronts-button");
   if (fronts) {
-    fronts.textContent = "Fronts: off";
+    fronts.textContent = "Fronts: hybrid";
     fronts.setAttribute("aria-pressed", "false");
     fronts.disabled = true;
   }
@@ -995,12 +1010,14 @@ export function renderBattle(battle, documentRef = document) {
   const events = new Map(battle.historical_events.map((event) => [event.id, event]));
   const compiled = compileTimeline(battle);
   const initialSample = sampleTimeline(compiled, 0);
-  const fallbackAvailable = battle.schema_version === "0.4.0"
+  const initialDerived = battle.schema_version === "0.4.0"
     && deriveFrontlineFallback({
       actors: battle.actors,
       positions: initialSample.actorPositions,
-    }).influences.length > 0;
-  const frontlinesAvailable = compiled.frontlineKeyframes.length > 0 || fallbackAvailable;
+    });
+  const derivedPotential = initialDerived
+    && new Set(initialDerived.influences.map(({ sideId }) => sideId)).size >= 2;
+  const frontlinesAvailable = compiled.frontlineKeyframes.length > 0 || derivedPotential;
   const displayOffsetMinutes = battleDisplayOffsetMinutes(battle);
 
   const style = battle.animation_hints?.style || {};
@@ -1025,7 +1042,8 @@ export function renderBattle(battle, documentRef = document) {
   modernBordersPane.style.zIndex = "350";
   modernBordersPane.style.pointerEvents = "none";
 
-  const allCoords = collectCoordinates(battle);
+  const allCoords = collectCoordinates(battle, initialSample.actorPositions.values());
+  const frontlineBounds = paddedCoordinateBounds(allCoords);
   const mapHints = battle.animation_hints?.map || {};
   if (Array.isArray(mapHints.initial_center) && typeof mapHints.initial_zoom === "number") {
     map.setView([mapHints.initial_center[1], mapHints.initial_center[0]], mapHints.initial_zoom);
@@ -1249,8 +1267,29 @@ export function renderBattle(battle, documentRef = document) {
   function clearFrontTransitions(owner) {
     for (const timer of owner._frontTransitionTimers.values()) cancelTimeout(timer);
     owner._frontTransitionTimers.clear();
+    owner._hybridCrossfadeSelections?.clear();
     settleTopologyTransition();
     settleEnclosureTransition();
+  }
+
+  function settleUnusedHybridCrossfades(activeTimerKeys) {
+    const keys = new Set([
+      ...controller._frontTransitionTimers.keys(),
+      ...controller._hybridCrossfadeSelections.keys(),
+    ]);
+    for (const key of keys) {
+      if (!key.startsWith("hybrid:") || activeTimerKeys.has(key)) continue;
+      const timer = controller._frontTransitionTimers.get(key);
+      if (timer !== undefined) cancelTimeout(timer);
+      controller._frontTransitionTimers.delete(key);
+      controller._hybridCrossfadeSelections.delete(key);
+      const index = key.slice("hybrid:".length);
+      const primary = frontlineEls.get(`hybrid:line:${index}`);
+      primary?.classList.remove("is-front-entering", "is-front-exiting");
+      const secondaryKey = `hybrid:derived:${index}`;
+      frontlineEls.get(secondaryKey)?.remove();
+      frontlineEls.delete(secondaryKey);
+    }
   }
 
   function frontlineGeometry(state) {
@@ -1327,8 +1366,7 @@ export function renderBattle(battle, documentRef = document) {
     return crossed;
   }
 
-  function renderFrontlines(sampled, mode = "reproject", previousSampled = null) {
-    if (mode === "seek") clearFrontTransitions(controller);
+  function renderSourceFrontlines(sampled, mode = "reproject", previousSampled = null) {
     const state = sampled.frontline;
     const active = new Set();
     controller._frontlineStatus = null;
@@ -1477,52 +1515,219 @@ export function renderBattle(battle, documentRef = document) {
         }, FRONT_CROSSFADE_MS);
         controller._frontTransitionTimers.set("topology", timer);
       }
-    } else if (battle.schema_version === "0.4.0") {
-      const unboundedFallback = deriveFrontlineFallback({
-        actors: battle.actors,
-        positions: sampled.actorPositions,
-      });
-      const fallback = deriveFrontlineFallback({
-        actors: battle.actors,
-        positions: sampled.actorPositions,
-        maxPairDistance: fallbackPairDistance(project, unboundedFallback.influences, map.getZoom()),
-      });
-      for (const influence of fallback.influences) {
-        const key = `derived:influence:${influence.actorId}`;
-        active.add(key);
-        const circle = keyedFrontlineElement(key, controlAreaLayer, "circle", "front-influence");
-        const point = project(influence.position);
-        circle.setAttribute("data-front-actor-id", influence.actorId);
-        circle.setAttribute("cx", point.x);
-        circle.setAttribute("cy", point.y);
-        circle.setAttribute("r", FRONT_INFLUENCE_RADIUS);
-        circle.setAttribute("fill", colorOf(influence.sideId));
-      }
-      if (fallback.contactLine) {
-        const lineKey = "derived:line";
-        const labelKey = "derived:label";
-        active.add(lineKey);
-        active.add(labelKey);
-        const path = keyedFrontlineElement(lineKey, frontLineLayer, "path", "front-line is-derived");
-        path.setAttribute("d", toFrontlinePath(fallback.contactLine));
-        const label = keyedFrontlineElement(
-          labelKey,
-          frontLineLayer,
-          "text",
-          "frontline-confidence-label is-derived",
-        );
-        const point = project(fallback.contactLine[Math.floor(fallback.contactLine.length / 2)]);
-        label.setAttribute("x", point.x + 7);
-        label.setAttribute("y", point.y - 7);
-        label.textContent = `${fallback.label} · ≤${Math.round(fallback.confidence * 100)}%`;
-      }
-      if (fallback.influences.length) controller._frontlineStatus = { kind: "fallback" };
     }
     for (const [key, element] of frontlineEls) {
       if (!active.has(key) && !element.classList.contains("is-front-exiting")) {
         element.remove();
         frontlineEls.delete(key);
       }
+    }
+  }
+
+  function currentDerivedFrontlines(sampled) {
+    const influences = selectFrontlineInfluences(battle.actors, sampled.actorPositions);
+    return deriveFrontlineFallback({
+      actors: battle.actors,
+      positions: sampled.actorPositions,
+      bounds: frontlineBounds,
+      maxPairDistance: fallbackPairDistance(project, influences, map.getZoom()),
+    });
+  }
+
+  function renderInfluences(derived, active) {
+    for (const influence of derived.influences) {
+      const key = `derived:influence:${influence.actorId}`;
+      active.add(key);
+      const circle = keyedFrontlineElement(key, controlAreaLayer, "circle", "front-influence");
+      const point = project(influence.position);
+      circle.setAttribute("data-front-actor-id", influence.actorId);
+      circle.setAttribute("cx", point.x);
+      circle.setAttribute("cy", point.y);
+      circle.setAttribute("r", FRONT_INFLUENCE_RADIUS);
+      circle.setAttribute("fill", colorOf(influence.sideId));
+    }
+  }
+
+  function renderDerivedLines(derived, active) {
+    derived.contactLines.forEach((coordinates, index) => {
+      const lineKey = `derived:line:${index}`;
+      const labelKey = `derived:label:${index}`;
+      active.add(lineKey);
+      active.add(labelKey);
+      const path = keyedFrontlineElement(lineKey, frontLineLayer, "path", "front-line is-derived");
+      path.setAttribute("d", toFrontlinePath(coordinates));
+      const label = keyedFrontlineElement(
+        labelKey,
+        frontLineLayer,
+        "text",
+        "frontline-confidence-label is-derived",
+      );
+      const point = project(coordinates[Math.floor(coordinates.length / 2)]);
+      label.setAttribute("x", point.x + 7);
+      label.setAttribute("y", point.y - 7);
+      label.textContent = `${derived.label} · ≤${Math.round(derived.confidence * 100)}%`;
+    });
+  }
+
+  function renderHybridAreas(geometry, active) {
+    for (const area of geometry.interpolatedAreas) {
+      const key = `area:${area.id}`;
+      active.add(key);
+      const path = keyedFrontlineElement(key, controlAreaLayer, "path", "front-control-area");
+      path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
+      path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
+      path.classList.toggle("is-inferred", area.precision === "inferred");
+    }
+  }
+
+  function renderHybridLine(key, coordinates, active, className = "front-line is-derived") {
+    active.add(key);
+    const path = keyedFrontlineElement(key, frontLineLayer, "path", className);
+    path.setAttribute("class", className);
+    path.setAttribute("d", toFrontlinePath(coordinates));
+    return path;
+  }
+
+  function renderHybridCrossfade(transition, index, active, mode, activeTimerKeys) {
+    const derivedCoordinates = transition.derivedLine;
+    const sourceCoordinates = transition.front_line?.geometry?.coordinates;
+    const useSource = controller._frontlineStatus.sourceWeight >= 0.5;
+    const timerKey = `hybrid:${index}`;
+    const selection = useSource ? "source" : "derived";
+    if (mode !== "playback" || reducedMotion || !derivedCoordinates || !sourceCoordinates) {
+      const coordinates = useSource ? sourceCoordinates : derivedCoordinates;
+      if (coordinates) renderHybridLine(`hybrid:line:${index}`, coordinates, active);
+      return;
+    }
+    activeTimerKeys.add(timerKey);
+    const prior = controller._frontTransitionTimers.get(timerKey);
+    const priorSelection = controller._hybridCrossfadeSelections.get(timerKey);
+    if (prior === undefined && priorSelection === selection) {
+      renderHybridLine(`hybrid:line:${index}`, useSource ? sourceCoordinates : derivedCoordinates, active);
+      return;
+    }
+    const source = renderHybridLine(`hybrid:line:${index}`, sourceCoordinates, active);
+    const derived = renderHybridLine(`hybrid:derived:${index}`, derivedCoordinates, active);
+    const entering = useSource ? source : derived;
+    const exiting = useSource ? derived : source;
+    entering.classList.add("is-front-entering");
+    exiting.classList.add("is-front-exiting");
+    if (prior !== undefined && priorSelection === selection) return;
+    if (prior !== undefined) cancelTimeout(prior);
+    controller._hybridCrossfadeSelections.set(timerKey, selection);
+    const timer = scheduleTimeout(() => {
+      if (controller._frontTransitionTimers.get(timerKey) !== timer) return;
+      controller._frontTransitionTimers.delete(timerKey);
+      exiting.remove();
+      frontlineEls.delete(useSource ? `hybrid:derived:${index}` : `hybrid:line:${index}`);
+      entering.classList.remove("is-front-entering");
+    }, FRONT_CROSSFADE_MS);
+    controller._frontTransitionTimers.set(timerKey, timer);
+  }
+
+  function renderHybridFrontlines(sampled, mode, previousSampled) {
+    const state = sampled.frontline;
+    const derived = currentDerivedFrontlines(sampled);
+    const active = new Set();
+    const activeTimerKeys = new Set();
+    renderInfluences(derived, active);
+    if (!state) {
+      renderDerivedLines(derived, active);
+      controller._frontlineStatus = derived.available
+        ? { kind: "derived" }
+        : { kind: "derived-unavailable" };
+      settleUnusedHybridCrossfades(activeTimerKeys);
+    } else {
+      const geometry = frontlineGeometry(state);
+      if (!derived.available) {
+        settleUnusedHybridCrossfades(activeTimerKeys);
+        renderSourceFrontlines(sampled, mode, previousSampled);
+        const sourceState = controller._frontlineStatus.state;
+        renderInfluences(derived, new Set());
+        controller._frontlineStatus = { kind: "source-fallback", state: sourceState };
+        return;
+      } else {
+        renderHybridAreas(geometry, active);
+        const sourceWeight = state.before === state.after
+          ? 1
+          : (Math.abs(state.progress - 0.5) * 2) ** 2;
+        const converged = convergeDerivedFrontlines(
+          derived.contactLines,
+          { front_lines: geometry.interpolatedLines },
+          sourceWeight,
+        );
+        controller._frontlineStatus = {
+          kind: sourceWeight === 1 ? "source" : "hybrid",
+          state,
+          sourceWeight,
+        };
+        if (sourceWeight === 1) {
+          clearFrontTransitions(controller);
+          for (const line of converged.front_lines) {
+            renderHybridLine(
+              `line:${line.id}`,
+              line.geometry.coordinates,
+              active,
+              "front-line is-source-backed",
+            ).classList.toggle("is-inferred", line.precision === "inferred");
+          }
+        } else if (converged.lineTransitions?.length) {
+          converged.lineTransitions.forEach((transition, index) => {
+            if (transition.transition === "hybrid") {
+              renderHybridLine(`hybrid:line:${index}`, transition.front_line.geometry.coordinates, active);
+            } else {
+              renderHybridCrossfade(transition, index, active, mode, activeTimerKeys);
+            }
+          });
+        } else {
+          const count = Math.max(converged.derivedLines?.length || 0, converged.front_lines?.length || 0);
+          for (let index = 0; index < count; index += 1) {
+            renderHybridCrossfade({
+              derivedLine: converged.derivedLines?.[index],
+              front_line: converged.front_lines?.[index],
+            }, index, active, mode, activeTimerKeys);
+          }
+        }
+        settleUnusedHybridCrossfades(activeTimerKeys);
+      }
+    }
+    for (const [key, element] of frontlineEls) {
+      if (!active.has(key) && !element.classList.contains("is-front-exiting")) {
+        element.remove();
+        frontlineEls.delete(key);
+      }
+    }
+  }
+
+  function renderDerivedFrontlines(sampled) {
+    const derived = currentDerivedFrontlines(sampled);
+    const active = new Set();
+    renderInfluences(derived, active);
+    renderDerivedLines(derived, active);
+    controller._frontlineStatus = derived.available
+      ? { kind: "derived" }
+      : { kind: "derived-unavailable" };
+    for (const [key, element] of frontlineEls) {
+      if (!active.has(key)) {
+        element.remove();
+        frontlineEls.delete(key);
+      }
+    }
+  }
+
+  function renderFrontlines(sampled, mode = "reproject", previousSampled = null) {
+    if (mode === "seek") clearFrontTransitions(controller);
+    if (!controller.frontsEnabled) {
+      controller._frontlineStatus = null;
+      return;
+    }
+    if (controller.frontlineMode === "source") {
+      renderSourceFrontlines(sampled, mode, previousSampled);
+      if (!sampled.frontline) controller._frontlineStatus = { kind: "source-unavailable" };
+    } else if (controller.frontlineMode === "derived") {
+      renderDerivedFrontlines(sampled);
+    } else {
+      renderHybridFrontlines(sampled, mode, previousSampled);
     }
   }
 
@@ -1538,8 +1743,16 @@ export function renderBattle(battle, documentRef = document) {
       summary.textContent = "";
       return;
     }
-    if (status.kind === "fallback") {
-      summary.textContent = "Not a source-backed frontline. Low-confidence influence/contact line derived from land unit positions; not a source-backed historical fact.";
+    if (status.kind === "derived") {
+      summary.textContent = "DERIVED FROM UNIT POSITIONS · LOW CONFIDENCE";
+      return;
+    }
+    if (status.kind === "derived-unavailable") {
+      summary.textContent = "Derived frontline unavailable: insufficient units.";
+      return;
+    }
+    if (status.kind === "source-unavailable") {
+      summary.textContent = "Source-backed frontline unavailable.";
       return;
     }
 
@@ -1556,14 +1769,22 @@ export function renderBattle(battle, documentRef = document) {
     const transitionLabel = transition === "crossfade"
       ? "Crossfade"
       : transition === "enclosure" ? "Enclosure reveal" : "Interpolated";
-    const parts = [
-      time,
-      precision,
-      `${Math.round(confidence * 100)}% confidence`,
-      ...linkedEvents.map((title) => `Event: ${title}`),
-      transitionLabel,
-    ].filter(Boolean);
-    summary.textContent = parts.join(" · ");
+    if (status.kind === "hybrid") {
+      const sourcePercent = Math.round(status.sourceWeight * 100);
+      summary.textContent = `HYBRID · 推導 ${100 - sourcePercent}% / 史料校正 ${sourcePercent}%`;
+    } else if (status.kind === "source-fallback") {
+      summary.textContent = "單位資料不足，使用史料補間";
+    } else {
+      const parts = [
+        "SOURCE-BACKED",
+        time,
+        precision,
+        `${Math.round(confidence * 100)}% confidence`,
+        ...linkedEvents.map((title) => `Event: ${title}`),
+        transitionLabel,
+      ].filter(Boolean);
+      summary.textContent = parts.join(" · ");
+    }
 
     const sourceIds = [...new Set(snapshots.flatMap((snapshot) => snapshot.source_ids || []))];
     for (const sourceId of sourceIds) {
@@ -2040,6 +2261,8 @@ export function renderBattle(battle, documentRef = document) {
     followEnabled: true,
     trailsEnabled: false,
     modernBordersEnabled: false,
+    FRONTLINE_MODES,
+    frontlineMode: "hybrid",
     frontsEnabled: frontlinesAvailable,
     isPlaying: false,
     _frame: null,
@@ -2047,6 +2270,7 @@ export function renderBattle(battle, documentRef = document) {
     _lastFollowCheck: -Infinity,
     _trailFadeTimers: new Map(),
     _frontTransitionTimers: new Map(),
+    _hybridCrossfadeSelections: new Map(),
     _beaconEls: beaconEls,
     _beaconExitTimers: beaconExitTimers,
     _lastTrailHistoricalMs: null,
@@ -2154,19 +2378,31 @@ export function renderBattle(battle, documentRef = document) {
       return this.trailsEnabled;
     },
 
-    setFrontsEnabled(enabled) {
-      if (this._destroyed) return this.frontsEnabled;
-      this.frontsEnabled = Boolean(enabled) && frontlinesAvailable;
-      if (!this.frontsEnabled) clearFrontTransitions(this);
+    setFrontlineMode(mode) {
+      if (this._destroyed || !FRONTLINE_MODES.includes(mode)) return this.frontlineMode;
+      clearFrontTransitions(this);
+      this.frontlineMode = mode;
+      this.frontsEnabled = mode !== "off" && frontlinesAvailable;
       if (this.frontsEnabled) frontlineLayer.removeAttribute("hidden");
       else frontlineLayer.setAttribute("hidden", "");
       const button = $("fronts-button");
       if (button) {
         button.disabled = !frontlinesAvailable;
-        button.setAttribute("aria-pressed", String(this.frontsEnabled));
-        button.textContent = `Fronts: ${this.frontsEnabled ? "on" : "off"}`;
+        button.setAttribute("aria-pressed", String(mode !== "off"));
+        button.textContent = `Fronts: ${mode}`;
       }
+      if (this.sampledState) renderFrontlines(this.sampledState, "seek", this.sampledState);
       updateFrontlineInspector(this);
+      return this.frontlineMode;
+    },
+
+    nextFrontlineMode() {
+      return this.setFrontlineMode(nextFrontlineMode(this.frontlineMode));
+    },
+
+    setFrontsEnabled(enabled) {
+      if (this._destroyed) return this.frontsEnabled;
+      this.setFrontlineMode(Boolean(enabled) ? "hybrid" : "off");
       return this.frontsEnabled;
     },
 
@@ -2326,8 +2562,15 @@ export function renderBattle(battle, documentRef = document) {
       clearTrailEffects(this);
       clearFrontTransitions(this);
       frontlineEls.clear();
+      this.frontlineMode = "hybrid";
       this.frontsEnabled = false;
       updateFrontlineInspector(this);
+      const frontsButton = $("fronts-button");
+      if (frontsButton) {
+        frontsButton.textContent = "Fronts: hybrid";
+        frontsButton.setAttribute("aria-pressed", "false");
+        frontsButton.disabled = true;
+      }
       for (const key of [...beaconEls.keys()]) removeBeacon(key);
       this.sampledState = null;
       this._lastTrailHistoricalMs = null;
@@ -2395,7 +2638,7 @@ export function renderBattle(battle, documentRef = document) {
   controller.setFollowEnabled(true);
   controller.setTrailsEnabled(false);
   controller.setModernBordersEnabled(false);
-  controller.setFrontsEnabled(frontlinesAvailable);
+  controller.setFrontlineMode("hybrid");
 
   mapEl._battleController = controller;
   redrawStaticGeometry();
@@ -2455,18 +2698,45 @@ function geometryPoint(geometry) {
   return [0, 0];
 }
 
-function collectCoordinates(battle) {
+function collectCoordinates(battle, positions = []) {
   const points = [];
+  const addGeometry = (geometry) => {
+    const visit = (coordinates) => {
+      if (!Array.isArray(coordinates)) return;
+      if (coordinates.length >= 2 && Number.isFinite(coordinates[0]) && Number.isFinite(coordinates[1])) {
+        points.push([coordinates[0], coordinates[1]]);
+      } else {
+        coordinates.forEach(visit);
+      }
+    };
+    visit(geometry?.coordinates);
+  };
   for (const place of battle.places) {
-    const geometry = place.geometry;
-    if (geometry.type === "Point") points.push(geometry.coordinates);
-    else if (geometry.type === "LineString") points.push(...geometry.coordinates);
-    else if (geometry.type === "Polygon") for (const ring of geometry.coordinates) points.push(...ring);
+    addGeometry(place.geometry);
   }
   for (const movement of battle.movements) {
-    points.push(...movement.path.coordinates);
+    addGeometry(movement.path);
   }
+  for (const snapshot of battle.frontline_snapshots || []) {
+    for (const line of snapshot.front_lines || []) addGeometry(line.geometry);
+    for (const area of snapshot.control_areas || []) addGeometry(area.geometry);
+  }
+  for (const position of positions) addGeometry({ coordinates: position });
   return points;
+}
+
+function paddedCoordinateBounds(points) {
+  const finite = points.filter((point) =>
+    Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]));
+  if (!finite.length) return undefined;
+  const longitudes = finite.map(([longitude]) => longitude);
+  const latitudes = finite.map(([, latitude]) => latitude);
+  const minX = Math.min(...longitudes);
+  const maxX = Math.max(...longitudes);
+  const minY = Math.min(...latitudes);
+  const maxY = Math.max(...latitudes);
+  const padding = Math.max(maxX - minX, maxY - minY, 1) * 0.2;
+  return [[minX - padding, minY - padding], [maxX + padding, maxY + padding]];
 }
 
 function buildLegend(battle, documentRef, colorOf) {

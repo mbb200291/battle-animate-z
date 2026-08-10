@@ -153,7 +153,7 @@ class FakeDocument {
     this.elements.get("focus-event-button").disabled = true;
     this.elements.get("modern-borders-button").textContent = "Modern borders: off";
     this.elements.get("modern-borders-button").setAttribute("aria-pressed", "false");
-    this.elements.get("fronts-button").textContent = "Fronts: off";
+    this.elements.get("fronts-button").textContent = "Fronts: hybrid";
     this.elements.get("fronts-button").setAttribute("aria-pressed", "false");
     this.elements.get("fronts-button").disabled = true;
     this.elements.get("frontline-status").hidden = true;
@@ -487,6 +487,14 @@ function frontlineFallbackBattleFixture() {
   );
   battle.actors[0].strength = 10000;
   battle.outcome = { winner_side_ids: ["blue"], source_ids: [], summary: "Blue wins" };
+  return battle;
+}
+
+function hybridFrontlineBattleFixture() {
+  const battle = frontlineFallbackBattleFixture();
+  const source = frontlineBattleFixture();
+  battle.frontline_snapshots = source.frontline_snapshots;
+  battle.sources = source.sources;
   return battle;
 }
 
@@ -1005,6 +1013,253 @@ test("fronts control rewires once without pausing or changing time", () => {
   assert.equal(current.isPlaying, true);
 });
 
+test("frontline control defaults to hybrid and cycles modes without changing playback", () => {
+  const document = new FakeDocument(new FrameClock().window);
+  const calls = [];
+  const controller = {
+    frontlineMode: "hybrid",
+    currentPresentationMs: 625,
+    isPlaying: true,
+    nextFrontlineMode() {
+      const modes = ["hybrid", "source", "derived", "off"];
+      const mode = modes[(modes.indexOf(this.frontlineMode) + 1) % modes.length];
+      calls.push(mode);
+      this.frontlineMode = mode;
+      return mode;
+    },
+  };
+  wirePlaybackControls(controller, document);
+
+  for (const mode of ["source", "derived", "off", "hybrid"]) {
+    document.getElementById("fronts-button").dispatch("click");
+    assert.equal(controller.frontlineMode, mode);
+    assert.equal(controller.currentPresentationMs, 625);
+    assert.equal(controller.isPlaying, true);
+  }
+  assert.deepEqual(calls, ["source", "derived", "off", "hybrid"]);
+});
+
+test("frontline controller validates modes and preserves the legacy boolean alias", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(hybridFrontlineBattleFixture(), document);
+  const button = document.getElementById("fronts-button");
+
+  assert.deepEqual(controller.FRONTLINE_MODES, ["hybrid", "source", "derived", "off"]);
+  assert.equal(controller.frontlineMode, "hybrid");
+  assert.equal(button.textContent, "Fronts: hybrid");
+  assert.equal(button.getAttribute("aria-pressed"), "true");
+  assert.equal(controller.setFrontlineMode("bogus"), "hybrid");
+  assert.equal(controller.frontlineMode, "hybrid");
+  assert.equal(controller.setFrontsEnabled(false), false);
+  assert.equal(controller.frontlineMode, "off");
+  assert.equal(button.textContent, "Fronts: off");
+  assert.equal(button.getAttribute("aria-pressed"), "false");
+  assert.equal(controller.setFrontsEnabled(true), true);
+  assert.equal(controller.frontlineMode, "hybrid");
+});
+
+test("source and derived frontline modes never borrow from each other", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(hybridFrontlineBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const all = () => descendants(svg);
+
+  controller.setFrontlineMode("source");
+  assert.equal(all().filter((element) => element.classList.contains("front-line")).length, 1);
+  assert.equal(all().every((element) => !element.classList.contains("is-derived")), true);
+  assert.equal(all().some((element) => element.classList.contains("front-influence")), false);
+  assert.match(document.getElementById("frontline-summary").textContent, /^SOURCE-BACKED ·/);
+
+  controller.setFrontlineMode("derived");
+  const derivedLines = all().filter((element) => element.classList.contains("front-line"));
+  assert.ok(derivedLines.length >= 1);
+  assert.equal(derivedLines.every((element) => element.classList.contains("is-derived")), true);
+  assert.equal(derivedLines.every((element, index) =>
+    element.getAttribute("data-frontline-key") === `derived:line:${index}`), true);
+  assert.equal(all().some((element) => element.classList.contains("is-source-backed")), false);
+  assert.match(document.getElementById("frontline-summary").textContent,
+    /^DERIVED FROM UNIT POSITIONS · LOW CONFIDENCE$/);
+});
+
+test("hybrid uses exact source anchors and a U-shaped source correction between them", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const battle = hybridFrontlineBattleFixture();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const lines = () => descendants(svg).filter((element) => element.classList.contains("front-line"));
+  const pathNumbers = () => lines()[0].getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number);
+
+  assert.equal(controller._frontlineStatus.sourceWeight, 1);
+  assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 400), true);
+  assert.deepEqual([pathNumbers()[1], pathNumbers().at(-1)], [350, 250]);
+  controller.seek(250);
+  assert.equal(controller._frontlineStatus.sourceWeight, 0.25);
+  assert.match(document.getElementById("frontline-summary").textContent,
+    /^HYBRID · 推導 75% \/ 史料校正 25%$/);
+  assert.equal(lines().every((line) => line.classList.contains("is-derived")), true);
+  controller.seek(500);
+  assert.equal(controller._frontlineStatus.sourceWeight, 0);
+  assert.equal(document.getElementById("frontline-summary").textContent,
+    "HYBRID · 推導 100% / 史料校正 0%");
+  controller.seek(1000);
+  assert.equal(controller._frontlineStatus.sourceWeight, 1);
+  assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 500), true);
+  assert.deepEqual([pathNumbers()[1], pathNumbers().at(-1)], [350, 250]);
+});
+
+test("hybrid topology mismatch does not show source-only lines at zero source weight", () => {
+  const battle = hybridFrontlineBattleFixture();
+  for (const snapshot of battle.frontline_snapshots) {
+    snapshot.front_lines.push({
+      id: "source_only",
+      geometry: { type: "LineString", coordinates: [[3, -0.5], [3, 0.5]] },
+    });
+  }
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.seek(500);
+
+  const lines = descendants(svg).filter((element) => element.classList.contains("front-line"));
+  assert.equal(controller._frontlineStatus.sourceWeight, 0);
+  assert.equal(lines.length, 1);
+  assert.equal(lines.every((line) => line.classList.contains("is-derived")), true);
+});
+
+test("hybrid mismatch reuses its timer and settles derived artifacts at a source anchor", () => {
+  const battle = hybridFrontlineBattleFixture();
+  for (const snapshot of battle.frontline_snapshots) {
+    snapshot.front_lines.push({
+      id: "source_only",
+      geometry: { type: "LineString", coordinates: [[3, -0.5], [3, 0.5]] },
+    });
+  }
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(250, { mode: "playback" });
+  const timer = controller._frontTransitionTimers.get("hybrid:0");
+  controller.renderAt(300, { mode: "playback" });
+
+  assert.equal(controller._frontTransitionTimers.get("hybrid:0"), timer);
+  assert.equal(clock.clearedTimeouts.includes(timer), false);
+  controller.renderAt(1000, { mode: "playback" });
+  assert.equal(controller._frontTransitionTimers.size, 0);
+  assert.equal(descendants(svg).some((element) =>
+    element.classList.contains("is-front-entering") || element.classList.contains("is-front-exiting")), false);
+  assert.equal(descendants(svg).filter((element) => element.classList.contains("front-line")).length, 2);
+});
+
+test("hybrid retires a stale crossfade timer when its line becomes compatible", () => {
+  const battle = hybridFrontlineBattleFixture();
+  for (const snapshot of battle.frontline_snapshots) {
+    snapshot.front_lines.push({
+      id: "temporary_source_only",
+      geometry: { type: "LineString", coordinates: [[3, -0.5], [3, 0.5]] },
+    });
+  }
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(250, { mode: "playback" });
+  const timer = controller._frontTransitionTimers.get("hybrid:0");
+  const staleCallback = clock.timeouts.get(timer);
+  for (const snapshot of battle.frontline_snapshots) snapshot.front_lines.pop();
+  controller.renderAt(300, { mode: "playback" });
+  const current = descendants(svg).find((element) =>
+    element.getAttribute("data-frontline-key") === "hybrid:line:0");
+
+  assert.ok(current?.parentNode);
+  assert.equal(controller._frontTransitionTimers.has("hybrid:0"), false);
+  assert.ok(clock.clearedTimeouts.includes(timer));
+  staleCallback();
+  assert.ok(current.parentNode);
+});
+
+test("hybrid keeps source control areas and falls back to source interpolation without enough units", () => {
+  const battle = hybridFrontlineBattleFixture();
+  battle.actors.forEach((actor) => { actor.kind = "ship"; });
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.seek(500);
+  assert.ok(descendants(svg).some((element) =>
+    element.getAttribute("data-frontline-key") === "area:blue_area"));
+  assert.ok(descendants(svg).some((element) => element.classList.contains("is-source-backed")));
+  assert.equal(controller._frontlineStatus.kind, "source-fallback");
+  assert.equal(document.getElementById("frontline-summary").textContent, "單位資料不足，使用史料補間");
+
+  controller.setFrontlineMode("derived");
+  assert.equal(descendants(svg).some((element) => element.classList.contains("front-line")), false);
+  assert.match(document.getElementById("frontline-summary").textContent, /insufficient units/i);
+});
+
+test("hybrid without source stays derived while source mode reports unavailable", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineFallbackBattleFixture(), document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  assert.ok(descendants(svg).some((element) =>
+    element.classList.contains("front-line") && element.classList.contains("is-derived")));
+  controller.setFrontlineMode("source");
+  assert.equal(descendants(svg).some((element) => element.classList.contains("front-line")), false);
+  assert.match(document.getElementById("frontline-summary").textContent, /source-backed frontline unavailable/i);
+  assert.equal(document.getElementById("fronts-button").disabled, false);
+});
+
+test("switching frontline modes clears transitions and redraws the same instant", () => {
+  const battle = topologyChangeBattleFixture();
+  battle.actors.forEach((actor) => { actor.kind = "division"; });
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  controller.setFrontlineMode("source");
+  controller.renderAt(0, { mode: "playback" });
+  controller.renderAt(1000, { mode: "playback" });
+  assert.ok(controller._frontTransitionTimers.size > 0);
+  const before = { time: controller.currentPresentationMs, playing: controller.isPlaying };
+
+  controller.setFrontlineMode("derived");
+
+  assert.deepEqual({ time: controller.currentPresentationMs, playing: controller.isPlaying }, before);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+  assert.equal(descendants(svg).some((element) =>
+    element.classList.contains("is-front-entering") || element.classList.contains("is-front-exiting") ||
+    element.classList.contains("is-enclosure-exiting")), false);
+});
+
+test("frontline button starts hybrid in HTML and reset disables it without changing its mode label", () => {
+  const html = readFileSync(new URL("../app/index.html", import.meta.url), "utf8");
+  assert.match(html, /id="fronts-button"[^>]*aria-pressed="false"[^>]*disabled>Fronts: hybrid<\/button>/);
+  const document = new FakeDocument(new FrameClock().window);
+  resetBattleUI(document);
+  assert.equal(document.getElementById("fronts-button").textContent, "Fronts: hybrid");
+  assert.equal(document.getElementById("fronts-button").getAttribute("aria-pressed"), "false");
+  assert.equal(document.getElementById("fronts-button").disabled, true);
+});
+
 test("source-backed frontlines render in fixed order and toggle independently", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
@@ -1028,7 +1283,7 @@ test("source-backed frontlines render in fixed order and toggle independently", 
   assert.ok(line.classList.contains("is-source-backed"));
   assert.equal(area.getAttribute("fill"), "#2468ac");
   assert.equal(button.disabled, false);
-  assert.equal(button.textContent, "Fronts: on");
+  assert.equal(button.textContent, "Fronts: hybrid");
   assert.equal(button.getAttribute("aria-pressed"), "true");
 
   const before = {
@@ -1063,6 +1318,7 @@ test("frontline inspector shows source-backed provenance and interpolation safel
   installLeaflet();
   const battle = frontlineBattleFixture();
   const controller = renderBattle(battle, document);
+  controller.setFrontlineMode("source");
   assert.match(document.getElementById("frontline-summary").textContent, /exact.*Interpolated/);
   controller.seek(500);
 
@@ -1088,6 +1344,7 @@ test("frontline inspector labels topology crossfade", () => {
   const document = new FakeDocument(clock.window);
   installLeaflet();
   const controller = renderBattle(topologyChangeBattleFixture(), document);
+  controller.setFrontlineMode("source");
   controller.seek(500);
   assert.match(document.getElementById("frontline-summary").textContent, /Crossfade/);
 });
@@ -1105,7 +1362,7 @@ test("frontline inspector does not link unsafe source URLs", () => {
   assert.equal(label.getAttribute("href"), null);
 });
 
-test("frontline inspector warns for fallback without inventing a source", () => {
+test("frontline inspector labels derived provenance without inventing a source", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
@@ -1114,9 +1371,7 @@ test("frontline inspector warns for fallback without inventing a source", () => 
   const status = document.getElementById("frontline-status");
   assert.equal(status.hidden, false);
   const summary = document.getElementById("frontline-summary").textContent;
-  assert.match(summary, /^Not a source-backed frontline\./);
-  assert.match(summary, /Low-confidence influence\/contact line derived from land unit positions/);
-  assert.match(summary, /not a source-backed historical fact/);
+  assert.equal(summary, "DERIVED FROM UNIT POSITIONS · LOW CONFIDENCE");
   assert.equal(document.getElementById("frontline-sources").children.length, 0);
 });
 
@@ -1156,13 +1411,14 @@ test("land fallback defaults on and renders only eligible influences with a deri
   assert.equal(label.textContent, "DERIVED FROM UNIT POSITIONS · ≤35%");
 });
 
-test("source frontline at the current time suppresses renderer fallback", () => {
+test("source mode at the current time suppresses derived rendering", () => {
   const battle = frontlineFallbackBattleFixture();
   battle.frontline_snapshots = frontlineBattleFixture().frontline_snapshots.slice(0, 1);
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
-  renderBattle(battle, document);
+  const controller = renderBattle(battle, document);
+  controller.setFrontlineMode("source");
   const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
   const all = descendants(svg);
 
@@ -1172,17 +1428,19 @@ test("source frontline at the current time suppresses renderer fallback", () => 
   assert.equal(all.some((element) => element.classList.contains("is-derived")), false);
 });
 
-test("one-side fallback shows influences without inventing a contact line", () => {
+test("one-side fallback leaves the overall frontline control unavailable", () => {
   const battle = frontlineFallbackBattleFixture();
   battle.actors.find(({ id }) => id === "bravo").side_id = "blue";
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
-  renderBattle(battle, document);
+  const controller = renderBattle(battle, document);
   const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
   const all = descendants(svg);
 
-  assert.equal(all.filter((element) => element.classList.contains("front-influence")).length, 2);
+  assert.equal(controller.frontsEnabled, false);
+  assert.equal(document.getElementById("fronts-button").disabled, true);
+  assert.equal(all.filter((element) => element.classList.contains("front-influence")).length, 0);
   assert.equal(all.some((element) =>
     element.classList.contains("front-line") && element.classList.contains("is-derived")), false);
 });
@@ -1528,6 +1786,7 @@ test("high-speed enclosure inspector uses the crossed snapshots provenance", () 
   const document = new FakeDocument(clock.window);
   installLeaflet();
   const controller = renderBattle(battle, document);
+  controller.setFrontlineMode("source");
 
   controller.renderAt(2000, { mode: "playback" });
 
@@ -1619,6 +1878,7 @@ test("a jump past enclosure reveals the final sampled geometry and later topolog
   const expectedDocument = new FakeDocument(expectedClock.window);
   installLeaflet();
   const expectedController = renderBattle(battle, expectedDocument);
+  expectedController.setFrontlineMode("source");
   expectedController.seek(2000);
   const expectedSvg = expectedDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
   const expectedLineD = descendants(expectedSvg).find((element) =>
@@ -1630,6 +1890,7 @@ test("a jump past enclosure reveals the final sampled geometry and later topolog
   const document = new FakeDocument(clock.window);
   installLeaflet();
   const controller = renderBattle(battle, document);
+  controller.setFrontlineMode("source");
   const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
   controller.renderAt(2000, { mode: "playback" });
 
@@ -2006,7 +2267,7 @@ test("frontline availability resets and is recomputed for replacement documents"
   const button = document.getElementById("fronts-button");
   assert.equal(third.frontsEnabled, false);
   assert.equal(button.disabled, true);
-  assert.equal(button.textContent, "Fronts: off");
+  assert.equal(button.textContent, "Fronts: hybrid");
 });
 
 test("battle UI enables focus only when a current plan has coordinates and reset disables it", () => {
@@ -2854,6 +3115,10 @@ test("destroy clears the public frontline inspector state", () => {
   assert.equal(status.hidden, true);
   assert.equal(summary.textContent, "");
   assert.equal(sources.children.length, 0);
+  assert.equal(controller.frontlineMode, "hybrid");
+  assert.equal(document.getElementById("fronts-button").textContent, "Fronts: hybrid");
+  assert.equal(document.getElementById("fronts-button").getAttribute("aria-pressed"), "false");
+  assert.equal(document.getElementById("fronts-button").disabled, true);
 });
 
 test("destroy tears down owned controls and timeline handlers and blocks public re-entry", () => {
