@@ -1236,13 +1236,15 @@ export function renderBattle(battle, documentRef = document) {
     return element;
   }
 
-  function settleTopologyTransition() {
+  function settleTopologyTransition({ areasOnly = false } = {}) {
     for (const element of [...transientFrontlineEls]) {
       if (!element.classList.contains("is-front-exiting")) continue;
+      if (areasOnly && !element.classList.contains("front-control-area")) continue;
       element.remove();
       transientFrontlineEls.delete(element);
     }
     for (const [key, element] of frontlineEls) {
+      if (areasOnly && !element.classList.contains("front-control-area")) continue;
       if (element.classList.contains("is-front-exiting")) {
         element.remove();
         frontlineEls.delete(key);
@@ -1530,7 +1532,7 @@ export function renderBattle(battle, documentRef = document) {
         const timer = scheduleTimeout(() => {
           if (controller._frontTransitionTimers.get("topology") !== timer) return;
           controller._frontTransitionTimers.delete("topology");
-          settleTopologyTransition();
+          settleTopologyTransition({ areasOnly: !renderLines });
         }, FRONT_CROSSFADE_MS);
         controller._frontTransitionTimers.set("topology", timer);
       }
@@ -1682,8 +1684,10 @@ export function renderBattle(battle, documentRef = document) {
       renderHybridLine(`hybrid:line:${index}`, useSource ? sourceCoordinates : derivedCoordinates, active);
       return;
     }
-    const source = renderHybridLine(`hybrid:line:${index}`, sourceCoordinates, active);
-    const derived = renderHybridLine(`hybrid:derived:${index}`, derivedCoordinates, active);
+    const sourceKey = `hybrid:line:${index}`;
+    const derivedKey = `hybrid:derived:${index}`;
+    const source = renderHybridLine(sourceKey, sourceCoordinates, active);
+    const derived = renderHybridLine(derivedKey, derivedCoordinates, active);
     const entering = useSource ? source : derived;
     const exiting = useSource ? derived : source;
     entering.classList.add("is-front-entering");
@@ -1694,9 +1698,13 @@ export function renderBattle(battle, documentRef = document) {
     const timer = scheduleTimeout(() => {
       if (controller._frontTransitionTimers.get(timerKey) !== timer) return;
       controller._frontTransitionTimers.delete(timerKey);
-      exiting.remove();
-      frontlineEls.delete(useSource ? `hybrid:derived:${index}` : `hybrid:line:${index}`);
-      entering.classList.remove("is-front-entering");
+      const exitingKey = useSource ? derivedKey : sourceKey;
+      if (frontlineEls.get(exitingKey) === exiting) {
+        exiting.remove();
+        frontlineEls.delete(exitingKey);
+      }
+      const enteringKey = useSource ? sourceKey : derivedKey;
+      if (frontlineEls.get(enteringKey) === entering) entering.classList.remove("is-front-entering");
     }, FRONT_CROSSFADE_MS);
     controller._frontTransitionTimers.set(timerKey, timer);
   }

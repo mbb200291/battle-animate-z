@@ -1508,6 +1508,43 @@ test("hybrid replaces timer ownership when one-sided and paired transitions trad
     element.getAttribute("data-frontline-key") === "hybrid:derived:0"), false);
 });
 
+test("hybrid area topology settlement cannot orphan a newer line crossfade", () => {
+  const battle = multiContourBattleFixture({ source: true, mixed: true });
+  battle.frontline_snapshots[0].control_areas[0].id = "departing_area";
+  battle.frontline_snapshots[1].control_areas[0].id = "current_area";
+  const third = structuredClone(battle.frontline_snapshots[1]);
+  third.id = "front_2";
+  third.time = { ...third.time, label: "front_2", start: "2020-01-01T00:00:02Z" };
+  battle.frontline_snapshots.push(third);
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.renderAt(1250, { mode: "playback" });
+  const areaTimer = controller._frontTransitionTimers.get("topology");
+  assert.equal(clock.timeoutDelays.get(areaTimer), 500);
+  controller.renderAt(1900, { mode: "playback" });
+  const lineTimer = controller._frontTransitionTimers.get("hybrid:0");
+  assert.equal(clock.timeoutDelays.get(lineTimer), 500);
+  const settleAreas = clock.timeouts.get(areaTimer);
+  const settleLines = clock.timeouts.get(lineTimer);
+
+  settleAreas();
+  controller.renderAt(1950, { mode: "playback" });
+  settleLines();
+  clock.flushTimeouts();
+
+  const hybridPaths = descendants(svg).filter((element) =>
+    /^hybrid:(?:line|derived):/.test(element.getAttribute("data-frontline-key") || ""));
+  assert.deepEqual(hybridPaths.map((path) => path.getAttribute("data-frontline-key")),
+    ["hybrid:line:0", "hybrid:line:1"]);
+  assert.equal(hybridPaths.some((path) =>
+    path.classList.contains("is-front-entering") || path.classList.contains("is-front-exiting")), false);
+  assert.equal(controller._frontTransitionTimers.size, 0);
+});
+
 test("hybrid keeps source control areas and falls back to source interpolation without enough units", () => {
   const battle = hybridFrontlineBattleFixture();
   battle.actors.forEach((actor) => { actor.kind = "ship"; });
