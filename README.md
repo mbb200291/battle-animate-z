@@ -48,16 +48,16 @@ Geographic fields use a small GeoJSON subset:
 
 Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, disputed, or unknown through `precision` and `confidence`.
 
-## Generate JSON With AI — Battle JSON Prompt 1.1.0
+## Generate JSON With AI — Battle JSON Prompt 1.2.0
 
 Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
 
 ````text
 你是一個歷史資料標準化助理。請根據我提供且你實際可讀取的 Wikipedia、Wikidata 或其他 Wiki 頁面內容，產生一個完全符合 battle-animation-schema 0.4.0 的 JSON，供地圖動畫 app 使用。
 
-本提示詞版本是 Battle JSON Prompt 1.1.0。Prompt 版本與 schema 版本是兩件事：
+本提示詞版本是 Battle JSON Prompt 1.2.0。Prompt 版本與 schema 版本是兩件事：
 - schema_version 固定使用字串 "0.4.0"（不要加 v，也不要寫成數字）。
-- metadata.source_system 固定使用字串 "battle_json_prompt_1.1.0"，讓文件保留生成規則的版本。
+- metadata.source_system 固定使用字串 "battle_json_prompt_1.2.0"，讓文件保留生成規則的版本。
 - 不要新增 prompt_version；目前 schema 沒有這個欄位。
 - 0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件；本提示詞只輸出 0.4.0。
 
@@ -76,14 +76,17 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
    不要自行新增 type / role / source_ids / precision / notes / language 等未列出的欄位。
 
 ===== 生成原則：資料充分時做深，資料不足時不要猜 =====
-1. 先在內部核對來源涵蓋的單位、事件、時間、位置、交戰與結果，再產生 JSON；不要輸出這份內部核對。
+1. AI 只整理來源事實與有限、受證據支持的推估。先在內部核對來源涵蓋的單位、事件、時間、位置、交戰與結果，再產生 JSON；不要輸出這份內部核對。
 2. 來源若支持個別軍艦或師／旅等單位、分段時間、代表位置、交戰結果與戰線快照，應使用 schema 0.4.0 的 actors、movements、waypoint_times、engagements、frontline_snapshots 完整表達，不要無故降回粗略層級。
-3. 精細度以來源為上限。低 confidence 不能把臆測變成合法資料。required 欄位不能省略：
+3. 精細度以來源為上限。來源明載的事實直接記錄；低 confidence 不是虛構資料的許可，也不能把臆測變成合法資料。required 欄位不能省略：
    - battle.date 或 historical_events[].time 若只有粗略時間，就以來源支持的 year／month／day／hour／range 粒度填寫；若來源確實未提供時間，使用 label:"時間不詳"、precision:"unknown" 與低 confidence，不要虛構日期。
    - movement.path 既沒有直接來源支持、也不符合下方 inferred 代表性路徑規則時，省略整筆 movement；只有 path 有依據而精確時間不足時，省略選填的 movement.time 與 waypoint_times。
    - engagement 只有在 attacker、target、action 與 result 都有來源支持時才建立；若任何一項缺少來源支持，整筆 engagement 必須省略。
-4. inferred 只能用於來源已確認發生及先後順序的事件之代表性幾何或時間，相關 confidence <= 0.5。
-5. frontline_snapshots 是選填；沒有直接支持該時刻戰線或控制區的來源時，省略 frontline_snapshots，不要從單位點位、戰果敘述或動畫需求反推。
+4. inferred movement 只限來源確認單位由 A 到 B 的行動或階段先後順序時使用；標 precision:"inferred"、confidence <= 0.5，座標只是代表位置，不是精確 footprint。
+5. 不得為了動畫平滑而編造單位、事件、時間、轉折點或路徑；降低 confidence 也不能為這些內容創造來源依據。
+6. frontline_snapshots 是選填；沒有直接支持該時刻戰線或控制區的來源時，省略 frontline_snapshots。只有直接支持特定日期／時刻戰線的來源地圖才可建立；沿該來源地圖描繪的幾何可標 precision:"inferred" 且 confidence <= 0.5，source_ids 必須指向該地圖。
+7. 不得從單位點位生成 frontline_snapshots。推導戰線只由 app 執行時計算，不得寫回 JSON。
+8. 來源同時支持細緻單位／movements 與來源戰線快照時，兩者都要保留；不可因 app 能推導戰線而省略任一種來源資料。
 
 ===== 各物件的「合法欄位」（required 標 *，其餘為選填）=====
 metadata: *id *title *created_at *updated_at *license *source_system, wikidata_qid
@@ -124,9 +127,10 @@ frontline_snapshots[]（選填）:
   control_areas[]: *id *side_id *geometry
   - 每筆至少提供 front_lines 或 control_areas 其中一項；geometry 分別只能是 LineString 與 Polygon。
   - source_ids 必須指向直接支持該時刻戰線或控制區的來源；一般戰役敘事、結果或單位曾出現於某地，不足以支持精確戰線。
-  - 只有來源支持戰線存在及大致位置、但幾何由資料員概括時，才可標 precision:"inferred" 且 confidence <= 0.5。
+  - 直接支持特定日期／時刻戰線的來源地圖是建立 snapshot 的唯一方式；沿來源地圖描繪的線可標 precision:"inferred" 且 confidence <= 0.5，這和 app 依單位點位執行時推導的戰線不同。
   - 不得從戰果敘述推導出精確包圍圈、突破口、控制區邊界或戰線形狀。
   - 不得從 casualties、strength 或 outcome 推算 control_areas 或其他控制區幾何。
+  - 不得從單位點位生成 frontline_snapshots；推導戰線只由 app 執行時計算，不得寫回 JSON。
   - 同一戰線或控制區跨快照保持相同的戰線與控制區 id；只有實體新增、消失或分裂時才改用新 id。
 outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
@@ -159,8 +163,8 @@ animation_hints: *map *style *timeline, camera
 動畫細緻度取決於來源可支持的粒度，而不是欄位數量。請做到：
 1. 只把來源明確記載的關鍵單位拆細：海戰可採船艦級，陸戰在來源允許時採師／旅級（必要時到團級），各自當一個 actor
    （kind 用 ship / division / brigade…），需要時用 parent_id 歸到上級單位。
-2. 針對來源明確記載的戰役階段，給關鍵單位分階段的位置與移動；每個已記載階段為有移動的單位
-   補一條 movements（帶對應的 event_id）。不要為了讓動畫連續而新增來源未記載的階段或行動。
+2. 針對來源明確記載的戰役階段，讓師／旅級單位以代表位置建立 movements；每個已記載階段為有移動的單位
+   補一條 movement（帶對應的 event_id）。同一單位跨階段保持相同 actor id。不要為了讓動畫連續而新增來源未記載的階段或行動。
 3. 來源明確記載對抗雙方與結果時，才用 engagements 記錄哪個單位打哪個、用什麼方式、結果如何。app 會在對應事件
    畫出交火線，並讓被擊沉／失能的單位淡出。
 4. 對來源已確認發生及先後順序的事件，可為不同階段建立代表性近似 Point 以避免標記重疊，
@@ -174,11 +178,12 @@ animation_hints: *map *style *timeline, camera
 不得用低 confidence 包裝臆測內容。
 
 ===== 輸出前品質檢查（只在內部執行，不要輸出）=====
-- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.1.0"。
+- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.2.0"。
 - required 欄位、受控 enum、id 參照、GeoJSON 座標順序及 additionalProperties:false 是否全部符合。
 - movement、engagement、actor 分類與 result 是否都有相應來源，推估是否只限代表性幾何與時間且 confidence <= 0.5。
 - 若輸出 frontline_snapshots，每筆是否有直接支持該時刻戰線或控制區的來源、至少一種合法幾何，且同一實體跨快照使用穩定 id。
 - 是否避免由結果敘述、勝負、包圍或突破等概括文字生成精確戰線或控制區。
+- 是否完全避免把 app 依單位點位推導的戰線寫進 frontline_snapshots。
 
 ===== 資料正確性 =====
 - 不要編造來源中沒有的細節。資料不精確時用 precision（approximate/inferred/disputed/unknown）與 confidence（0~1）標記。
@@ -189,43 +194,52 @@ animation_hints: *map *style *timeline, camera
 ===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
 {
   "schema_version": "0.4.0",
-  "metadata": { "id": "battle_example", "title": "範例戰役", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0", "source_system": "battle_json_prompt_1.1.0" },
-  "battle": { "id": "battle_example", "name": "範例戰役", "also_known_as": ["別名"], "part_of": "某場戰爭", "date": { "label": "1894-09-15", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "summary": "一句話說明這場戰役。", "confidence": 0.85 },
+  "metadata": { "id": "battle_land_template", "title": "陸戰結構範本（內容須替換）", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "REPLACE WITH DOCUMENT LICENSE", "source_system": "battle_json_prompt_1.2.0" },
+  "battle": { "id": "battle_land_template", "name": "範例陸戰（非真實戰役資料）", "part_of": "來源內容占位", "date": { "label": "1900-01-01（範例時間，須替換）", "start": "1900-01-01", "precision": "day", "confidence": 0.5 }, "summary": "此物件只示範穩定單位 id、分階段移動與來源戰線快照的結構；所有內容都必須由實際來源替換。", "confidence": 0.5 },
   "sides": [
     { "id": "side_a", "name": "甲方", "color": "#2f6fb5", "belligerents": [{ "id": "bel_a", "name": "甲國" }] },
     { "id": "side_b", "name": "乙方", "color": "#c0392b", "belligerents": [{ "id": "bel_b", "name": "乙國" }] }
   ],
-  "commanders": [ { "id": "cmd_a", "name": "甲方指揮官", "side_id": "side_a", "rank_or_role": "司令", "confidence": 0.8 } ],
+  "commanders": [],
   "actors": [
-    { "id": "actor_a_fleet", "name": "甲方艦隊", "side_id": "side_a", "kind": "fleet", "commander_ids": ["cmd_a"], "strength": { "label": "12 艘軍艦", "min": 12, "max": 12, "confidence": 0.7 }, "confidence": 0.8 },
-    { "id": "actor_b_army", "name": "乙方陸軍", "side_id": "side_b", "kind": "army", "confidence": 0.8 }
+    { "id": "actor_a_1div", "name": "甲方第一師", "side_id": "side_a", "kind": "division", "confidence": 0.5 },
+    { "id": "actor_a_2brig", "name": "甲方第二旅", "side_id": "side_a", "kind": "brigade", "confidence": 0.5 },
+    { "id": "actor_b_1div", "name": "乙方第一師", "side_id": "side_b", "kind": "division", "confidence": 0.5 },
+    { "id": "actor_b_2brig", "name": "乙方第二旅", "side_id": "side_b", "kind": "brigade", "confidence": 0.5 }
   ],
   "places": [
-    { "id": "place_harbor", "name": "某港", "geometry": { "type": "Point", "coordinates": [122.1, 39.0] }, "precision": "approximate", "confidence": 0.7 },
-    { "id": "place_ridge", "name": "某高地", "geometry": { "type": "Point", "coordinates": [123.4, 38.6] }, "precision": "approximate", "confidence": 0.7 }
+    { "id": "place_sector_west", "name": "西側戰區（占位）", "geometry": { "type": "Point", "coordinates": [10.0, 50.0] }, "precision": "inferred", "confidence": 0.5 },
+    { "id": "place_sector_east", "name": "東側戰區（占位）", "geometry": { "type": "Point", "coordinates": [10.8, 50.0] }, "precision": "inferred", "confidence": 0.5 }
   ],
   "historical_events": [
-    { "id": "evt_attack", "type": "attack", "title": "海上交戰", "time": { "label": "1894-09-15 上午", "start": "1894-09-15", "precision": "day", "confidence": 0.9 }, "description": "甲方艦隊在某港外與乙方交戰。", "actor_ids": ["actor_a_fleet"], "place_ids": ["place_harbor"], "precision": "approximate", "confidence": 0.85, "source_ids": ["src_wiki"] },
-    { "id": "evt_advance", "type": "advance", "title": "乙方陸軍推進", "time": { "label": "1894-09-16 08:00–09:00", "start": "1894-09-16T08:00:00", "end": "1894-09-16T09:00:00", "precision": "range", "confidence": 0.5 }, "description": "乙方陸軍向某高地推進；座標是師級單位的代表位置，不代表精確部署範圍。", "actor_ids": ["actor_b_army"], "place_ids": ["place_ridge"], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_wiki"] }
+    { "id": "evt_stage_1", "type": "advance", "title": "第一階段推進（占位）", "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "description": "範本假設來源確認四個單位在第一階段的行動與先後順序；代表位置不表示精確部署範圍。", "actor_ids": ["actor_a_1div", "actor_a_2brig", "actor_b_1div", "actor_b_2brig"], "place_ids": ["place_sector_west", "place_sector_east"], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_template"] },
+    { "id": "evt_stage_2", "type": "attack", "title": "第二階段交戰（占位）", "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "description": "範本假設來源確認相同四個單位進入第二階段；actor id 沿用第一階段。", "actor_ids": ["actor_a_1div", "actor_a_2brig", "actor_b_1div", "actor_b_2brig"], "place_ids": ["place_sector_west", "place_sector_east"], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_template"] }
   ],
   "movements": [
-    { "id": "mov_b_advance", "event_id": "evt_advance", "actor_id": "actor_b_army", "from_place_id": "place_harbor", "to_place_id": "place_ridge", "path": { "type": "LineString", "coordinates": [[122.1, 39.0], [122.7, 38.8], [123.4, 38.6]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1894-09-16 08:00–09:00", "start": "1894-09-16T08:00:00", "end": "1894-09-16T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1894-09-16T08:00:00", "1894-09-16T08:30:00", "1894-09-16T09:00:00"] }
+    { "id": "mov_a1_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_a_1div", "path": { "type": "LineString", "coordinates": [[10.00, 50.12], [10.12, 50.12], [10.24, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
+    { "id": "mov_a2_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_a_2brig", "path": { "type": "LineString", "coordinates": [[10.00, 49.88], [10.12, 49.88], [10.24, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
+    { "id": "mov_b1_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_b_1div", "path": { "type": "LineString", "coordinates": [[10.80, 50.12], [10.68, 50.12], [10.56, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
+    { "id": "mov_b2_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_b_2brig", "path": { "type": "LineString", "coordinates": [[10.80, 49.88], [10.68, 49.88], [10.56, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
+    { "id": "mov_a1_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_a_1div", "path": { "type": "LineString", "coordinates": [[10.24, 50.12], [10.32, 50.12], [10.38, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] },
+    { "id": "mov_a2_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_a_2brig", "path": { "type": "LineString", "coordinates": [[10.24, 49.88], [10.32, 49.88], [10.38, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] },
+    { "id": "mov_b1_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_b_1div", "path": { "type": "LineString", "coordinates": [[10.56, 50.12], [10.48, 50.12], [10.42, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] },
+    { "id": "mov_b2_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_b_2brig", "path": { "type": "LineString", "coordinates": [[10.56, 49.88], [10.48, 49.88], [10.42, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] }
   ],
   "frontline_snapshots": [
-    { "id": "front_advance", "time": { "label": "1894-09-16 09:00", "start": "1894-09-16T09:00:00", "precision": "hour", "confidence": 0.5 }, "event_id": "evt_advance", "front_lines": [{ "id": "front_main", "geometry": { "type": "LineString", "coordinates": [[123.1, 38.4], [123.2, 38.9]] } }], "control_areas": [{ "id": "area_b", "side_id": "side_b", "geometry": { "type": "Polygon", "coordinates": [[[122.9, 38.3], [123.2, 38.3], [123.2, 38.9], [122.9, 38.3]]] } }], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_wiki"] }
+    { "id": "front_stage_1", "time": { "label": "1900-01-01 09:00（來源地圖日期占位）", "start": "1900-01-01T09:00:00", "precision": "hour", "confidence": 0.5 }, "event_id": "evt_stage_1", "front_lines": [{ "id": "front_main", "geometry": { "type": "LineString", "coordinates": [[10.40, 49.75], [10.40, 50.25]] } }], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_template"] }
   ],
-  "outcome": { "summary": "乙方獲勝。", "winner_side_ids": ["side_b"], "casualties": [{ "side_id": "side_a", "label": "約 500 人", "min": 400, "max": 600, "confidence": 0.6 }], "confidence": 0.85, "source_ids": ["src_wiki"] },
-  "sources": [ { "id": "src_wiki", "title": "維基百科條目（含 09:00 戰線圖）", "url": "https://zh.wikipedia.org/wiki/...", "retrieved_at": "YYYY-MM-DD", "license": "CC BY-SA 4.0", "note": "範本中此來源直接支持 09:00 的大致戰線；實際生成時必須替換為真正有此內容的來源。" } ],
+  "outcome": { "summary": "結果占位；必須依實際來源替換。", "winner_side_ids": [], "confidence": 0.5, "source_ids": ["src_template"] },
+  "sources": [ { "id": "src_template", "title": "來源占位範本（不是實際來源）", "url": "https://example.invalid/replace-with-real-source", "retrieved_at": "YYYY-MM-DD", "license": "REPLACE WITH ACTUAL SOURCE LICENSE", "note": "這是占位範本，不聲稱 example.invalid 是真實來源。替換後的來源必須直接支持兩個階段、單位行動、結果與 09:00 戰線圖；此 snapshot 是沿該來源圖描繪，不是由單位點位推導。" } ],
   "animation_hints": {
-    "map": { "initial_center": [122.8, 38.8], "initial_zoom": 7, "bounds_padding": 0.05 },
+    "map": { "initial_center": [10.4, 50.0], "initial_zoom": 9, "bounds_padding": 0.05 },
     "style": {
       "side_colors": { "side_a": "#2f6fb5", "side_b": "#c0392b" },
-      "actor_icons": { "actor_a_fleet": "fleet_generic", "actor_b_army": "infantry" },
+      "actor_icons": { "actor_a_1div": "infantry", "actor_a_2brig": "infantry", "actor_b_1div": "infantry", "actor_b_2brig": "infantry" },
       "event_icons": { "attack": "burst", "advance": "arrow-up-right" },
       "movement_line_width": 4
     },
-    "timeline": { "default_event_duration_ms": 1600, "ordered_event_ids": ["evt_attack", "evt_advance"], "historical_seconds_per_playback_second": 120, "idle_compression_threshold_seconds": 900, "idle_compressed_duration_ms": 1200 },
-    "camera": [{ "event_id": "evt_advance", "center": [123.4, 38.6], "zoom": 9 }]
+    "timeline": { "default_event_duration_ms": 1600, "ordered_event_ids": ["evt_stage_1", "evt_stage_2"], "historical_seconds_per_playback_second": 120, "idle_compression_threshold_seconds": 900, "idle_compressed_duration_ms": 1200 },
+    "camera": [{ "event_id": "evt_stage_1", "center": [10.4, 50.0], "zoom": 9 }, { "event_id": "evt_stage_2", "center": [10.4, 50.0], "zoom": 10 }]
   }
 }
 
@@ -293,7 +307,9 @@ Versions `0.3.0` and `0.4.0` use continuous historical-time playback（連續歷
 
 **Modern borders** are off by default and reset to off whenever a document is loaded. They are optional modern de facto reference boundaries, not historical borders, and contain no country names, roads, or labels.
 
-**Fronts** is available when a `0.4.0` document contains timed, source-backed `frontline_snapshots`, or when opposing land-unit positions permit a conservative fallback. Source-backed fronts use solid lines and list their cited sources in the inspector. The fallback is dashed, explicitly labeled low-confidence, and exists only in the renderer: it is never written back to the battle JSON. Turning Fronts off hides both forms without changing playback or unit positions.
+**Fronts** cycles `hybrid→source→derived→off`; `hybrid` is the default. Hybrid mode uses a U-shaped convergence between source anchors: it is exact source geometry at each dated anchor and increasingly derived from opposing land-unit positions toward the interval midpoint. If unit data is insufficient, hybrid falls back to source interpolation. `source` shows only source-backed snapshots, while `derived` shows only the conservative runtime estimate from unit positions. Source-backed fronts use solid lines and list their cited sources in the inspector. Derived fronts are dashed and explicitly low-confidence; they exist only in the renderer and are never written back to the battle JSON. `off` hides fronts without changing playback or unit positions.
+
+An inferred line traced from a dated source map remains source-backed evidence: its `frontline_snapshots[].source_ids` cite that map and its precision/confidence describe the tracing. An app-derived line is different—it is calculated at runtime from representative unit positions, has no historical source claim, and must never be copied into `frontline_snapshots`.
 
 當相同穩定 ID 的開放戰線變為閉合包圍圈時，舊線會淡出，目標輪廓則逐步揭示；這只是 renderer 衍生的顯示效果，不表示來源提供了中間合圍路徑，因此不需更改 schema、提示詞或範例資料。其他戰線分裂或合併仍以 crossfade 顯示。拖曳或跳轉時間軸，以及系統偏好減少動態效果時，會立即顯示目標輪廓。
 

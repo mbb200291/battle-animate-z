@@ -582,10 +582,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
-    def test_readme_prompt_v11_teaches_v040_frontlines(self):
+    def test_readme_prompt_v12_teaches_hybrid_frontline_evidence(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         prompt_match = re.search(
-            r"## Generate JSON With AI — Battle JSON Prompt 1\.1\.0.*?"
+            r"## Generate JSON With AI — Battle JSON Prompt 1\.2\.0.*?"
             r"````text\n(?P<prompt>.*?)\n````",
             readme,
             re.DOTALL,
@@ -594,9 +594,9 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         prompt = prompt_match.group("prompt")
 
         for required in (
-            "Battle JSON Prompt 1.1.0",
+            "Battle JSON Prompt 1.2.0",
             'schema_version 固定使用字串 "0.4.0"',
-            'metadata.source_system 固定使用字串 "battle_json_prompt_1.1.0"',
+            'metadata.source_system 固定使用字串 "battle_json_prompt_1.2.0"',
             "只輸出「一個 JSON 物件」",
             "唯一例外",
             "不要新增 prompt_version",
@@ -634,6 +634,14 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "不得從 casualties、strength 或 outcome 推算 control_areas",
             "0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件",
             "本提示詞只輸出 0.4.0",
+            "不得從單位點位生成 frontline_snapshots",
+            "推導戰線只由 app 執行時計算，不得寫回 JSON",
+            "同一單位跨階段保持相同 actor id",
+            "AI 只整理來源事實與有限、受證據支持的推估",
+            "低 confidence 不是虛構資料的許可",
+            "不得為了動畫平滑而編造單位、事件、時間、轉折點或路徑",
+            "只有直接支持特定日期／時刻戰線的來源地圖才可建立",
+            "來源同時支持細緻單位／movements 與來源戰線快照時，兩者都要保留",
         ):
             self.assertIn(required, prompt)
         for obsolete in (
@@ -644,6 +652,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertNotIn(obsolete, prompt)
         self.assertNotIn('"prompt_version"', prompt)
+        self.assertNotIn("Battle JSON Prompt 1.1.0", prompt)
+        self.assertNotIn("battle_json_prompt_1.1.0", prompt)
         self.assertEqual(set(re.findall(r"confidence <= (0\.\d+)", prompt)), {"0.5"})
         self.assertRegex(
             prompt,
@@ -662,8 +672,100 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertEqual(set(documented_token_list), ACTOR_ICON_TOKENS)
         self.assertNotIn("寧可多給細節", prompt)
         self.assertNotIn("強烈建議提供", prompt)
+        self.assertRegex(
+            prompt,
+            r"師／旅級.*?代表位置.*?movements",
+        )
         for stale_emoji in ("🚢", "⛵", "🪖", "🐎", "💥", "🛡️", "✈️", "🏰", "🚩"):
             self.assertNotIn(stale_emoji, prompt)
+
+        sample_match = re.search(
+            r"===== 輸出格式範本.*?=====\n(?P<json>\{.*?\n\})\n\n===== 資料來源 =====",
+            prompt,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(sample_match)
+        sample = json.loads(sample_match.group("json"))
+        self.assertEqual(validate_document_with_warnings(sample), ([], []))
+
+        script = """
+            import { validateBattle } from "./app/animate.js";
+            let input = "";
+            process.stdin.setEncoding("utf8");
+            for await (const chunk of process.stdin) input += chunk;
+            console.log(JSON.stringify(validateBattle(JSON.parse(input))));
+        """
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script],
+            cwd=ROOT,
+            input=json.dumps(sample),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), {"errors": [], "warnings": []})
+
+        sides = {side["id"] for side in sample["sides"]}
+        land_kinds = {"army", "corps", "division", "brigade", "regiment", "unit"}
+        for side_id in sides:
+            self.assertGreaterEqual(
+                sum(
+                    actor["side_id"] == side_id and actor["kind"] in land_kinds
+                    for actor in sample["actors"]
+                ),
+                2,
+            )
+
+        movements_by_actor = {}
+        for movement in sample["movements"]:
+            self.assertEqual(
+                len(movement["path"]["coordinates"]),
+                len(movement["waypoint_times"]),
+            )
+            movements_by_actor.setdefault(movement["actor_id"], []).append(movement)
+        recurring_actor_ids = []
+        for actor_id, movements in movements_by_actor.items():
+            ordered = sorted(movements, key=lambda movement: movement["time"]["start"])
+            if len(ordered) < 2 or len({movement["event_id"] for movement in ordered}) < 2:
+                continue
+            if all(
+                datetime.fromisoformat(previous["time"]["end"]) <=
+                datetime.fromisoformat(current["time"]["start"])
+                for previous, current in zip(ordered, ordered[1:])
+            ):
+                recurring_actor_ids.append(actor_id)
+        self.assertGreaterEqual(len(recurring_actor_ids), 2)
+
+        def inferred_confidences(value):
+            if isinstance(value, dict):
+                if value.get("precision") == "inferred":
+                    yield value["confidence"]
+                for child in value.values():
+                    yield from inferred_confidences(child)
+            elif isinstance(value, list):
+                for child in value:
+                    yield from inferred_confidences(child)
+
+        self.assertTrue(all(value <= 0.5 for value in inferred_confidences(sample)))
+        source_notes = {source["id"]: source.get("note", "") for source in sample["sources"]}
+        self.assertTrue(sample["frontline_snapshots"])
+        for snapshot in sample["frontline_snapshots"]:
+            for source_id in snapshot["source_ids"]:
+                self.assertIn("直接支持", source_notes[source_id])
+                self.assertIn("不是由單位點位推導", source_notes[source_id])
+
+        for required in (
+            "`hybrid→source→derived→off`",
+            "`hybrid` is the default",
+            "U-shaped convergence",
+            "exact source geometry at each dated anchor",
+            "hybrid falls back to source interpolation",
+            "exist only in the renderer",
+            "An inferred line traced from a dated source map remains source-backed evidence",
+            "An app-derived line is different",
+        ):
+            self.assertIn(required, readme)
 
     def test_readme_embedded_v040_sample_validates_in_python_and_browser(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
