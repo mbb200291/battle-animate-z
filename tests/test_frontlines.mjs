@@ -192,6 +192,132 @@ test("snapshot interpolation does not mutate either snapshot", () => {
   assert.equal(JSON.stringify([from, to]), before);
 });
 
+test("derived convergence preserves exact endpoint geometry semantics", () => {
+  const derivedLines = [[[0, 0], [0, 2]]];
+  const sourceSnapshot = { front_lines: [line("main", [[2, 0], [2, 2]])] };
+  const before = JSON.stringify([derivedLines, sourceSnapshot]);
+
+  const derived = frontlineGeometry.convergeDerivedFrontlines(derivedLines, sourceSnapshot, 0);
+  assert.equal(derived.transition, "derived");
+  assert.equal(derived.sourceWeight, 0);
+  assert.deepEqual(derived.front_lines[0], {
+    id: "hybrid:main",
+    geometry: { type: "LineString", coordinates: derivedLines[0] },
+    precision: "inferred",
+    confidence: 0.35,
+  });
+  assert.notEqual(derived.front_lines[0].geometry.coordinates, derivedLines[0]);
+  assert.notEqual(derived.front_lines[0].geometry.coordinates[0], derivedLines[0][0]);
+
+  const source = frontlineGeometry.convergeDerivedFrontlines(derivedLines, sourceSnapshot, 1);
+  assert.equal(source.transition, "source");
+  assert.equal(source.sourceWeight, 1);
+  assert.equal(source.front_lines, sourceSnapshot.front_lines);
+  assert.deepEqual(source.front_lines, sourceSnapshot.front_lines);
+  assert.equal(JSON.stringify([derivedLines, sourceSnapshot]), before);
+});
+
+test("compatible open fronts converge by index with synthetic metadata", () => {
+  const result = frontlineGeometry.convergeDerivedFrontlines(
+    [[[0, 0], [0, 2]]],
+    { front_lines: [line("main", [[2, 0], [2, 2]])] },
+    0.5,
+  );
+
+  assert.equal(result.transition, "hybrid");
+  assert.equal(result.sourceWeight, 0.5);
+  assert.equal(result.front_lines.length, 1);
+  assert.equal(result.front_lines[0].id, "hybrid:main");
+  assert.equal(result.front_lines[0].precision, "inferred");
+  assert.equal(result.front_lines[0].confidence, 0.35);
+  assert.equal(result.front_lines[0].geometry.coordinates.length, 48);
+  assert.ok(result.front_lines[0].geometry.coordinates.every(([x]) => Math.abs(x - 1) < 1e-9));
+});
+
+test("derived convergence clamps weights without mutation and is deterministic", () => {
+  const derivedLines = [[[0, 0], [0, 2]]];
+  const sourceSnapshot = { front_lines: [line("main", [[2, 0], [2, 2]])] };
+  const before = JSON.stringify([derivedLines, sourceSnapshot]);
+
+  const below = frontlineGeometry.convergeDerivedFrontlines(derivedLines, sourceSnapshot, -2);
+  const above = frontlineGeometry.convergeDerivedFrontlines(derivedLines, sourceSnapshot, Infinity);
+  const first = frontlineGeometry.convergeDerivedFrontlines(derivedLines, sourceSnapshot, 0.37);
+  const second = frontlineGeometry.convergeDerivedFrontlines(derivedLines, sourceSnapshot, 0.37);
+
+  assert.equal(below.sourceWeight, 0);
+  assert.equal(below.transition, "derived");
+  assert.deepEqual(below.front_lines[0].geometry.coordinates, derivedLines[0]);
+  assert.equal(above.sourceWeight, 1);
+  assert.equal(above.transition, "source");
+  assert.equal(above.front_lines, sourceSnapshot.front_lines);
+  assert.deepEqual(first, second);
+  assert.equal(JSON.stringify([derivedLines, sourceSnapshot]), before);
+});
+
+test("incompatible topology or line counts use the stable crossfade shape", () => {
+  const open = [[0, 0], [0, 2]];
+  const closed = [[2, 0], [4, 0], [4, 2], [2, 0]];
+  const topologySource = { front_lines: [line("main", closed)] };
+  const topology = frontlineGeometry.convergeDerivedFrontlines([open], topologySource, 0.5);
+  assert.deepEqual(topology, {
+    derivedLines: [open],
+    front_lines: topologySource.front_lines,
+    transition: "crossfade",
+    sourceWeight: 0.5,
+  });
+
+  const countSource = { front_lines: [line("one", open), line("two", [[2, 0], [2, 2]])] };
+  assert.deepEqual(frontlineGeometry.convergeDerivedFrontlines([open], countSource, 0.5), {
+    derivedLines: [open],
+    front_lines: countSource.front_lines,
+    transition: "crossfade",
+    sourceWeight: 0.5,
+  });
+});
+
+test("malformed or missing convergence inputs safely crossfade", () => {
+  const malformedSource = { front_lines: [{ id: "bad", geometry: null }] };
+  assert.doesNotThrow(() => frontlineGeometry.convergeDerivedFrontlines(null, null, 0.5));
+  assert.deepEqual(frontlineGeometry.convergeDerivedFrontlines(null, null, 0.5), {
+    derivedLines: null,
+    front_lines: [],
+    transition: "crossfade",
+    sourceWeight: 0.5,
+  });
+  assert.deepEqual(frontlineGeometry.convergeDerivedFrontlines([[[0, 0], [1, 0]]], malformedSource, 0.5), {
+    derivedLines: [[[0, 0], [1, 0]]],
+    front_lines: malformedSource.front_lines,
+    transition: "crossfade",
+    sourceWeight: 0.5,
+  });
+  assert.doesNotThrow(() => frontlineGeometry.convergeDerivedFrontlines([[[0, 0], null]], {}, 1));
+});
+
+test("compatible closed fronts morph with exact closure and ring sample count", () => {
+  const derivedRing = [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]];
+  const sourceRing = [[2, 0], [4, 0], [4, 2], [2, 2], [2, 0]];
+
+  const coordinates = frontlineGeometry.convergeDerivedFrontlines(
+    [derivedRing],
+    { front_lines: [line("pocket", sourceRing)] },
+    0.5,
+  ).front_lines[0].geometry.coordinates;
+
+  assert.equal(coordinates.length, 65);
+  assert.deepEqual(coordinates.at(-1), coordinates[0]);
+  assert.notEqual(coordinates.at(-1), coordinates[0]);
+});
+
+test("derived convergence morphs locally across the dateline", () => {
+  const coordinates = frontlineGeometry.convergeDerivedFrontlines(
+    [[[179, 0], [-179, 2]]],
+    { front_lines: [line("dateline", [[-179, 0], [179, 2]])] },
+    0.5,
+  ).front_lines[0].geometry.coordinates;
+
+  assert.ok(coordinates.every(([longitude]) => Math.abs(longitude) > 170));
+});
+
 test("transition metadata keeps approximate over exact precision", () => {
   const result = interpolateFrontlineSnapshots(
     { precision: "exact", confidence: 0.8, front_lines: [line("main", [[0, 0], [1, 0]])] },

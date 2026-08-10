@@ -228,6 +228,68 @@ export function isClosedFrontline(coordinates) {
     Math.abs(first[1] - last[1]) <= 1e-6;
 }
 
+function usableLineCoordinates(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2 || !coordinates.every(isPoint)) return false;
+  const closes = Math.abs(deltaLongitude(coordinates[0][0], coordinates.at(-1)[0])) <= 1e-6 &&
+    Math.abs(coordinates[0][1] - coordinates.at(-1)[1]) <= 1e-6;
+  return closes ? isClosedFrontline(coordinates) : resampleLine(coordinates).length > 0;
+}
+
+const hybridLine = (sourceLine, coordinates) => ({
+  id: `hybrid:${sourceLine.id}`,
+  geometry: { type: "LineString", coordinates },
+  precision: "inferred",
+  confidence: 0.35,
+});
+
+export function convergeDerivedFrontlines(derivedLines, sourceSnapshot, sourceWeight) {
+  const numericWeight = typeof sourceWeight === "number" && !Number.isNaN(sourceWeight) ? sourceWeight : 0;
+  const weight = Math.max(0, Math.min(1, numericWeight));
+  const sourceLines = sourceSnapshot?.front_lines ?? [];
+  const usableSource = Array.isArray(sourceLines) && sourceLines.length > 0 && sourceLines.every((line) =>
+    typeof line?.id === "string" &&
+    line.geometry?.type === "LineString" &&
+    usableLineCoordinates(line.geometry.coordinates));
+
+  if (weight === 1 && usableSource) {
+    return { front_lines: sourceLines, transition: "source", sourceWeight: 1 };
+  }
+
+  const compatible = usableSource &&
+    Array.isArray(derivedLines) &&
+    derivedLines.length === sourceLines.length &&
+    derivedLines.length > 0 &&
+    derivedLines.every((coordinates, index) =>
+      usableLineCoordinates(coordinates) &&
+      isClosedFrontline(coordinates) === isClosedFrontline(sourceLines[index].geometry.coordinates));
+  if (!compatible) {
+    return { derivedLines, front_lines: sourceLines, transition: "crossfade", sourceWeight: weight };
+  }
+
+  if (weight === 0) {
+    return {
+      front_lines: derivedLines.map((coordinates, index) =>
+        hybridLine(sourceLines[index], coordinates.map((point) => [...point]))),
+      transition: "derived",
+      sourceWeight: 0,
+    };
+  }
+
+  const frontLines = derivedLines.map((coordinates, index) => {
+    const sourceLine = sourceLines[index];
+    const closed = isClosedFrontline(coordinates);
+    const from = closed ? resampleRing(coordinates) : resampleLine(coordinates);
+    const sampledSource = closed
+      ? resampleRing(sourceLine.geometry.coordinates)
+      : resampleLine(sourceLine.geometry.coordinates);
+    const to = closed ? alignRing(from, sampledSource) : alignLine(from, sampledSource);
+    const morphed = from.map((point, pointIndex) => interpolatePoint(point, to[pointIndex], weight));
+    if (closed) morphed[morphed.length - 1] = [...morphed[0]];
+    return hybridLine(sourceLine, morphed);
+  });
+  return { front_lines: frontLines, transition: "hybrid", sourceWeight: weight };
+}
+
 export function enclosureLineIds(beforeSnapshot, afterSnapshot) {
   const before = Array.isArray(beforeSnapshot?.front_lines) ? beforeSnapshot.front_lines : [];
   const after = Array.isArray(afterSnapshot?.front_lines) ? afterSnapshot.front_lines : [];
