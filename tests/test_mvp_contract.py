@@ -202,22 +202,83 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertNotIn("target_actor_ids", events["event_front_1944_12_16"])
         self.assertEqual(battle["outcome"]["source_ids"], ["source_us_army_ardennes"])
 
+        def movement_evidence(event_id, actor_id, start, middle, end, coordinates, confidence):
+            label = f"{int(start[-2:])}–{int(end[-2:])} December 1944"
+            return {
+                "event_id": event_id,
+                "actor_id": actor_id,
+                "time": {
+                    "label": label,
+                    "start": start,
+                    "end": end,
+                    "precision": "range",
+                    "confidence": 0.5,
+                },
+                "waypoint_times": [start, middle, end],
+                "path": {"type": "LineString", "coordinates": coordinates},
+                "precision": "inferred",
+                "confidence": confidence,
+            }
+
+        evidence_keys = (
+            "event_id", "actor_id", "time", "waypoint_times", "path", "precision", "confidence"
+        )
         self.assertEqual(
             {
-                movement["id"]: (movement["event_id"], movement["actor_id"])
+                movement["id"]: {key: movement[key] for key in evidence_keys}
                 for movement in battle["movements"]
             },
             {
-                "movement_1_ss_panzer_16_20": ("event_front_1944_12_20", "actor_german_1_ss_panzer_corps"),
-                "movement_66_corps_16_20": ("event_front_1944_12_20", "actor_german_66_corps"),
-                "movement_66_corps_20_25": ("event_front_1944_12_25", "actor_german_66_corps"),
-                "movement_58_panzer_16_20": ("event_front_1944_12_20", "actor_german_58_panzer_corps"),
-                "movement_58_panzer_20_25": ("event_front_1944_12_25", "actor_german_58_panzer_corps"),
-                "movement_47_panzer_16_20": ("event_front_1944_12_20", "actor_german_47_panzer_corps"),
-                "movement_47_panzer_20_25": ("event_front_1944_12_25", "actor_german_47_panzer_corps"),
-                "movement_us_30_16_20": ("event_front_1944_12_20", "actor_us_30_infantry"),
-                "movement_us_7_armored_16_20": ("event_front_1944_12_20", "actor_us_7_armored"),
-                "movement_us_7_armored_20_25": ("event_front_1944_12_25", "actor_us_7_armored"),
+                "movement_1_ss_panzer_16_20": movement_evidence(
+                    "event_front_1944_12_20", "actor_german_1_ss_panzer_corps",
+                    "1944-12-16", "1944-12-18", "1944-12-20",
+                    [[6.45, 50.4], [6.15, 50.42], [5.85, 50.42]], 0.45,
+                ),
+                "movement_66_corps_16_20": movement_evidence(
+                    "event_front_1944_12_20", "actor_german_66_corps",
+                    "1944-12-16", "1944-12-18", "1944-12-20",
+                    [[6.45, 50.29], [6.25, 50.29], [6.05, 50.28]], 0.45,
+                ),
+                "movement_66_corps_20_25": movement_evidence(
+                    "event_front_1944_12_25", "actor_german_66_corps",
+                    "1944-12-20", "1944-12-22", "1944-12-25",
+                    [[6.05, 50.28], [5.95, 50.25], [5.85, 50.22]], 0.4,
+                ),
+                "movement_58_panzer_16_20": movement_evidence(
+                    "event_front_1944_12_20", "actor_german_58_panzer_corps",
+                    "1944-12-16", "1944-12-18", "1944-12-20",
+                    [[6.45, 50.19], [6.2, 50.18], [5.95, 50.18]], 0.4,
+                ),
+                "movement_58_panzer_20_25": movement_evidence(
+                    "event_front_1944_12_25", "actor_german_58_panzer_corps",
+                    "1944-12-20", "1944-12-22", "1944-12-25",
+                    [[5.95, 50.18], [5.7, 50.19], [5.45, 50.2]], 0.4,
+                ),
+                "movement_47_panzer_16_20": movement_evidence(
+                    "event_front_1944_12_20", "actor_german_47_panzer_corps",
+                    "1944-12-16", "1944-12-18", "1944-12-20",
+                    [[6.5, 50.1], [6.15, 50.05], [5.82, 50.02]], 0.45,
+                ),
+                "movement_47_panzer_20_25": movement_evidence(
+                    "event_front_1944_12_25", "actor_german_47_panzer_corps",
+                    "1944-12-20", "1944-12-22", "1944-12-25",
+                    [[5.82, 50.02], [5.55, 50.0], [5.25, 50.08]], 0.4,
+                ),
+                "movement_us_30_16_20": movement_evidence(
+                    "event_front_1944_12_20", "actor_us_30_infantry",
+                    "1944-12-16", "1944-12-18", "1944-12-20",
+                    [[6.1, 50.75], [6.08, 50.58], [6.03, 50.43]], 0.4,
+                ),
+                "movement_us_7_armored_16_20": movement_evidence(
+                    "event_front_1944_12_20", "actor_us_7_armored",
+                    "1944-12-16", "1944-12-18", "1944-12-20",
+                    [[5.8, 50.55], [6.0, 50.4], [6.13, 50.28]], 0.45,
+                ),
+                "movement_us_7_armored_20_25": movement_evidence(
+                    "event_front_1944_12_25", "actor_us_7_armored",
+                    "1944-12-20", "1944-12-22", "1944-12-25",
+                    [[6.13, 50.28], [5.9, 50.3], [5.7, 50.33]], 0.4,
+                ),
             },
         )
 
@@ -225,7 +286,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             [
                 (
                     snapshot["id"],
-                    snapshot["time"]["start"],
+                    snapshot["time"],
                     snapshot["source_ids"],
                     [line["id"] for line in snapshot["front_lines"]],
                     [line["geometry"]["coordinates"] for line in snapshot["front_lines"]],
@@ -235,21 +296,21 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             [
                 (
                     "snapshot_front_1944_12_16",
-                    "1944-12-16",
+                    {"label": "Front line, 16 December 1944", "start": "1944-12-16", "precision": "day", "confidence": 0.8},
                     ["source_wacht_am_rhein_map"],
                     ["front_main"],
                     [[[6.28, 50.82], [6.3, 50.65], [6.25, 50.55], [6.22, 50.43], [6.28, 50.3], [6.42, 50.2], [6.25, 50.08], [6.1, 49.95]]],
                 ),
                 (
                     "snapshot_front_1944_12_20",
-                    "1944-12-20",
+                    {"label": "Front line, 20 December 1944", "start": "1944-12-20", "precision": "day", "confidence": 0.8},
                     ["source_wacht_am_rhein_map"],
                     ["front_main"],
                     [[[6.28, 50.82], [6.3, 50.65], [6.24, 50.54], [6.05, 50.44], [5.82, 50.38], [5.65, 50.27], [5.65, 50.13], [5.8, 50.02], [6.0, 49.95]]],
                 ),
                 (
                     "snapshot_front_1944_12_25",
-                    "1944-12-25",
+                    {"label": "Front line, 25 December 1944", "start": "1944-12-25", "precision": "day", "confidence": 0.8},
                     ["source_wacht_am_rhein_map"],
                     ["front_main"],
                     [[[6.28, 50.82], [6.3, 50.65], [6.2, 50.53], [5.9, 50.4], [5.55, 50.28], [5.25, 50.22], [4.95, 50.12], [5.1, 49.98], [5.45, 49.9], [5.8, 49.9], [6.05, 49.95]]],
@@ -533,6 +594,15 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         mutations["event citation"]["historical_events"][1]["source_ids"] = [
             "source_wacht_am_rhein_map"
         ]
+        mutations["snapshot range semantics"] = deepcopy(battle)
+        mutations["snapshot range semantics"]["frontline_snapshots"][0]["time"].update({
+            "end": "1944-12-17",
+            "precision": "range",
+        })
+        mutations["movement evidence geometry"] = deepcopy(battle)
+        movement = mutations["movement evidence geometry"]["movements"][0]
+        movement["path"]["coordinates"] = [[0, 0], [1, 1], [2, 2]]
+        movement["waypoint_times"] = ["1944-12-16", "1944-12-18", "1944-12-20"]
         for label, mutated in mutations.items():
             with self.subTest(rejects=label):
                 with self.assertRaises(AssertionError):
