@@ -274,6 +274,31 @@ test("derived convergence spatially matches reversed source fronts deterministic
   assert.ok(reversed.front_lines[1].geometry.coordinates.every(([x]) => Math.abs(x - 10) < 1e-9));
 });
 
+test("derived convergence pairs three fronts monotonically across source permutations", () => {
+  const derivedLines = [0, 6, 10].map((x) => [[x, 0], [x, 2]]);
+  const sourceLines = [
+    line("source-5", [[5, 0], [5, 2]]),
+    line("source-7", [[7, 0], [7, 2]]),
+    line("source-11", [[11, 0], [11, 2]]),
+  ];
+  const converge = (front_lines) => frontlineGeometry.convergeDerivedFrontlines(
+    derivedLines,
+    { front_lines },
+    0.5,
+  );
+
+  const ordered = converge(sourceLines);
+  const permuted = converge([sourceLines[2], sourceLines[0], sourceLines[1]]);
+
+  assert.deepEqual(permuted, ordered);
+  assert.deepEqual(ordered.front_lines.map(({ id }) => id), [
+    "hybrid:source-5",
+    "hybrid:source-7",
+    "hybrid:source-11",
+  ]);
+  assert.deepEqual(ordered.front_lines.map(({ geometry }) => geometry.coordinates[0][0]), [2.5, 6.5, 10.5]);
+});
+
 test("derived convergence clamps weights without mutation and is deterministic", () => {
   const derivedLines = [[[0, 0], [0, 2]]];
   const sourceSnapshot = { front_lines: [line("main", [[2, 0], [2, 2]])] };

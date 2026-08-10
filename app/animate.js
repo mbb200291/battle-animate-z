@@ -1011,27 +1011,17 @@ export function renderBattle(battle, documentRef = document) {
   const events = new Map(battle.historical_events.map((event) => [event.id, event]));
   const compiled = compileTimeline(battle);
   const initialSample = sampleTimeline(compiled, 0);
-  const frontlinePositionActorIds = new Set(battle.movements.map(({ actor_id: actorId }) => actorId));
-  for (const event of battle.historical_events) {
-    const hasPointPlace = (event.place_ids || []).some((placeId) => {
-      const geometry = places.get(placeId)?.geometry;
-      return geometry?.type === "Point" &&
-        Array.isArray(geometry.coordinates) &&
-        Number.isFinite(geometry.coordinates[0]) &&
-        Number.isFinite(geometry.coordinates[1]);
-    });
-    if (!hasPointPlace) continue;
-    for (const actorId of [...(event.actor_ids || []), ...(event.target_actor_ids || [])]) {
-      frontlinePositionActorIds.add(actorId);
+  const frontlinePositions = (sampled) => {
+    const actorIds = new Set(compiled.explicitStartingPositionActorIds);
+    for (const track of compiled.tracks) {
+      if (sampled.historicalMs >= track.startMs) actorIds.add(track.actorId);
     }
-  }
-  const frontlinePositions = (positions) => new Map(
-    [...positions].filter(([actorId]) => frontlinePositionActorIds.has(actorId)),
-  );
+    return new Map([...sampled.actorPositions].filter(([actorId]) => actorIds.has(actorId)));
+  };
   const initialDerived = battle.schema_version === "0.4.0"
     && deriveFrontlineFallback({
       actors: battle.actors,
-      positions: frontlinePositions(initialSample.actorPositions),
+      positions: frontlinePositions(initialSample),
     });
   const derivedPotential = initialDerived
     && new Set(initialDerived.influences.map(({ sideId }) => sideId)).size >= 2;
@@ -1063,10 +1053,20 @@ export function renderBattle(battle, documentRef = document) {
   const allCoords = collectCoordinates(battle, initialSample.actorPositions.values());
   const frontlineBounds = paddedCoordinateBounds(allCoords);
   const mapHints = battle.animation_hints?.map || {};
+  const hintedLongitude = Array.isArray(mapHints.initial_center) && Number.isFinite(mapHints.initial_center[0])
+    ? mapHints.initial_center[0]
+    : null;
+  const battleLongitudeAnchor = hintedLongitude ?? (frontlineBounds
+    ? (frontlineBounds[0][0] + frontlineBounds[1][0]) / 2
+    : 0);
+  const anchoredCoordinate = ([longitude, latitude]) => [
+    nearestWorldLongitude(longitude, battleLongitudeAnchor),
+    latitude,
+  ];
   if (Array.isArray(mapHints.initial_center) && typeof mapHints.initial_zoom === "number") {
     map.setView([mapHints.initial_center[1], mapHints.initial_center[0]], mapHints.initial_zoom);
   } else if (allCoords.length) {
-    map.fitBounds(L.latLngBounds(allCoords.map(([lon, lat]) => [lat, lon])).pad(0.25));
+    map.fitBounds(L.latLngBounds(allCoords.map(anchoredCoordinate).map(([lon, lat]) => [lat, lon])).pad(0.25));
   } else {
     map.setView([0, 0], 2);
   }
@@ -1084,7 +1084,10 @@ export function renderBattle(battle, documentRef = document) {
   const defs = svgEl(documentRef, "defs");
   svg.append(defs);
 
-  const project = ([lon, lat]) => map.latLngToContainerPoint([lat, lon]);
+  const project = (coordinate) => {
+    const [longitude, latitude] = anchoredCoordinate(coordinate);
+    return map.latLngToContainerPoint([latitude, longitude]);
+  };
   const toPath = (coords) =>
     coords
       .map((coord, index) => {
@@ -1093,13 +1096,12 @@ export function renderBattle(battle, documentRef = document) {
       })
       .join(" ");
   const toFrontlinePath = (coords) => {
-    let previousLongitude;
+    let previousLongitude = battleLongitudeAnchor;
     return coords
       .map(([longitude, latitude], index) => {
-        while (previousLongitude !== undefined && longitude - previousLongitude > 180) longitude -= 360;
-        while (previousLongitude !== undefined && longitude - previousLongitude < -180) longitude += 360;
+        longitude = nearestWorldLongitude(longitude, previousLongitude);
         previousLongitude = longitude;
-        const point = project([longitude, latitude]);
+        const point = map.latLngToContainerPoint([latitude, longitude]);
         return `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`;
       })
       .join(" ");
@@ -1569,7 +1571,7 @@ export function renderBattle(battle, documentRef = document) {
   }
 
   function currentDerivedFrontlines(sampled) {
-    const positions = frontlinePositions(sampled.actorPositions);
+    const positions = frontlinePositions(sampled);
     const influences = selectFrontlineInfluences(battle.actors, positions);
     return deriveFrontlineFallback({
       actors: battle.actors,
@@ -2212,10 +2214,10 @@ export function renderBattle(battle, documentRef = document) {
       : { duration: flyDuration, animate: true };
     moveMapProgrammatically(owner, () => {
       if (uniquePoints.length === 1) {
-        const [lon, lat] = uniquePoints[0];
+        const [lon, lat] = anchoredCoordinate(uniquePoints[0]);
         map.flyTo([lat, lon], map.getZoom(), cameraOptions);
       } else {
-        const bounds = L.latLngBounds(uniquePoints.map(([lon, lat]) => [lat, lon])).pad(0.35);
+        const bounds = L.latLngBounds(uniquePoints.map(anchoredCoordinate).map(([lon, lat]) => [lat, lon])).pad(0.35);
         map.flyToBounds(bounds, { ...cameraOptions, maxZoom: map.getZoom() });
       }
     });
@@ -2585,11 +2587,11 @@ export function renderBattle(battle, documentRef = document) {
       if (plan.kind === "none") return false;
       moveMapProgrammatically(this, () => {
         if (plan.kind === "view") {
-          const [lon, lat] = plan.center;
+          const [lon, lat] = anchoredCoordinate(plan.center);
           if (reducedMotion) map.setView([lat, lon], plan.zoom, { animate: false });
           else map.flyTo([lat, lon], plan.zoom, { duration: 0.9, animate: true });
         } else {
-          const bounds = L.latLngBounds(plan.points.map(([lon, lat]) => [lat, lon])).pad(0.3);
+          const bounds = L.latLngBounds(plan.points.map(anchoredCoordinate).map(([lon, lat]) => [lat, lon])).pad(0.3);
           if (reducedMotion) map.fitBounds(bounds, { maxZoom: plan.maxZoom, animate: false });
           else map.flyToBounds(bounds, {
             maxZoom: plan.maxZoom,
@@ -2835,6 +2837,11 @@ function collectCoordinates(battle, positions = []) {
   }
   for (const position of positions) addGeometry({ coordinates: position });
   return points;
+}
+
+function nearestWorldLongitude(longitude, anchor) {
+  if (!Number.isFinite(longitude) || !Number.isFinite(anchor)) return longitude;
+  return anchor + ((longitude - anchor + 180) % 360 + 360) % 360 - 180;
 }
 
 function paddedCoordinateBounds(points) {

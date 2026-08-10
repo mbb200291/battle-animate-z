@@ -940,6 +940,36 @@ test("actor starting position uses the chronologically earliest track", () => {
   }));
 
   assert.deepEqual(sampleTimeline(timeline, 0).actorPositions.get("a"), [1, 1]);
+  assert.deepEqual([...timeline.explicitStartingPositionActorIds], ["a"]);
+});
+
+test("starting-position provenance uses only the selected actor event Point", () => {
+  const fixture = battle({
+    actors: [{ id: "unlocated-first" }, { id: "located-first" }],
+    places: [
+      { id: "global", geometry: { type: "Point", coordinates: [1, 2] } },
+      { id: "later", geometry: { type: "Point", coordinates: [9, 8] } },
+    ],
+    historical_events: [
+      event("first", iso(0), iso(1), {
+        actor_ids: ["unlocated-first"],
+        place_ids: ["missing"],
+      }),
+      event("located", iso(1), iso(2), {
+        actor_ids: ["located-first"],
+        place_ids: ["later"],
+      }),
+      event("too-late", iso(2), iso(3), {
+        actor_ids: ["unlocated-first"],
+        place_ids: ["later"],
+      }),
+    ],
+  });
+  const timeline = compileTimeline(fixture);
+
+  assert.deepEqual(sampleTimeline(timeline, 0).actorPositions.get("unlocated-first"), [1, 2]);
+  assert.deepEqual(sampleTimeline(timeline, 0).actorPositions.get("located-first"), [9, 8]);
+  assert.deepEqual([...timeline.explicitStartingPositionActorIds], ["located-first"]);
 });
 
 test("starting position falls back through event places then first place", () => {

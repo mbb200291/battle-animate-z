@@ -464,6 +464,7 @@ function startingPositions(battle, tracks) {
   const placesById = new Map(places.map((place) => [place?.id, place]));
   const firstPlace = places.map((place) => geometryPoint(place?.geometry)).find(Boolean) ?? null;
   const positions = new Map();
+  const explicitActorIds = new Set();
   for (const actor of array(battle?.actors)) {
     const actorId = actor?.id;
     const track = tracks
@@ -474,16 +475,23 @@ function startingPositions(battle, tracks) {
         return earliest;
       }, null);
     let point = track?.coordinates[0] ?? null;
+    if (point) explicitActorIds.add(actorId);
     if (!point) {
       const actorEvent = array(battle?.historical_events).find((item) =>
         array(item?.actor_ids).includes(actorId) || array(item?.target_actor_ids).includes(actorId));
+      const eventPoint = array(actorEvent?.place_ids)
+        .map((id) => placesById.get(id)?.geometry)
+        .filter((geometry) => geometry?.type === "Point")
+        .map(geometryPoint)
+        .find(Boolean) ?? null;
+      if (eventPoint) explicitActorIds.add(actorId);
       point = array(actorEvent?.place_ids)
         .map((id) => geometryPoint(placesById.get(id)?.geometry))
         .find(Boolean) ?? firstPlace;
     }
     if (point) positions.set(actorId, [...point]);
   }
-  return positions;
+  return { positions, explicitActorIds };
 }
 
 function classifyTimeIntervals(windows, historicalStartMs, historicalEndMs) {
@@ -583,6 +591,7 @@ export function compileTimeline(battle = {}) {
     compressedDurationMs,
     fallbackPresentationDurationMs,
   );
+  const initialPositions = startingPositions(battle, tracks);
   const compiled = {
     tracks,
     eventWindows,
@@ -594,7 +603,8 @@ export function compileTimeline(battle = {}) {
     timeWarp: timeWarp.segments,
     compressedGaps: timeWarp.compressedGaps,
     scale,
-    startingPositions: startingPositions(battle, tracks),
+    startingPositions: initialPositions.positions,
+    explicitStartingPositionActorIds: initialPositions.explicitActorIds,
     actorIds: array(battle?.actors).map((actor) => actor?.id),
     synthetic: allWindows.length === 0 || allWindows.every(({ synthetic }) => synthetic),
   };

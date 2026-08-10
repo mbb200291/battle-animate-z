@@ -264,40 +264,46 @@ function sampleLineCoordinates(coordinates) {
   return sampled.length > 0 && denseEvery(sampled, isPoint) ? { closed: closes, coordinates: sampled } : null;
 }
 
-function spatialLineAssignment(derivedSamples, sourceSamples, sourceLines) {
-  const candidates = [];
-  for (let derivedIndex = 0; derivedIndex < derivedSamples.length; derivedIndex += 1) {
-    const from = derivedSamples[derivedIndex];
-    if (!from) continue;
-    for (let sourceIndex = 0; sourceIndex < sourceSamples.length; sourceIndex += 1) {
-      const to = sourceSamples[sourceIndex];
-      if (!to || from.closed !== to.closed) continue;
-      const aligned = from.closed
-        ? alignRing(from.coordinates, to.coordinates)
-        : alignLine(from.coordinates, to.coordinates);
-      candidates.push({
-        cost: correspondenceCost(from.coordinates, aligned),
-        derivedIndex,
-        sourceId: sourceLines[sourceIndex]?.id ?? "",
-        sourceIndex,
-      });
-    }
-  }
-  // Front counts are intentionally small. A sorted greedy assignment keeps the
-  // closest topology-compatible pairs and uses IDs/indices for deterministic ties.
-  candidates.sort((left, right) =>
-    left.cost - right.cost ||
-    left.derivedIndex - right.derivedIndex ||
-    left.sourceId.localeCompare(right.sourceId) ||
-    left.sourceIndex - right.sourceIndex);
+function sampleCentroid(sample) {
+  const points = sample.closed ? sample.coordinates.slice(0, -1) : sample.coordinates;
+  const local = unwrap(points);
+  if (!local?.length) return null;
+  return local.reduce(
+    ([sumX, sumY], [x, y]) => [sumX + x / local.length, sumY + y / local.length],
+    [0, 0],
+  );
+}
+
+function nonCrossingLineAssignment(derivedSamples, sourceSamples, sourceLines) {
   const assignment = Array(derivedSamples.length);
-  const usedDerived = new Set();
   const usedSource = new Set();
-  for (const candidate of candidates) {
-    if (usedDerived.has(candidate.derivedIndex) || usedSource.has(candidate.sourceIndex)) continue;
-    assignment[candidate.derivedIndex] = candidate.sourceIndex;
-    usedDerived.add(candidate.derivedIndex);
-    usedSource.add(candidate.sourceIndex);
+  for (const closed of [false, true]) {
+    const derived = derivedSamples
+      .map((sample, index) => ({ centroid: sample && sample.closed === closed ? sampleCentroid(sample) : null, index }))
+      .filter(({ centroid }) => centroid);
+    const source = sourceSamples
+      .map((sample, index) => ({
+        centroid: sample && sample.closed === closed ? sampleCentroid(sample) : null,
+        id: sourceLines[index]?.id ?? "",
+        index,
+      }))
+      .filter(({ centroid }) => centroid);
+    const centroids = [...derived, ...source].map(({ centroid }) => centroid);
+    if (!centroids.length) continue;
+    const spanX = Math.max(...centroids.map(([x]) => x)) - Math.min(...centroids.map(([x]) => x));
+    const spanY = Math.max(...centroids.map(([, y]) => y)) - Math.min(...centroids.map(([, y]) => y));
+    const primary = spanX >= spanY ? 0 : 1;
+    const compare = (left, right) =>
+      left.centroid[primary] - right.centroid[primary] ||
+      left.centroid[1 - primary] - right.centroid[1 - primary] ||
+      (left.id ?? "").localeCompare(right.id ?? "") ||
+      left.index - right.index;
+    derived.sort(compare);
+    source.sort(compare);
+    for (let index = 0; index < Math.min(derived.length, source.length); index += 1) {
+      assignment[derived[index].index] = source[index].index;
+      usedSource.add(source[index].index);
+    }
   }
   const remainingSources = sourceLines
     .map((sourceLine, sourceIndex) => ({ sourceId: sourceLine?.id ?? "", sourceIndex }))
@@ -355,7 +361,7 @@ export function convergeDerivedFrontlines(derivedLines, sourceSnapshot, sourceWe
   }
 
   const derivedSamples = derivedLines.map(sampleLineCoordinates);
-  const sourceAssignment = spatialLineAssignment(derivedSamples, sourceSamples, sourceLines);
+  const sourceAssignment = nonCrossingLineAssignment(derivedSamples, sourceSamples, sourceLines);
   const lineTransitions = derivedLines.map((coordinates, index) => {
     const sourceIndex = sourceAssignment[index];
     const sourceLine = sourceLines[sourceIndex];

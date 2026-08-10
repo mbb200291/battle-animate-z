@@ -262,6 +262,7 @@ class FakeMap {
     this.removeCount = 0;
     this.offCount = 0;
     this.zoom = 8;
+    this.center = [0, 0];
     this.flyCalls = [];
     this.pointFlyCalls = [];
     this.fitBoundsCalls = [];
@@ -284,12 +285,21 @@ class FakeMap {
   removeLayer(layer) { this.layers.delete(layer); return this; }
   hasLayer(layer) { return this.layers.has(layer); }
   setView(center, zoom, options) {
+    this.center = [...center];
     this.zoom = zoom;
     this.setViewCalls.push({ center, zoom, options });
     return this;
   }
   fitBounds(bounds, options) {
     this.fitBoundsCalls.push({ bounds, options });
+    if (bounds.points.length) {
+      const latitudes = bounds.points.map(([latitude]) => latitude);
+      const longitudes = bounds.points.map(([, longitude]) => longitude);
+      this.center = [
+        (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
+        (Math.min(...longitudes) + Math.max(...longitudes)) / 2,
+      ];
+    }
     return this;
   }
   invalidateSize() { this.invalidateCount += 1; }
@@ -299,10 +309,13 @@ class FakeMap {
     const projectedLat = this.mercator
       ? Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) * 180 / Math.PI
       : lat;
+    const projectedCenterLat = this.mercator
+      ? Math.log(Math.tan(Math.PI / 4 + this.center[0] * Math.PI / 360)) * 180 / Math.PI
+      : this.center[0];
     const scale = 2 ** (this.zoom - 8);
     return {
-      x: lon * 100 * scale + 400 + this.projectionOffset,
-      y: 300 - projectedLat * 100 * scale,
+      x: (lon - this.center[1]) * 100 * scale + 400 + this.projectionOffset,
+      y: 300 - (projectedLat - projectedCenterLat) * 100 * scale,
     };
   }
   on(events, listener) {
@@ -492,6 +505,20 @@ function frontlineFallbackBattleFixture() {
   );
   battle.actors[0].strength = 10000;
   battle.outcome = { winner_side_ids: ["blue"], source_ids: [], summary: "Blue wins" };
+  return battle;
+}
+
+function antimeridianFrontlineBattleFixture() {
+  const battle = frontlineFallbackBattleFixture();
+  battle.actors = battle.actors.filter(({ id }) => id === "alpha" || id === "bravo");
+  battle.movements = battle.movements.filter(({ actor_id: actorId }) =>
+    actorId === "alpha" || actorId === "bravo");
+  for (const movement of battle.movements) {
+    const longitude = movement.actor_id === "alpha" ? 179.8 : -179.8;
+    movement.path.coordinates = [[longitude, 0], [longitude, 0]];
+  }
+  battle.places[0].geometry.coordinates = [179.8, 0];
+  battle.places[1].geometry.coordinates = [-179.8, 0];
   return battle;
 }
 
@@ -1183,7 +1210,7 @@ test("hybrid renderer spatially matches source fronts supplied in reverse order"
   for (const snapshot of battle.frontline_snapshots) snapshot.front_lines.reverse();
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
-  installLeaflet();
+  const maps = installLeaflet();
   const controller = renderBattle(battle, document);
   const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
 
@@ -1193,7 +1220,8 @@ test("hybrid renderer spatially matches source fronts supplied in reverse order"
     .filter((element) => /^hybrid:line:/.test(element.getAttribute("data-frontline-key") || ""))
     .map((line) => {
       const values = line.getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number);
-      const xs = values.filter((_, index) => index % 2 === 0).map((x) => (x - 400) / 100);
+      const xs = values.filter((_, index) => index % 2 === 0)
+        .map((x) => maps[0].center[1] + (x - 400) / 100);
       return xs.reduce((total, x) => total + x, 0) / xs.length;
     })
     .sort((left, right) => left - right);
@@ -1228,8 +1256,10 @@ test("derived grid stays data-bound through pan, zoom, and later availability", 
     return paths().map((path) => {
       const values = path.match(/-?\d+(?:\.\d+)?/g).map(Number);
       return Array.from({ length: values.length / 2 }, (_, index) => [
-        Number(((values[index * 2] - 400 - maps[0].projectionOffset) / (100 * scale)).toFixed(2)),
-        Number(((300 - values[index * 2 + 1]) / (100 * scale)).toFixed(2)),
+        Number((maps[0].center[1]
+          + (values[index * 2] - 400 - maps[0].projectionOffset) / (100 * scale)).toFixed(2)),
+        Number((maps[0].center[0]
+          + (300 - values[index * 2 + 1]) / (100 * scale)).toFixed(2)),
       ]);
     });
   };
@@ -1282,7 +1312,7 @@ test("hybrid uses exact source anchors and a U-shaped source correction between 
   const pathNumbers = () => lines()[0].getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number);
 
   assert.equal(controller._frontlineStatus.sourceWeight, 1);
-  assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 400), true);
+  assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 300), true);
   assert.deepEqual([pathNumbers()[1], pathNumbers().at(-1)], [350, 250]);
   controller.seek(250);
   assert.equal(controller._frontlineStatus.sourceWeight, 0.25);
@@ -1295,7 +1325,7 @@ test("hybrid uses exact source anchors and a U-shaped source correction between 
     "HYBRID · 推導 100% / 史料校正 0%");
   controller.seek(1000);
   assert.equal(controller._frontlineStatus.sourceWeight, 1);
-  assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 500), true);
+  assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 400), true);
   assert.deepEqual([pathNumbers()[1], pathNumbers().at(-1)], [350, 250]);
 });
 
@@ -1848,6 +1878,24 @@ test("derived frontlines exclude actors positioned only by the global place fall
     element.getAttribute("data-front-actor-id") === "bravo"), false);
 });
 
+test("a later located event does not legitimize an earlier global fallback position", () => {
+  const battle = frontlineFallbackBattleFixture();
+  battle.movements = battle.movements.filter(({ actor_id: actorId }) => actorId !== "bravo");
+  battle.historical_events[0].place_ids = [];
+  battle.historical_events[1].target_actor_ids = ["bravo"];
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  controller.seek(500);
+
+  assert.equal(controller.compiled.explicitStartingPositionActorIds.has("bravo"), false);
+  assert.equal(controller.frontsEnabled, false);
+  assert.equal(descendants(svg).some((element) => element.classList.contains("front-line")), false);
+});
+
 test("an actor with an event Point location remains eligible for a derived frontline", () => {
   const battle = frontlineFallbackBattleFixture();
   battle.movements = battle.movements.filter(({ actor_id: actorId }) => actorId !== "bravo");
@@ -1859,6 +1907,7 @@ test("an actor with an event Point location remains eligible for a derived front
 
   controller.seek(500);
 
+  assert.equal(controller.compiled.explicitStartingPositionActorIds.has("bravo"), true);
   assert.equal(controller.frontsEnabled, true);
   assert.ok(descendants(svg).find((element) =>
     element.classList.contains("front-line") && element.classList.contains("is-derived")));
@@ -1974,16 +2023,7 @@ test("fallback influence centers reproject while their screen radius stays fixed
 });
 
 test("antimeridian battle data uses narrow circular bounds for a derived frontline", () => {
-  const battle = frontlineFallbackBattleFixture();
-  battle.actors = battle.actors.filter(({ id }) => id === "alpha" || id === "bravo");
-  battle.movements = battle.movements.filter(({ actor_id: actorId }) =>
-    actorId === "alpha" || actorId === "bravo");
-  for (const movement of battle.movements) {
-    const longitude = movement.actor_id === "alpha" ? 179.8 : -179.8;
-    movement.path.coordinates = [[longitude, 0], [longitude, 0]];
-  }
-  battle.places[0].geometry.coordinates = [179.8, 0];
-  battle.places[1].geometry.coordinates = [-179.8, 0];
+  const battle = antimeridianFrontlineBattleFixture();
   battle.animation_hints.map.initial_center = [180, 0];
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
@@ -1992,17 +2032,56 @@ test("antimeridian battle data uses narrow circular bounds for a derived frontli
   const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
   const derivedLine = () => descendants(svg).find((element) =>
     element.classList.contains("front-line") && element.classList.contains("is-derived"));
+  const geographicLine = () => {
+    const scale = 2 ** (maps[0].zoom - 8);
+    const values = derivedLine().getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number);
+    return values.filter((_, index) => index % 2 === 0).map((x) => Number((
+      maps[0].center[1] + (x - 400 - maps[0].projectionOffset) / (100 * scale)
+    ).toFixed(3)));
+  };
 
   assert.equal(controller._frontlineStatus.kind, "derived");
   assert.ok(derivedLine());
+  assert.deepEqual(maps[0].setViewCalls[0].center, [0, 180]);
+  const influenceXs = descendants(svg)
+    .filter((element) => element.classList.contains("front-influence"))
+    .map((element) => Number(element.getAttribute("cx")));
+  assert.ok(Math.max(...influenceXs) - Math.min(...influenceXs) < 100);
+  assert.ok(influenceXs.every((x) => x > 300 && x < 500));
+  const lineXs = derivedLine().getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number)
+    .filter((_, index) => index % 2 === 0);
+  assert.ok(lineXs.every((x) => x > 300 && x < 500));
   const before = derivedLine().getAttribute("d");
+  const beforeGeography = geographicLine();
   maps[0].projectionOffset = 25;
   maps[0].fire("move");
   assert.notEqual(derivedLine().getAttribute("d"), before);
+  assert.deepEqual(geographicLine(), beforeGeography);
   maps[0].zoom = 9;
   maps[0].fire("zoomend");
   assert.equal(controller._frontlineStatus.kind, "derived");
   assert.ok(derivedLine());
+  assert.deepEqual(geographicLine(), beforeGeography);
+});
+
+test("antimeridian fitBounds stays on the circular battle world copy", () => {
+  const battle = antimeridianFrontlineBattleFixture();
+  delete battle.animation_hints.map.initial_center;
+  delete battle.animation_hints.map.initial_zoom;
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+
+  const fitLongitudes = maps[0].fitBoundsCalls[0].bounds.points.map(([, longitude]) => longitude);
+  assert.ok(Math.max(...fitLongitudes) - Math.min(...fitLongitudes) < 1);
+  assert.ok(Math.abs(maps[0].center[1] - 180) < 0.01);
+  const influenceXs = descendants(svg)
+    .filter((element) => element.classList.contains("front-influence"))
+    .map((element) => Number(element.getAttribute("cx")));
+  assert.ok(Math.max(...influenceXs) - Math.min(...influenceXs) < 100);
+  assert.ok(influenceXs.every((x) => x > 300 && x < 500));
 });
 
 test("fallback pairing becomes more conservative when zoomed in", () => {
@@ -2065,7 +2144,7 @@ test("frontline geometry updates keyed nodes and inferred snapshots show confide
   const beforePath = firstLine.getAttribute("d");
 
   controller.seek(500);
-  assert.match(firstLine.getAttribute("d"), /^M 450\.0 350\.0 /);
+  assert.match(firstLine.getAttribute("d"), /^M 350\.0 350\.0 /);
 
   controller.seek(1000);
 
