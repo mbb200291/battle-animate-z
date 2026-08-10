@@ -948,6 +948,7 @@ export function resetBattleUI(documentRef = document) {
   const frontlineStatus = documentRef.getElementById("frontline-status");
   if (frontlineStatus) frontlineStatus.hidden = true;
   setText(documentRef, "frontline-summary", "");
+  setText(documentRef, "frontline-details", "");
   documentRef.getElementById("frontline-sources")?.replaceChildren();
   const focus = documentRef.getElementById("focus-event-button");
   if (focus) focus.disabled = true;
@@ -1366,7 +1367,12 @@ export function renderBattle(battle, documentRef = document) {
     return crossed;
   }
 
-  function renderSourceFrontlines(sampled, mode = "reproject", previousSampled = null) {
+  function renderSourceFrontlines(
+    sampled,
+    mode = "reproject",
+    previousSampled = null,
+    { renderLines = true } = {},
+  ) {
     const state = sampled.frontline;
     const active = new Set();
     controller._frontlineStatus = null;
@@ -1378,15 +1384,19 @@ export function renderBattle(battle, documentRef = document) {
       const crossedGeometries = mode === "playback" && !reducedMotion
         ? crossedIncompatibleKeyframes(previousSampled, sampled)
         : [];
-      const crossing = crossedGeometries.length > 0;
+      const crossing = crossedGeometries.some((geometry) =>
+        geometry.enteringAreas.length || geometry.exitingAreas.length ||
+        (renderLines && (geometry.enteringLines.length || geometry.exitingLines.length)));
       const enclosureIds = enclosure ? new Set(enclosure.ids) : new Set();
       const enclosureOld = new Map();
       const enclosureOldAreas = new Map((enclosure
         ? interpolateFrontlineSnapshots(enclosure.before, enclosure.before, 0).interpolatedAreas
         : []).map((area) => [area.id, area]));
-      for (const id of enclosureIds) {
-        const target = frontlineEls.get(`line:${id}`);
-        if (target?.parentNode) enclosureOld.set(id, target.cloneNode(true));
+      if (renderLines) {
+        for (const id of enclosureIds) {
+          const target = frontlineEls.get(`line:${id}`);
+          if (target?.parentNode) enclosureOld.set(id, target.cloneNode(true));
+        }
       }
       const geometry = frontlineGeometry(state);
       if (enclosure) {
@@ -1400,16 +1410,16 @@ export function renderBattle(battle, documentRef = document) {
       }
       const targetKeys = new Set([
         ...geometry.interpolatedAreas.map((area) => `area:${area.id}`),
-        ...geometry.interpolatedLines.map((line) => `line:${line.id}`),
+        ...(renderLines ? geometry.interpolatedLines.map((line) => `line:${line.id}`) : []),
       ]);
       const entering = [];
       if (crossing || enclosure) clearFrontTransitions(controller);
       if (crossing) {
         const sameKeyCrossfades = new Set();
-        for (const [prefix, exitField, enterField] of [
-          ["line", "exitingLines", "enteringLines"],
-          ["area", "exitingAreas", "enteringAreas"],
-        ]) {
+        const topologyKinds = renderLines
+          ? [["line", "exitingLines", "enteringLines"], ["area", "exitingAreas", "enteringAreas"]]
+          : [["area", "exitingAreas", "enteringAreas"]];
+        for (const [prefix, exitField, enterField] of topologyKinds) {
           const exitingIds = new Set(crossedGeometries.flatMap((item) =>
             item[exitField].map(({ id }) => id).filter((id) => prefix !== "line" || !enclosureIds.has(id))));
           const incomingIds = new Set(crossedGeometries.flatMap((item) =>
@@ -1426,8 +1436,8 @@ export function renderBattle(battle, documentRef = document) {
             element.parentNode.append(exiting);
             transientFrontlineEls.add(exiting);
             entering.push(element);
-          } else if (!targetKeys.has(key)
-              && (element.classList.contains("front-line") || element.classList.contains("front-control-area"))) {
+          } else if (!targetKeys.has(key) && (element.classList.contains("front-control-area") ||
+              (renderLines && element.classList.contains("front-line")))) {
             element.classList.add("is-front-exiting");
           }
         }
@@ -1448,7 +1458,7 @@ export function renderBattle(battle, documentRef = document) {
           path.classList.add("is-enclosure-area-entering");
         }
       }
-      for (const line of geometry.interpolatedLines) {
+      for (const line of renderLines ? geometry.interpolatedLines : []) {
         const key = `line:${line.id}`;
         active.add(key);
         const existed = frontlineEls.has(key);
@@ -1470,7 +1480,16 @@ export function renderBattle(battle, documentRef = document) {
       }
       if (enclosure) {
         let reveals = 0;
-        for (const id of enclosure.ids) {
+        let delayedAreas = 0;
+        for (const area of geometry.interpolatedAreas) {
+          const oldArea = enclosureOldAreas.get(area.id);
+          if (!oldArea || oldArea.sideId !== area.sideId ||
+            oldArea.geometry?.type !== area.geometry?.type ||
+            JSON.stringify(oldArea.geometry?.coordinates) !== JSON.stringify(area.geometry?.coordinates)) {
+            delayedAreas += 1;
+          }
+        }
+        for (const id of renderLines ? enclosure.ids : []) {
           const target = frontlineEls.get(`line:${id}`);
           const old = enclosureOld.get(id);
           if (!target?.parentNode || !old) continue;
@@ -1495,7 +1514,7 @@ export function renderBattle(battle, documentRef = document) {
           target.setAttribute("mask", `url(#${maskId})`);
           reveals += 1;
         }
-        if (reveals) {
+        if (reveals || (!renderLines && delayedAreas)) {
           const timer = scheduleTimeout(() => {
             if (controller._frontTransitionTimers.get("enclosure") !== timer) return;
             controller._frontTransitionTimers.delete("enclosure");
@@ -1517,7 +1536,8 @@ export function renderBattle(battle, documentRef = document) {
       }
     }
     for (const [key, element] of frontlineEls) {
-      if (!active.has(key) && !element.classList.contains("is-front-exiting")) {
+      const managed = renderLines || element.classList.contains("front-control-area");
+      if (managed && !active.has(key) && !element.classList.contains("is-front-exiting")) {
         element.remove();
         frontlineEls.delete(key);
       }
@@ -1569,17 +1589,6 @@ export function renderBattle(battle, documentRef = document) {
     });
   }
 
-  function renderHybridAreas(geometry, active) {
-    for (const area of geometry.interpolatedAreas) {
-      const key = `area:${area.id}`;
-      active.add(key);
-      const path = keyedFrontlineElement(key, controlAreaLayer, "path", "front-control-area");
-      path.setAttribute("d", `${toFrontlinePath(area.geometry.coordinates[0])} Z`);
-      path.setAttribute("fill", sides.get(area.sideId)?.color || colorOf(area.sideId));
-      path.classList.toggle("is-inferred", area.precision === "inferred");
-    }
-  }
-
   function renderHybridLine(key, coordinates, active, className = "front-line is-derived") {
     active.add(key);
     const path = keyedFrontlineElement(key, frontLineLayer, "path", className);
@@ -1588,13 +1597,80 @@ export function renderBattle(battle, documentRef = document) {
     return path;
   }
 
-  function renderHybridCrossfade(transition, index, active, mode, activeTimerKeys) {
+  function renderOneSidedHybridTransition(transition, index, active, mode, activeTimerKeys) {
     const derivedCoordinates = transition.derivedLine;
     const sourceCoordinates = transition.front_line?.geometry?.coordinates;
     const useSource = controller._frontlineStatus.sourceWeight >= 0.5;
+    const coordinates = useSource ? sourceCoordinates : derivedCoordinates;
+    const selection = `single:${coordinates ? (useSource ? "source" : "derived") : "hidden"}`;
     const timerKey = `hybrid:${index}`;
-    const selection = useSource ? "source" : "derived";
-    if (mode !== "playback" || reducedMotion || !derivedCoordinates || !sourceCoordinates) {
+    const lineKey = `hybrid:line:${index}`;
+    activeTimerKeys.add(timerKey);
+
+    if (mode !== "playback" || reducedMotion) {
+      if (coordinates) renderHybridLine(lineKey, coordinates, active);
+      controller._hybridCrossfadeSelections.set(timerKey, selection);
+      return;
+    }
+
+    const prior = controller._frontTransitionTimers.get(timerKey);
+    const priorSelection = controller._hybridCrossfadeSelections.get(timerKey);
+    if (prior === undefined && priorSelection === selection) {
+      if (coordinates) renderHybridLine(lineKey, coordinates, active);
+      return;
+    }
+    if (prior !== undefined && priorSelection === selection) {
+      const path = frontlineEls.get(lineKey);
+      if (path) {
+        active.add(lineKey);
+        if (coordinates) path.setAttribute("d", toFrontlinePath(coordinates));
+      }
+      return;
+    }
+    if (prior !== undefined) cancelTimeout(prior);
+
+    let path = frontlineEls.get(lineKey);
+    if (!path && !coordinates && sourceCoordinates) {
+      const source = frontlineEls.get(`line:${transition.front_line.id}`);
+      if (source?.parentNode) {
+        path = source.cloneNode(true);
+        path.setAttribute("class", "front-line is-derived");
+        path.setAttribute("data-frontline-key", lineKey);
+        source.parentNode.append(path);
+        frontlineEls.set(lineKey, path);
+      }
+    }
+    if (coordinates) path = renderHybridLine(lineKey, coordinates, active);
+    else if (path) active.add(lineKey);
+    path?.classList.remove("is-front-entering", "is-front-exiting");
+    path?.classList.add(coordinates ? "is-front-entering" : "is-front-exiting");
+    controller._hybridCrossfadeSelections.set(timerKey, selection);
+    if (!path) return;
+
+    const timer = scheduleTimeout(() => {
+      if (controller._frontTransitionTimers.get(timerKey) !== timer) return;
+      controller._frontTransitionTimers.delete(timerKey);
+      if (coordinates) {
+        path.classList.remove("is-front-entering");
+      } else {
+        path.remove();
+        if (frontlineEls.get(lineKey) === path) frontlineEls.delete(lineKey);
+      }
+    }, FRONT_CROSSFADE_MS);
+    controller._frontTransitionTimers.set(timerKey, timer);
+  }
+
+  function renderHybridCrossfade(transition, index, active, mode, activeTimerKeys) {
+    const derivedCoordinates = transition.derivedLine;
+    const sourceCoordinates = transition.front_line?.geometry?.coordinates;
+    if (!derivedCoordinates || !sourceCoordinates) {
+      renderOneSidedHybridTransition(transition, index, active, mode, activeTimerKeys);
+      return;
+    }
+    const useSource = controller._frontlineStatus.sourceWeight >= 0.5;
+    const timerKey = `hybrid:${index}`;
+    const selection = `pair:${useSource ? "source" : "derived"}`;
+    if (mode !== "playback" || reducedMotion) {
       const coordinates = useSource ? sourceCoordinates : derivedCoordinates;
       if (coordinates) renderHybridLine(`hybrid:line:${index}`, coordinates, active);
       return;
@@ -1630,8 +1706,8 @@ export function renderBattle(battle, documentRef = document) {
     const derived = currentDerivedFrontlines(sampled);
     const active = new Set();
     const activeTimerKeys = new Set();
-    renderInfluences(derived, active);
     if (!state) {
+      renderInfluences(derived, active);
       renderDerivedLines(derived, active);
       controller._frontlineStatus = derived.available
         ? { kind: "derived" }
@@ -1647,7 +1723,10 @@ export function renderBattle(battle, documentRef = document) {
         controller._frontlineStatus = { kind: "source-fallback", state: sourceState };
         return;
       } else {
-        renderHybridAreas(geometry, active);
+        renderSourceFrontlines(sampled, mode, previousSampled, { renderLines: false });
+        const displayedSourceState = controller._frontlineStatus.state;
+        geometry.interpolatedAreas.forEach((area) => active.add(`area:${area.id}`));
+        renderInfluences(derived, active);
         const sourceWeight = state.before === state.after
           ? 1
           : (Math.abs(state.progress - 0.5) * 2) ** 2;
@@ -1658,11 +1737,10 @@ export function renderBattle(battle, documentRef = document) {
         );
         controller._frontlineStatus = {
           kind: sourceWeight === 1 ? "source" : "hybrid",
-          state,
+          state: displayedSourceState,
           sourceWeight,
         };
         if (sourceWeight === 1) {
-          clearFrontTransitions(controller);
           for (const line of converged.front_lines) {
             renderHybridLine(
               `line:${line.id}`,
@@ -1734,9 +1812,11 @@ export function renderBattle(battle, documentRef = document) {
   function updateFrontlineInspector(owner) {
     const section = $("frontline-status");
     const summary = $("frontline-summary");
+    const details = $("frontline-details");
     const sourceList = $("frontline-sources");
     if (!section || !summary || !sourceList) return;
     sourceList.replaceChildren();
+    if (details) details.textContent = "";
     const status = owner.frontsEnabled ? owner._frontlineStatus : null;
     section.hidden = !status;
     if (!status) {
@@ -1775,15 +1855,16 @@ export function renderBattle(battle, documentRef = document) {
     } else if (status.kind === "source-fallback") {
       summary.textContent = "單位資料不足，使用史料補間";
     } else {
-      const parts = [
-        "SOURCE-BACKED",
+      summary.textContent = "SOURCE-BACKED";
+    }
+    if (details) {
+      details.textContent = [
         time,
         precision,
         `${Math.round(confidence * 100)}% confidence`,
         ...linkedEvents.map((title) => `Event: ${title}`),
         transitionLabel,
-      ].filter(Boolean);
-      summary.textContent = parts.join(" · ");
+      ].filter(Boolean).join(" · ");
     }
 
     const sourceIds = [...new Set(snapshots.flatMap((snapshot) => snapshot.source_ids || []))];
@@ -2388,7 +2469,7 @@ export function renderBattle(battle, documentRef = document) {
       const button = $("fronts-button");
       if (button) {
         button.disabled = !frontlinesAvailable;
-        button.setAttribute("aria-pressed", String(mode !== "off"));
+        button.setAttribute("aria-pressed", String(this.frontsEnabled));
         button.textContent = `Fronts: ${mode}`;
       }
       if (this.sampledState) renderFrontlines(this.sampledState, "seek", this.sampledState);
