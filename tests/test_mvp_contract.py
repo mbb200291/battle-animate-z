@@ -707,15 +707,25 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout), {"errors": [], "warnings": []})
 
         sides = {side["id"] for side in sample["sides"]}
-        land_kinds = {"army", "corps", "division", "brigade", "regiment", "unit"}
+        LAND_KINDS = {"army", "corps", "division", "brigade", "regiment"}
+        actors_by_id = {actor["id"]: actor for actor in sample["actors"]}
         for side_id in sides:
             self.assertGreaterEqual(
                 sum(
-                    actor["side_id"] == side_id and actor["kind"] in land_kinds
+                    actor["side_id"] == side_id and actor["kind"] in LAND_KINDS
                     for actor in sample["actors"]
                 ),
                 2,
             )
+
+        ineligible_sample = deepcopy(sample)
+        for index, actor in enumerate(ineligible_sample["actors"]):
+            actor["kind"] = "unit" if index % 2 == 0 else "ship"
+        self.assertFalse({
+            actor["id"]
+            for actor in ineligible_sample["actors"]
+            if actor["kind"] in LAND_KINDS
+        })
 
         movements_by_actor = {}
         for movement in sample["movements"]:
@@ -726,6 +736,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             movements_by_actor.setdefault(movement["actor_id"], []).append(movement)
         recurring_actor_ids = []
         for actor_id, movements in movements_by_actor.items():
+            if actors_by_id[actor_id]["kind"] not in LAND_KINDS:
+                continue
             ordered = sorted(movements, key=lambda movement: movement["time"]["start"])
             if len(ordered) < 2 or len({movement["event_id"] for movement in ordered}) < 2:
                 continue
