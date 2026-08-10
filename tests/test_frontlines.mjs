@@ -94,6 +94,14 @@ test("resampleLine locally unwraps dateline crossings", () => {
   assert.equal(Math.abs(midpoint), 180);
 });
 
+test("resampleLine rejects sparse coordinate arrays without throwing", () => {
+  const coordinates = Array(3);
+  coordinates[0] = [0, 0];
+  coordinates[2] = [2, 0];
+  assert.doesNotThrow(() => resampleLine(coordinates, 3));
+  assert.deepEqual(resampleLine(coordinates, 3), []);
+});
+
 test("resampleRing returns the requested unique samples plus a fresh closing point", () => {
   const input = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]];
   const sampled = resampleRing(input, 4);
@@ -262,17 +270,73 @@ test("incompatible topology or line counts use the stable crossfade shape", () =
   assert.deepEqual(topology, {
     derivedLines: [open],
     front_lines: topologySource.front_lines,
+    lineTransitions: [{
+      transition: "crossfade",
+      derivedLine: open,
+      front_line: topologySource.front_lines[0],
+    }],
     transition: "crossfade",
     sourceWeight: 0.5,
   });
+  assert.notEqual(topology.lineTransitions[0].derivedLine, open);
+  assert.notEqual(topology.lineTransitions[0].derivedLine[0], open[0]);
 
   const countSource = { front_lines: [line("one", open), line("two", [[2, 0], [2, 2]])] };
   assert.deepEqual(frontlineGeometry.convergeDerivedFrontlines([open], countSource, 0.5), {
     derivedLines: [open],
     front_lines: countSource.front_lines,
+    lineTransitions: [],
     transition: "crossfade",
     sourceWeight: 0.5,
   });
+});
+
+test("weight zero preserves exact derived geometry across a topology mismatch", () => {
+  const open = [[0, 0], [0, 2]];
+  const source = { front_lines: [line("main", [[2, 0], [4, 0], [4, 2], [2, 0]])] };
+  const result = frontlineGeometry.convergeDerivedFrontlines([open], source, 0);
+
+  assert.equal(result.transition, "derived");
+  assert.deepEqual(result.front_lines[0], {
+    id: "hybrid:main",
+    geometry: { type: "LineString", coordinates: open },
+    precision: "inferred",
+    confidence: 0.35,
+  });
+  assert.notEqual(result.front_lines[0].geometry.coordinates, open);
+});
+
+test("equal-count pairs isolate compatible morphs from incompatible crossfades", () => {
+  const derivedLines = [
+    [[0, 0], [0, 2]],
+    [[10, 0], [10, 2]],
+  ];
+  const sourceLines = [
+    line("main", [[2, 0], [2, 2]]),
+    line("pocket", [[12, 0], [14, 0], [14, 2], [12, 0]]),
+  ];
+  const before = JSON.stringify([derivedLines, sourceLines]);
+
+  const result = frontlineGeometry.convergeDerivedFrontlines(
+    derivedLines,
+    { front_lines: sourceLines },
+    0.5,
+  );
+
+  assert.equal(result.transition, "mixed");
+  assert.equal(result.sourceWeight, 0.5);
+  assert.equal(result.lineTransitions.length, 2);
+  assert.equal(result.lineTransitions[0].transition, "hybrid");
+  assert.equal(result.lineTransitions[0].front_line, result.front_lines[0]);
+  assert.ok(result.front_lines[0].geometry.coordinates.every(([x]) => Math.abs(x - 1) < 1e-9));
+  assert.deepEqual(result.lineTransitions[1], {
+    transition: "crossfade",
+    derivedLine: derivedLines[1],
+    front_line: sourceLines[1],
+  });
+  assert.notEqual(result.lineTransitions[1].derivedLine, derivedLines[1]);
+  assert.equal(result.front_lines[1], sourceLines[1]);
+  assert.equal(JSON.stringify([derivedLines, sourceLines]), before);
 });
 
 test("malformed or missing convergence inputs safely crossfade", () => {
@@ -281,19 +345,25 @@ test("malformed or missing convergence inputs safely crossfade", () => {
   assert.deepEqual(frontlineGeometry.convergeDerivedFrontlines(null, null, 0.5), {
     derivedLines: null,
     front_lines: [],
+    lineTransitions: [],
     transition: "crossfade",
     sourceWeight: 0.5,
   });
   assert.deepEqual(frontlineGeometry.convergeDerivedFrontlines([[[0, 0], [1, 0]]], malformedSource, 0.5), {
     derivedLines: [[[0, 0], [1, 0]]],
     front_lines: malformedSource.front_lines,
+    lineTransitions: [{
+      transition: "crossfade",
+      derivedLine: [[0, 0], [1, 0]],
+      front_line: malformedSource.front_lines[0],
+    }],
     transition: "crossfade",
     sourceWeight: 0.5,
   });
   assert.doesNotThrow(() => frontlineGeometry.convergeDerivedFrontlines([[[0, 0], null]], {}, 1));
 });
 
-function assertSafeCrossfade(derivedLines, sourceLines, sourceWeight) {
+function assertSafeCrossfade(derivedLines, sourceLines, sourceWeight, pairable = false) {
   let result;
   assert.doesNotThrow(() => {
     result = frontlineGeometry.convergeDerivedFrontlines(
@@ -305,6 +375,11 @@ function assertSafeCrossfade(derivedLines, sourceLines, sourceWeight) {
   assert.deepEqual(result, {
     derivedLines,
     front_lines: sourceLines,
+    lineTransitions: pairable ? [{
+      transition: "crossfade",
+      derivedLine: derivedLines[0],
+      front_line: sourceLines[0],
+    }] : [],
     transition: "crossfade",
     sourceWeight,
   });
@@ -322,19 +397,55 @@ test("sparse coordinate arrays safely crossfade on either side", () => {
   const sparseDerived = Array(3);
   sparseDerived[0] = [0, 0];
   sparseDerived[2] = [0, 2];
-  assertSafeCrossfade([sparseDerived], [line("main", [[2, 0], [2, 2]])], 0.5);
+  assertSafeCrossfade([sparseDerived], [line("main", [[2, 0], [2, 2]])], 0.5, true);
 
   const sparseSource = Array(3);
   sparseSource[0] = [2, 0];
   sparseSource[2] = [2, 2];
-  assertSafeCrossfade([[[0, 0], [0, 2]]], [line("main", sparseSource)], 0.5);
+  assertSafeCrossfade([[[0, 0], [0, 2]]], [line("main", sparseSource)], 0.5, true);
 });
 
 test("degenerate closed coordinates safely crossfade, including at source weight one", () => {
   const ring = [[0, 0], [2, 0], [2, 2], [0, 0]];
   const degenerate = [[1, 1], [1, 1], [1, 1], [1, 1]];
-  assertSafeCrossfade([degenerate], [line("main", ring)], 0.5);
-  assertSafeCrossfade([ring], [line("main", degenerate)], 1);
+  assertSafeCrossfade([degenerate], [line("main", ring)], 0.5, true);
+  assertSafeCrossfade([ring], [line("main", degenerate)], 1, true);
+});
+
+test("out-of-range longitude safely crossfades without unwrapping", () => {
+  assertSafeCrossfade(
+    [[[1e20, 0], [0, 2]]],
+    [line("main", [[2, 0], [2, 2]])],
+    0.5,
+    true,
+  );
+});
+
+test("extreme latitudes safely crossfade without non-finite samples", () => {
+  assertSafeCrossfade(
+    [[[0, 1e308], [0, -1e308]]],
+    [line("main", [[2, 0], [2, 2]])],
+    0.5,
+    true,
+  );
+});
+
+test("non-array source front lines normalize to an iterable empty crossfade", () => {
+  const derivedLines = [[[0, 0], [0, 2]]];
+  const result = frontlineGeometry.convergeDerivedFrontlines(
+    derivedLines,
+    { front_lines: "malformed" },
+    0.5,
+  );
+
+  assert.deepEqual(result, {
+    derivedLines,
+    front_lines: [],
+    lineTransitions: [],
+    transition: "crossfade",
+    sourceWeight: 0.5,
+  });
+  assert.ok(Array.isArray(result.front_lines));
 });
 
 test("compatible closed fronts morph with exact closure and ring sample count", () => {

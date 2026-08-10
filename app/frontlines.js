@@ -7,14 +7,28 @@ const PRECISION_RANK = new Map([
   ["unknown", 4],
 ]);
 
+function denseEvery(array, predicate) {
+  if (!Array.isArray(array)) return false;
+  for (let index = 0; index < array.length; index += 1) {
+    if (!Object.hasOwn(array, index) || !predicate(array[index], index)) return false;
+  }
+  return true;
+}
+
 const isPoint = (point) =>
   Array.isArray(point) &&
   point.length >= 2 &&
+  Object.hasOwn(point, 0) &&
+  Object.hasOwn(point, 1) &&
   Number.isFinite(point[0]) &&
-  Number.isFinite(point[1]);
+  point[0] >= -180 &&
+  point[0] <= 180 &&
+  Number.isFinite(point[1]) &&
+  point[1] >= -90 &&
+  point[1] <= 90;
 
 function unwrap(points) {
-  if (!Array.isArray(points) || !points.every(isPoint)) return null;
+  if (!denseEvery(points, isPoint)) return null;
   const result = points.map(([longitude, latitude]) => [longitude, latitude]);
   for (let index = 1; index < result.length; index += 1) {
     while (result[index][0] - result[index - 1][0] > 180) result[index][0] -= 360;
@@ -221,22 +235,20 @@ function deltaLongitude(left, right) {
 }
 
 export function isClosedFrontline(coordinates) {
-  if (!Array.isArray(coordinates) || coordinates.length < 4 || !coordinates.every(isPoint)) return false;
+  if (!Array.isArray(coordinates) || coordinates.length < 4 || !denseEvery(coordinates, isPoint)) return false;
   const first = coordinates[0];
   const last = coordinates.at(-1);
   return Math.abs(deltaLongitude(first[0], last[0])) <= 1e-6 &&
     Math.abs(first[1] - last[1]) <= 1e-6;
 }
 
-function usableLineCoordinates(coordinates) {
-  if (!Array.isArray(coordinates) || coordinates.length < 2 ||
-    !Array.from({ length: coordinates.length }, (_, index) => isPoint(coordinates[index])).every(Boolean)) {
-    return false;
-  }
+function sampleLineCoordinates(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2 || !denseEvery(coordinates, isPoint)) return null;
   const closes = Math.abs(deltaLongitude(coordinates[0][0], coordinates.at(-1)[0])) <= 1e-6 &&
     Math.abs(coordinates[0][1] - coordinates.at(-1)[1]) <= 1e-6;
-  if (closes && !isClosedFrontline(coordinates)) return false;
-  return (closes ? resampleRing(coordinates) : resampleLine(coordinates)).length > 0;
+  if (closes && !isClosedFrontline(coordinates)) return null;
+  const sampled = closes ? resampleRing(coordinates) : resampleLine(coordinates);
+  return sampled.length > 0 && denseEvery(sampled, isPoint) ? { closed: closes, coordinates: sampled } : null;
 }
 
 const hybridLine = (sourceLine, coordinates) => ({
@@ -246,59 +258,76 @@ const hybridLine = (sourceLine, coordinates) => ({
   confidence: 0.35,
 });
 
+const copyLine = (coordinates) => Array.isArray(coordinates)
+  ? coordinates.map((point) => Array.isArray(point) ? [...point] : point)
+  : coordinates;
+
+const globalCrossfade = (derivedLines, sourceLines, sourceWeight) => ({
+  derivedLines,
+  front_lines: sourceLines,
+  lineTransitions: [],
+  transition: "crossfade",
+  sourceWeight,
+});
+
 export function convergeDerivedFrontlines(derivedLines, sourceSnapshot, sourceWeight) {
   const numericWeight = typeof sourceWeight === "number" && !Number.isNaN(sourceWeight) ? sourceWeight : 0;
   const weight = Math.max(0, Math.min(1, numericWeight));
-  const sourceLines = sourceSnapshot?.front_lines ?? [];
-  const usableSource = Array.isArray(sourceLines) && sourceLines.length > 0 && Array.from(
-    { length: sourceLines.length },
-    (_, index) => {
-      const line = sourceLines[index];
-      return typeof line?.id === "string" &&
-        line.geometry?.type === "LineString" &&
-        usableLineCoordinates(line.geometry.coordinates);
-    },
-  ).every(Boolean);
+  const sourceLines = Array.isArray(sourceSnapshot?.front_lines) ? sourceSnapshot.front_lines : [];
+  const sourceCollectionUsable = sourceLines.length > 0 && denseEvery(sourceLines, () => true);
+  const sourceSamples = sourceCollectionUsable ? sourceLines.map((line) =>
+    typeof line?.id === "string" && line.geometry?.type === "LineString"
+      ? sampleLineCoordinates(line.geometry.coordinates)
+      : null) : [];
+  const usableSource = sourceCollectionUsable && sourceSamples.every(Boolean);
 
   if (weight === 1 && usableSource) {
     return { front_lines: sourceLines, transition: "source", sourceWeight: 1 };
   }
 
-  const compatible = usableSource &&
-    Array.isArray(derivedLines) &&
-    derivedLines.length === sourceLines.length &&
-    derivedLines.length > 0 &&
-    Array.from({ length: derivedLines.length }, (_, index) => {
-      const coordinates = derivedLines[index];
-      return usableLineCoordinates(coordinates) &&
-        isClosedFrontline(coordinates) === isClosedFrontline(sourceLines[index].geometry.coordinates);
-    }).every(Boolean);
-  if (!compatible) {
-    return { derivedLines, front_lines: sourceLines, transition: "crossfade", sourceWeight: weight };
+  if (!Array.isArray(derivedLines) ||
+    derivedLines.length !== sourceLines.length ||
+    derivedLines.length === 0 ||
+    !denseEvery(derivedLines, () => true) ||
+    !sourceCollectionUsable) {
+    return globalCrossfade(derivedLines, sourceLines, weight);
   }
 
-  if (weight === 0) {
-    return {
-      front_lines: derivedLines.map((coordinates, index) =>
-        hybridLine(sourceLines[index], coordinates.map((point) => [...point]))),
-      transition: "derived",
-      sourceWeight: 0,
-    };
-  }
-
-  const frontLines = derivedLines.map((coordinates, index) => {
+  const derivedSamples = derivedLines.map(sampleLineCoordinates);
+  const lineTransitions = derivedLines.map((coordinates, index) => {
     const sourceLine = sourceLines[index];
-    const closed = isClosedFrontline(coordinates);
-    const from = closed ? resampleRing(coordinates) : resampleLine(coordinates);
-    const sampledSource = closed
-      ? resampleRing(sourceLine.geometry.coordinates)
-      : resampleLine(sourceLine.geometry.coordinates);
-    const to = closed ? alignRing(from, sampledSource) : alignLine(from, sampledSource);
-    const morphed = from.map((point, pointIndex) => interpolatePoint(point, to[pointIndex], weight));
-    if (closed) morphed[morphed.length - 1] = [...morphed[0]];
-    return hybridLine(sourceLine, morphed);
+    const from = derivedSamples[index];
+    const to = sourceSamples[index];
+    if (from && to && (weight === 0 || from.closed === to.closed)) {
+      let morphed;
+      if (weight === 0) {
+        morphed = copyLine(coordinates);
+      } else {
+        const aligned = from.closed
+          ? alignRing(from.coordinates, to.coordinates)
+          : alignLine(from.coordinates, to.coordinates);
+        morphed = from.coordinates.map((point, pointIndex) =>
+          interpolatePoint(point, aligned[pointIndex], weight));
+        if (from.closed) morphed[morphed.length - 1] = [...morphed[0]];
+      }
+      if (denseEvery(morphed, isPoint)) {
+        return { transition: "hybrid", front_line: hybridLine(sourceLine, morphed) };
+      }
+    }
+    return { transition: "crossfade", derivedLine: copyLine(coordinates), front_line: sourceLine };
   });
-  return { front_lines: frontLines, transition: "hybrid", sourceWeight: weight };
+  const hybridCount = lineTransitions.filter(({ transition }) => transition === "hybrid").length;
+  const transition = hybridCount === lineTransitions.length
+    ? (weight === 0 ? "derived" : "hybrid")
+    : hybridCount === 0 ? "crossfade" : "mixed";
+  const result = {
+    front_lines: lineTransitions.map(({ front_line: frontLine }) => frontLine),
+    lineTransitions,
+    transition,
+    sourceWeight: weight,
+  };
+  if (transition === "crossfade") result.derivedLines = derivedLines;
+  return result;
 }
 
 export function enclosureLineIds(beforeSnapshot, afterSnapshot) {
