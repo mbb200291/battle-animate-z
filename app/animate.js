@@ -1011,13 +1011,9 @@ export function renderBattle(battle, documentRef = document) {
   const events = new Map(battle.historical_events.map((event) => [event.id, event]));
   const compiled = compileTimeline(battle);
   const initialSample = sampleTimeline(compiled, 0);
-  const frontlinePositions = (sampled) => {
-    const actorIds = new Set(compiled.explicitStartingPositionActorIds);
-    for (const track of compiled.tracks) {
-      if (sampled.historicalMs >= track.startMs) actorIds.add(track.actorId);
-    }
-    return new Map([...sampled.actorPositions].filter(([actorId]) => actorIds.has(actorId)));
-  };
+  const frontlinePositions = ({ actorPositions }) => new Map(
+    [...actorPositions].filter(([actorId]) => compiled.explicitStartingPositionActorIds.has(actorId)),
+  );
   const initialDerived = battle.schema_version === "0.4.0"
     && deriveFrontlineFallback({
       actors: battle.actors,

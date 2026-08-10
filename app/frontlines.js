@@ -288,6 +288,11 @@ function nonCrossingLineAssignment(derivedSamples, sourceSamples, sourceLines) {
         index,
       }))
       .filter(({ centroid }) => centroid);
+    const anchor = derived[0]?.centroid[0] ?? source
+      .toSorted((left, right) => left.id.localeCompare(right.id) || left.index - right.index)[0]?.centroid[0];
+    for (const entry of [...derived, ...source]) {
+      entry.centroid[0] = localLongitude(entry.centroid[0], anchor);
+    }
     const centroids = [...derived, ...source].map(({ centroid }) => centroid);
     if (!centroids.length) continue;
     const spanX = Math.max(...centroids.map(([x]) => x)) - Math.min(...centroids.map(([x]) => x));

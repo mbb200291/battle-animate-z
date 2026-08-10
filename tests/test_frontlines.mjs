@@ -299,6 +299,42 @@ test("derived convergence pairs three fronts monotonically across source permuta
   assert.deepEqual(ordered.front_lines.map(({ geometry }) => geometry.coordinates[0][0]), [2.5, 6.5, 10.5]);
 });
 
+test("derived convergence matches dateline fronts on one shared world copy", () => {
+  const derivedLines = [
+    [[179, 0], [-179, 0]],
+    [[170, 0], [170, 2]],
+  ];
+  const dateline = line("dateline", [[-179, 0], [179, 0]]);
+  const mainland = line("mainland", [[171, 0], [171, 2]]);
+  const converge = (front_lines) => frontlineGeometry.convergeDerivedFrontlines(
+    derivedLines,
+    { front_lines },
+    0.5,
+  );
+  const centerLongitude = (coordinates) => {
+    let previous = coordinates[0][0];
+    let total = previous;
+    for (const [longitude] of coordinates.slice(1)) {
+      const delta = ((longitude - previous + 180) % 360 + 360) % 360 - 180;
+      previous += delta;
+      total += previous;
+    }
+    return total / coordinates.length;
+  };
+
+  const ordered = converge([mainland, dateline]);
+  const reversed = converge([dateline, mainland]);
+
+  assert.deepEqual(reversed, ordered);
+  assert.deepEqual(ordered.front_lines.map(({ id }) => id), [
+    "hybrid:dateline",
+    "hybrid:mainland",
+  ]);
+  const centers = ordered.front_lines.map(({ geometry }) => centerLongitude(geometry.coordinates));
+  assert.ok(Math.abs(centers[0] - 180) < 2);
+  assert.ok(Math.abs(centers[1] - 170.5) < 0.1);
+});
+
 test("derived convergence clamps weights without mutation and is deterministic", () => {
   const derivedLines = [[[0, 0], [0, 2]]];
   const sourceSnapshot = { front_lines: [line("main", [[2, 0], [2, 2]])] };
