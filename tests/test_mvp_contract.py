@@ -133,6 +133,130 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
     def _valid_v030_document(self):
         return valid_v030_document()
 
+    def _assert_bulge_reference_provenance(self, battle):
+        self.assertEqual(
+            {
+                actor["id"]: (actor["name"], actor["side_id"], actor["kind"])
+                for actor in battle["actors"]
+            },
+            {
+                "actor_us_30_infantry": ("U.S. 30th Infantry Division", "side_allied", "division"),
+                "actor_us_2_infantry": ("U.S. 2nd Infantry Division", "side_allied", "division"),
+                "actor_us_99_infantry": ("U.S. 99th Infantry Division", "side_allied", "division"),
+                "actor_us_106_infantry": ("U.S. 106th Infantry Division", "side_allied", "division"),
+                "actor_us_7_armored": ("U.S. 7th Armored Division", "side_allied", "division"),
+                "actor_us_28_infantry": ("U.S. 28th Infantry Division", "side_allied", "division"),
+                "actor_german_1_ss_panzer_corps": ("German I SS Panzer Corps", "side_german", "corps"),
+                "actor_german_66_corps": ("German LXVI Corps", "side_german", "corps"),
+                "actor_german_58_panzer_corps": ("German LVIII Panzer Corps", "side_german", "corps"),
+                "actor_german_47_panzer_corps": ("German XLVII Panzer Corps", "side_german", "corps"),
+            },
+        )
+        sources = {source["id"]: source for source in battle["sources"]}
+        self.assertEqual(
+            {
+                source_id: (
+                    source["title"], source["url"], source["retrieved_at"], source["license"]
+                )
+                for source_id, source in sources.items()
+            },
+            {
+                "source_us_army_ardennes": (
+                    "The Ardennes: Battle of the Bulge",
+                    "https://history.army.mil/Publications/Publications-Catalog/The-Ardennes-Battle-Of-The-Bulge/",
+                    "2026-08-11",
+                    "Public domain as a U.S. Army Center of Military History publication",
+                ),
+                "source_wacht_am_rhein_map": (
+                    "File:Wacht am Rhein map (original).svg",
+                    "https://commons.wikimedia.org/wiki/File:Wacht_am_Rhein_map_(original).svg",
+                    "2026-08-11",
+                    "CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)",
+                ),
+                "source_us_army_ardennes_alsace": (
+                    "Ardennes-Alsace",
+                    "https://history.army.mil/portals/143/Images/Publications/catalog/72-26.pdf",
+                    "2026-08-11",
+                    "Public domain as a U.S. Army Center of Military History publication",
+                ),
+            },
+        )
+        self.assertRegex(sources["source_wacht_am_rhein_map"]["note"], r"(?i)not georeferenced|projection")
+        self.assertIn("not serialized", sources["source_wacht_am_rhein_map"]["note"])
+        self.assertIn("not the example's exact representative coordinates", sources["source_us_army_ardennes_alsace"]["note"])
+
+        reviewed_event_sources = [
+            "source_us_army_ardennes",
+            "source_us_army_ardennes_alsace",
+            "source_wacht_am_rhein_map",
+        ]
+        events = {event["id"]: event for event in battle["historical_events"]}
+        self.assertEqual(
+            {event_id: event["source_ids"] for event_id, event in events.items()},
+            {
+                "event_front_1944_12_16": reviewed_event_sources,
+                "event_front_1944_12_20": reviewed_event_sources,
+                "event_front_1944_12_25": reviewed_event_sources,
+            },
+        )
+        self.assertNotIn("target_actor_ids", events["event_front_1944_12_16"])
+        self.assertEqual(battle["outcome"]["source_ids"], ["source_us_army_ardennes"])
+
+        self.assertEqual(
+            {
+                movement["id"]: (movement["event_id"], movement["actor_id"])
+                for movement in battle["movements"]
+            },
+            {
+                "movement_1_ss_panzer_16_20": ("event_front_1944_12_20", "actor_german_1_ss_panzer_corps"),
+                "movement_66_corps_16_20": ("event_front_1944_12_20", "actor_german_66_corps"),
+                "movement_66_corps_20_25": ("event_front_1944_12_25", "actor_german_66_corps"),
+                "movement_58_panzer_16_20": ("event_front_1944_12_20", "actor_german_58_panzer_corps"),
+                "movement_58_panzer_20_25": ("event_front_1944_12_25", "actor_german_58_panzer_corps"),
+                "movement_47_panzer_16_20": ("event_front_1944_12_20", "actor_german_47_panzer_corps"),
+                "movement_47_panzer_20_25": ("event_front_1944_12_25", "actor_german_47_panzer_corps"),
+                "movement_us_30_16_20": ("event_front_1944_12_20", "actor_us_30_infantry"),
+                "movement_us_7_armored_16_20": ("event_front_1944_12_20", "actor_us_7_armored"),
+                "movement_us_7_armored_20_25": ("event_front_1944_12_25", "actor_us_7_armored"),
+            },
+        )
+
+        self.assertEqual(
+            [
+                (
+                    snapshot["id"],
+                    snapshot["time"]["start"],
+                    snapshot["source_ids"],
+                    [line["id"] for line in snapshot["front_lines"]],
+                    [line["geometry"]["coordinates"] for line in snapshot["front_lines"]],
+                )
+                for snapshot in battle["frontline_snapshots"]
+            ],
+            [
+                (
+                    "snapshot_front_1944_12_16",
+                    "1944-12-16",
+                    ["source_wacht_am_rhein_map"],
+                    ["front_main"],
+                    [[[6.28, 50.82], [6.3, 50.65], [6.25, 50.55], [6.22, 50.43], [6.28, 50.3], [6.42, 50.2], [6.25, 50.08], [6.1, 49.95]]],
+                ),
+                (
+                    "snapshot_front_1944_12_20",
+                    "1944-12-20",
+                    ["source_wacht_am_rhein_map"],
+                    ["front_main"],
+                    [[[6.28, 50.82], [6.3, 50.65], [6.24, 50.54], [6.05, 50.44], [5.82, 50.38], [5.65, 50.27], [5.65, 50.13], [5.8, 50.02], [6.0, 49.95]]],
+                ),
+                (
+                    "snapshot_front_1944_12_25",
+                    "1944-12-25",
+                    ["source_wacht_am_rhein_map"],
+                    ["front_main"],
+                    [[[6.28, 50.82], [6.3, 50.65], [6.2, 50.53], [5.9, 50.4], [5.55, 50.28], [5.25, 50.22], [4.95, 50.12], [5.1, 49.98], [5.45, 49.9], [5.8, 49.9], [6.05, 49.95]]],
+                ),
+            ],
+        )
+
     def test_waterloo_example_validates_with_cli(self):
         result = subprocess.run(
             [sys.executable, "-m", "battle_animation.validator", str(EXAMPLE)],
@@ -268,6 +392,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
     def test_battle_of_the_bulge_hybrid_frontline_example(self):
         self.assertTrue(BULGE_EXAMPLE.is_file())
         battle = json.loads(BULGE_EXAMPLE.read_text(encoding="utf-8"))
+        self._assert_bulge_reference_provenance(battle)
 
         self.assertEqual(battle["schema_version"], "0.4.0")
         self.assertEqual(
@@ -375,6 +500,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
               available: between.derived.available,
               sideIds: [...new Set(between.derived.influences.map(({ sideId }) => sideId))],
               contactLineCount: between.derived.contactLines.length,
+              betweenDerivedLines: between.derived.contactLines,
               sourceAtAnchor: anchor.sampled.frontline.after.front_lines,
               convergedAtAnchor: converged.front_lines,
             }));
@@ -394,6 +520,23 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         self.assertEqual(len(browser["sideIds"]), 2)
         self.assertGreaterEqual(browser["contactLineCount"], 1)
         self.assertEqual(browser["convergedAtAnchor"], browser["sourceAtAnchor"])
+
+        mutations = {}
+        mutations["runtime-derived snapshot geometry"] = deepcopy(battle)
+        mutations["runtime-derived snapshot geometry"]["frontline_snapshots"][-1]["front_lines"][0]["geometry"]["coordinates"] = browser["betweenDerivedLines"][0]
+        mutations["source URL"] = deepcopy(battle)
+        mutations["source URL"]["sources"][0]["url"] = "https://example.invalid/replacement"
+        mutations["actor kinds"] = deepcopy(battle)
+        for actor in mutations["actor kinds"]["actors"]:
+            actor["kind"] = "army"
+        mutations["event citation"] = deepcopy(battle)
+        mutations["event citation"]["historical_events"][1]["source_ids"] = [
+            "source_wacht_am_rhein_map"
+        ]
+        for label, mutated in mutations.items():
+            with self.subTest(rejects=label):
+                with self.assertRaises(AssertionError):
+                    self._assert_bulge_reference_provenance(mutated)
 
     def test_modern_border_asset_is_geometry_only_natural_earth(self):
         path = ROOT / "app" / "data" / "modern-borders-50m.geojson"

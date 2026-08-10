@@ -172,7 +172,6 @@
       },
       "description": "The German winter counteroffensive opened against the Allied front in the Ardennes.",
       "actor_ids": ["actor_german_1_ss_panzer_corps", "actor_german_66_corps", "actor_german_58_panzer_corps", "actor_german_47_panzer_corps"],
-      "target_actor_ids": ["actor_us_30_infantry", "actor_us_7_armored"],
       "place_ids": ["place_malmedy", "place_st_vith", "place_bastogne"],
       "precision": "approximate",
       "confidence": 0.9,
