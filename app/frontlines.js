@@ -250,11 +250,209 @@ export function enclosureLineIds(beforeSnapshot, afterSnapshot) {
 const distance = (left, right) =>
   Math.hypot(deltaLongitude(left[0], right[0]), right[1] - left[1]);
 
-function midpoint(left, right) {
+function nearestDistance(point, influences) {
+  let nearest = Infinity;
+  for (const { position } of influences) nearest = Math.min(nearest, distance(point, position));
+  return nearest;
+}
+
+function unwrapInfluences(influences) {
+  const anchor = influences[0]?.position[0] ?? 0;
+  return influences.map((influence) => {
+    let longitude = influence.position[0];
+    while (longitude - anchor > 180) longitude -= 360;
+    while (longitude - anchor < -180) longitude += 360;
+    return { ...influence, position: [longitude, influence.position[1]] };
+  });
+}
+
+function canonicalBounds([minX, minY, maxX, maxY]) {
+  const shift = Math.floor(((minX + maxX) / 2 + 180) / 360) * 360;
+  return [minX - shift, minY, maxX - shift, maxY];
+}
+
+function normalizeBounds(bounds, influences) {
+  if (Array.isArray(bounds) && bounds.length === 2 && bounds.every(isPoint)) {
+    let right = bounds[1][0];
+    while (right - bounds[0][0] > 180) right -= 360;
+    while (right - bounds[0][0] < -180) right += 360;
+    const normalized = [
+      Math.min(bounds[0][0], right),
+      Math.min(bounds[0][1], bounds[1][1]),
+      Math.max(bounds[0][0], right),
+      Math.max(bounds[0][1], bounds[1][1]),
+    ];
+    if (normalized[2] > normalized[0] && normalized[3] > normalized[1]) {
+      return canonicalBounds(normalized);
+    }
+  }
+
+  const longitudes = influences.map(({ position }) => position[0]);
+  const latitudes = influences.map(({ position }) => position[1]);
+  const minX = Math.min(...longitudes);
+  const maxX = Math.max(...longitudes);
+  const minY = Math.min(...latitudes);
+  const maxY = Math.max(...latitudes);
+  const padding = Math.max(maxX - minX, maxY - minY, 1) * 0.2;
+  return canonicalBounds([minX - padding, minY - padding, maxX + padding, maxY + padding]);
+}
+
+function zeroCrossing(left, right, leftValue, rightValue) {
+  const progress = leftValue === rightValue ? 0.5 : leftValue / (leftValue - rightValue);
   return [
-    wrapLongitude(left[0] + deltaLongitude(left[0], right[0]) / 2),
-    (left[1] + right[1]) / 2,
+    left[0] + (right[0] - left[0]) * progress,
+    left[1] + (right[1] - left[1]) * progress,
   ];
+}
+
+function marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance) {
+  const segments = [];
+  const addSegment = (left, right) => {
+    if (Number.isFinite(maxPairDistance)) {
+      const midpoint = [
+        (left.point[0] + right.point[0]) / 2,
+        (left.point[1] + right.point[1]) / 2,
+      ];
+      const contactDistance = nearestDistance(midpoint, sideA) + nearestDistance(midpoint, sideB);
+      if (contactDistance > maxPairDistance + 1e-9) return;
+    }
+    segments.push({ id: segments.length, left, right });
+  };
+
+  for (let y = 0; y < ys.length - 1; y += 1) {
+    for (let x = 0; x < xs.length - 1; x += 1) {
+      const points = [
+        [xs[x], ys[y]], [xs[x + 1], ys[y]],
+        [xs[x + 1], ys[y + 1]], [xs[x], ys[y + 1]],
+      ];
+      const values = [field[y][x], field[y][x + 1], field[y + 1][x + 1], field[y + 1][x]];
+      const edges = [
+        { key: `h:${x}:${y}`, from: 0, to: 1 },
+        { key: `v:${x + 1}:${y}`, from: 1, to: 2 },
+        { key: `h:${x}:${y + 1}`, from: 3, to: 2 },
+        { key: `v:${x}:${y}`, from: 0, to: 3 },
+      ];
+      const crossings = edges.flatMap((edge, edgeIndex) => {
+        const fromValue = values[edge.from];
+        const toValue = values[edge.to];
+        if ((fromValue < 0) === (toValue < 0)) return [];
+        return [{
+          edgeIndex,
+          key: edge.key,
+          point: zeroCrossing(points[edge.from], points[edge.to], fromValue, toValue),
+        }];
+      });
+      if (crossings.length === 2) {
+        addSegment(crossings[0], crossings[1]);
+      } else if (crossings.length === 4) {
+        const byEdge = new Map(crossings.map((crossing) => [crossing.edgeIndex, crossing]));
+        const centerPositive = values.reduce((total, value) => total + value, 0) >= 0;
+        const pairs = centerPositive === (values[0] >= 0)
+          ? [[0, 1], [2, 3]]
+          : [[0, 3], [1, 2]];
+        for (const [left, right] of pairs) addSegment(byEdge.get(left), byEdge.get(right));
+      }
+    }
+  }
+  return segments;
+}
+
+function stitchSegments(segments) {
+  const adjacency = new Map();
+  const points = new Map();
+  const add = (endpoint, segment) => {
+    points.set(endpoint.key, endpoint.point);
+    if (!adjacency.has(endpoint.key)) adjacency.set(endpoint.key, []);
+    adjacency.get(endpoint.key).push(segment);
+  };
+  for (const segment of segments) {
+    add(segment.left, segment);
+    add(segment.right, segment);
+  }
+  for (const connected of adjacency.values()) {
+    connected.sort((left, right) => left.id - right.id);
+  }
+
+  const unused = new Set(segments.map(({ id }) => id));
+  const lines = [];
+  const unusedAt = (key) => (adjacency.get(key) ?? []).filter(({ id }) => unused.has(id));
+  while (unused.size) {
+    const endpoints = [...adjacency.keys()]
+      .filter((key) => unusedAt(key).length === 1)
+      .sort();
+    const firstUnused = segments.find(({ id }) => unused.has(id));
+    const start = endpoints[0] ?? [firstUnused.left.key, firstUnused.right.key].sort()[0];
+    const keys = [start];
+    let previous = null;
+    let current = start;
+
+    while (true) {
+      const candidates = unusedAt(current);
+      if (!candidates.length) break;
+      candidates.sort((left, right) => {
+        if (previous === null || candidates.length === 1) return left.id - right.id;
+        const other = (segment) => segment.left.key === current ? segment.right.key : segment.left.key;
+        const incoming = [
+          points.get(current)[0] - points.get(previous)[0],
+          points.get(current)[1] - points.get(previous)[1],
+        ];
+        const turn = (segment) => {
+          const target = points.get(other(segment));
+          const outgoing = [target[0] - points.get(current)[0], target[1] - points.get(current)[1]];
+          return Math.abs(Math.atan2(
+            incoming[0] * outgoing[1] - incoming[1] * outgoing[0],
+            incoming[0] * outgoing[0] + incoming[1] * outgoing[1],
+          ));
+        };
+        return turn(left) - turn(right) || other(left).localeCompare(other(right));
+      });
+      const segment = candidates[0];
+      unused.delete(segment.id);
+      const next = segment.left.key === current ? segment.right.key : segment.left.key;
+      keys.push(next);
+      previous = current;
+      current = next;
+      if (current === start) break;
+    }
+    if (keys.length >= 2) lines.push(keys.map((key) => [...points.get(key)]));
+  }
+  return lines;
+}
+
+function smoothLine(line) {
+  if (line.length < 4) return line.map(([x, y]) => [wrapLongitude(x), y]);
+  const closed = line[0][0] === line.at(-1)[0] && line[0][1] === line.at(-1)[1];
+  const source = closed ? line.slice(0, -1) : line;
+  const smoothed = closed ? [] : [[...source[0]]];
+  const limit = closed ? source.length : source.length - 1;
+  for (let index = 0; index < limit; index += 1) {
+    const left = source[index];
+    const right = source[(index + 1) % source.length];
+    smoothed.push(
+      [left[0] * 0.75 + right[0] * 0.25, left[1] * 0.75 + right[1] * 0.25],
+      [left[0] * 0.25 + right[0] * 0.75, left[1] * 0.25 + right[1] * 0.75],
+    );
+  }
+  if (!closed) smoothed.push([...source.at(-1)]);
+  const wrapped = smoothed.map(([x, y]) => [wrapLongitude(x), y]);
+  if (closed) wrapped.push([...wrapped[0]]);
+  return wrapped;
+}
+
+function deriveContactLines(influences, bounds, gridSize, maxPairDistance) {
+  const unwrapped = unwrapInfluences(influences);
+  const sideIds = [...new Set(unwrapped.map(({ sideId }) => sideId))].sort();
+  const sideA = unwrapped.filter(({ sideId }) => sideId === sideIds[0]);
+  const sideB = unwrapped.filter(({ sideId }) => sideId === sideIds[1]);
+  const [minX, minY, maxX, maxY] = normalizeBounds(bounds, unwrapped);
+  const size = Number.isInteger(gridSize) && gridSize >= 2 ? Math.min(gridSize, 256) : 32;
+  const xs = Array.from({ length: size }, (_, index) => minX + (maxX - minX) * index / (size - 1));
+  const ys = Array.from({ length: size }, (_, index) => minY + (maxY - minY) * index / (size - 1));
+  const field = ys.map((y) => xs.map((x) =>
+    nearestDistance([x, y], sideA) - nearestDistance([x, y], sideB)));
+  return stitchSegments(marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance))
+    .map(smoothLine)
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
 }
 
 export function selectFrontlineInfluences(actors = [], positions = new Map()) {
@@ -276,13 +474,19 @@ export function selectFrontlineInfluences(actors = [], positions = new Map()) {
     .sort((left, right) => left.actorId < right.actorId ? -1 : left.actorId > right.actorId ? 1 : 0);
 }
 
-export function deriveFrontlineFallback({ actors = [], positions = new Map(), maxPairDistance = Infinity } = {}) {
+export function deriveFrontlineFallback({
+  actors = [],
+  positions = new Map(),
+  bounds,
+  gridSize = 32,
+  maxPairDistance = Infinity,
+} = {}) {
   const influences = selectFrontlineInfluences(actors, positions);
   const sideCount = new Set(influences.map(({ sideId }) => sideId)).size;
   if (sideCount !== 2) {
     return {
       available: false,
-      reason: "requires-two-sides",
+      reason: "no-contact-line",
       influences,
       pairs: [],
       contactLine: null,
@@ -293,72 +497,16 @@ export function deriveFrontlineFallback({ actors = [], positions = new Map(), ma
     };
   }
 
-  const nearest = new Map();
-  for (const influence of influences) {
-    let best = null;
-    let bestDistance = Infinity;
-    for (const candidate of influences) {
-      if (candidate.sideId === influence.sideId) continue;
-      const candidateDistance = distance(influence.position, candidate.position);
-      if (candidateDistance < bestDistance ||
-          (candidateDistance === bestDistance && candidate.actorId < best?.actorId)) {
-        best = candidate;
-        bestDistance = candidateDistance;
-      }
-    }
-    if (best) nearest.set(influence.actorId, { influence: best, distance: bestDistance });
-  }
-
-  const pairs = [];
-  const seen = new Set();
-  for (const influence of influences) {
-    const match = nearest.get(influence.actorId);
-    if (!match || match.distance > maxPairDistance ||
-        nearest.get(match.influence.actorId)?.influence.actorId !== influence.actorId) continue;
-    const key = [influence.actorId, match.influence.actorId].sort().join("\0");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    pairs.push({
-      actorIds: [influence.actorId, match.influence.actorId],
-      positions: [influence.position, match.influence.position],
-      midpoint: midpoint(influence.position, match.influence.position),
-      distance: match.distance,
-    });
-  }
-
-  let contactLine = null;
-  if (pairs.length > 1) {
-    const anchor = pairs[0].midpoint[0];
-    const midpoints = pairs.map((pair) => {
-      const point = [...pair.midpoint];
-      while (point[0] - anchor > 180) point[0] -= 360;
-      while (point[0] - anchor < -180) point[0] += 360;
-      return point;
-    });
-    const longitudeSpan = Math.max(...midpoints.map(([value]) => value)) - Math.min(...midpoints.map(([value]) => value));
-    const latitudeSpan = Math.max(...midpoints.map(([, value]) => value)) - Math.min(...midpoints.map(([, value]) => value));
-    const axis = longitudeSpan >= latitudeSpan ? 0 : 1;
-    contactLine = midpoints.sort((left, right) => left[axis] - right[axis]).map((point) => [...point]);
-  } else if (pairs.length === 1 && pairs[0].distance > 0) {
-    const pair = pairs[0];
-    const [left, right] = pair.positions;
-    const dx = deltaLongitude(left[0], right[0]);
-    const dy = right[1] - left[1];
-    const halfLength = Math.max(0.1, pair.distance / 4);
-    const perpendicular = [-dy / pair.distance * halfLength, dx / pair.distance * halfLength];
-    contactLine = [
-      [wrapLongitude(pair.midpoint[0] - perpendicular[0]), pair.midpoint[1] - perpendicular[1]],
-      [wrapLongitude(pair.midpoint[0] + perpendicular[0]), pair.midpoint[1] + perpendicular[1]],
-    ];
-  }
+  const contactLines = deriveContactLines(influences, bounds, gridSize, maxPairDistance);
+  const contactLine = contactLines[0] ?? null;
 
   return {
-    available: contactLine !== null,
+    available: contactLines.length > 0,
     reason: contactLine ? null : "no-contact-line",
     influences,
-    pairs,
+    pairs: [],
     contactLine,
-    contactLines: contactLine ? [contactLine] : [],
+    contactLines,
     precision: "inferred",
     confidence: 0.35,
     label: "DERIVED FROM UNIT POSITIONS",

@@ -262,7 +262,7 @@ test("fallback is unavailable unless eligible land influences occupy exactly two
 
   for (const derived of [oneSide, threeSides]) {
     assert.equal(derived.available, false);
-    assert.equal(derived.reason, "requires-two-sides");
+    assert.equal(derived.reason, "no-contact-line");
     assert.deepEqual(derived.pairs, []);
     assert.equal(derived.contactLine, null);
     assert.deepEqual(derived.contactLines, []);
@@ -271,72 +271,136 @@ test("fallback is unavailable unless eligible land influences occupy exactly two
   assert.deepEqual(threeSides.influences.map(({ actorId }) => actorId), ["a", "b", "c"]);
 });
 
-test("fallback uses mutual-nearest pairs and orders two midpoints by widest axis", () => {
+const fieldActors = [
+  { id: "a1", side_id: "a", kind: "division" },
+  { id: "a2", side_id: "a", kind: "division" },
+  { id: "b1", side_id: "b", kind: "division" },
+  { id: "b2", side_id: "b", kind: "division" },
+];
+const fieldBounds = [[-1, -1], [5, 5]];
+const fieldPositions = () => new Map([
+  ["a1", [0, 0]], ["a2", [0, 4]], ["b1", [4, 0]], ["b2", [4, 4]],
+]);
+
+function xNearY(lines, targetY) {
+  return lines.flat()
+    .sort((left, right) => Math.abs(left[1] - targetY) - Math.abs(right[1] - targetY))
+    .slice(0, 4)
+    .reduce((total, [x]) => total + x, 0) / 4;
+}
+
+test("influence field forms a vertical front between two unit rows", () => {
   const derived = deriveFrontlineFallback({
-    actors: [
-      { id: "a1", side_id: "a", kind: "army" },
-      { id: "a2", side_id: "a", kind: "regiment" },
-      { id: "b1", side_id: "b", kind: "corps" },
-      { id: "b2", side_id: "b", kind: "division" },
-    ],
-    positions: new Map([
-      ["a1", [0, 10]], ["a2", [0, 0]], ["b1", [4, 10]], ["b2", [4, 0]],
-    ]),
-    maxPairDistance: 5,
+    actors: fieldActors,
+    positions: fieldPositions(),
+    bounds: fieldBounds,
+    gridSize: 24,
+    maxPairDistance: 6,
   });
+
   assert.equal(derived.available, true);
   assert.equal(derived.reason, null);
-  assert.deepEqual(derived.contactLine, [[2, 0], [2, 10]]);
-  assert.deepEqual(derived.contactLines, [derived.contactLine]);
-  assert.deepEqual(derived.pairs.map(({ actorIds }) => actorIds), [["a1", "b1"], ["a2", "b2"]]);
+  assert.ok(derived.contactLines.length >= 1);
+  assert.ok(derived.contactLines.flat().every(([x]) => Math.abs(x - 2) < 0.4));
+  assert.deepEqual(derived.contactLine, derived.contactLines[0]);
+  assert.deepEqual(derived.pairs, []);
 });
 
-test("multiple fallback midpoints stay locally continuous across the dateline", () => {
-  const derived = deriveFrontlineFallback({
-    actors: [
-      { id: "a1", side_id: "a", kind: "army" },
-      { id: "b1", side_id: "b", kind: "army" },
-      { id: "a2", side_id: "a", kind: "army" },
-      { id: "b2", side_id: "b", kind: "army" },
-    ],
-    positions: new Map([
-      ["a1", [179, 0]], ["b1", [-179, 0]],
-      ["a2", [-179, 10]], ["b2", [179, 10]],
-    ]),
-    maxPairDistance: 5,
+test("a local advance bends only the nearby derived front", () => {
+  const before = deriveFrontlineFallback({
+    actors: fieldActors,
+    positions: fieldPositions(),
+    bounds: fieldBounds,
+    gridSize: 32,
+    maxPairDistance: 6,
   });
-  assert.equal(derived.contactLine.length, 2);
-  assert.ok(Math.abs(derived.contactLine[1][0] - derived.contactLine[0][0]) <= 180);
+  const advanced = fieldPositions();
+  advanced.set("a2", [2, 4]);
+  const after = deriveFrontlineFallback({
+    actors: fieldActors,
+    positions: advanced,
+    bounds: fieldBounds,
+    gridSize: 32,
+    maxPairDistance: 6,
+  });
+
+  assert.ok(xNearY(after.contactLines, 4) > xNearY(before.contactLines, 4) + 0.5);
+  assert.ok(Math.abs(xNearY(after.contactLines, 0) - xNearY(before.contactLines, 0)) < 0.25);
 });
 
-test("equal-distance mutual-nearest ties use actor id independent of input order", () => {
-  const actorsById = {
-    a: { id: "a", side_id: "a", kind: "army" },
-    b1: { id: "b1", side_id: "b", kind: "army" },
-    b2: { id: "b2", side_id: "b", kind: "army" },
+test("derived contours are deterministic and independent of actor and map order", () => {
+  const options = {
+    actors: fieldActors,
+    positions: fieldPositions(),
+    bounds: fieldBounds,
+    gridSize: 24,
+    maxPairDistance: 6,
   };
-  const positions = new Map([["a", [0, 0]], ["b1", [-1, 0]], ["b2", [1, 0]]]);
-  const pairIds = (order) => deriveFrontlineFallback({
-    actors: order.map((id) => actorsById[id]),
-    positions,
-    maxPairDistance: 5,
-  }).pairs.map(({ actorIds }) => actorIds);
+  const forward = deriveFrontlineFallback(options);
+  const reversed = deriveFrontlineFallback({
+    ...options,
+    actors: [...fieldActors].reverse(),
+    positions: new Map([...fieldPositions()].reverse()),
+    bounds: [...fieldBounds].reverse(),
+  });
 
-  assert.deepEqual(pairIds(["a", "b2", "b1"]), pairIds(["b1", "a", "b2"]));
-  assert.deepEqual(pairIds(["a", "b2", "b1"]), [["a", "b1"]]);
+  assert.deepEqual(deriveFrontlineFallback(options), forward);
+  assert.deepEqual(reversed, forward);
 });
 
-test("one mutual pair creates a short perpendicular contact segment", () => {
+test("derived contours close around an enclosed side", () => {
+  const enclosureActors = [
+    { id: "a1", side_id: "a", kind: "division" },
+    { id: "a2", side_id: "a", kind: "division" },
+    ...["b1", "b2", "b3", "b4", "b5", "b6"].map((id) => ({ id, side_id: "b", kind: "division" })),
+  ];
+  const enclosurePositions = new Map([
+    ["a1", [-0.75, 0]], ["a2", [0.75, 0]],
+    ["b1", [-4, -4]], ["b2", [0, -4]], ["b3", [4, -4]],
+    ["b4", [4, 4]], ["b5", [0, 4]], ["b6", [-4, 4]],
+  ]);
   const derived = deriveFrontlineFallback({
-    actors: [actors[0], actors[2]],
-    positions: new Map([["a1", [0, 0]], ["b1", [4, 0]]]),
-    maxPairDistance: 10,
+    actors: enclosureActors,
+    positions: enclosurePositions,
+    bounds: [[-5, -5], [5, 5]],
+    gridSize: 40,
   });
-  assert.equal(derived.contactLine.length, 2);
-  assert.equal(derived.contactLine[0][0], 2);
-  assert.equal(derived.contactLine[1][0], 2);
-  assert.ok(derived.contactLine[0][1] < 0);
-  assert.ok(derived.contactLine[1][1] > 0);
+
+  assert.ok(derived.contactLines.some((coordinates) => isClosedFrontline(coordinates)));
+});
+
+test("influence field unwraps dateline bounds and does not mutate inputs", () => {
+  const datelineActors = [...fieldActors];
+  const positions = new Map([
+    ["a1", [179, 0]], ["a2", [179, 4]], ["b1", [-179, 0]], ["b2", [-179, 4]],
+  ]);
+  const bounds = [[178, -1], [-178, 5]];
+  const before = JSON.stringify({ actors: datelineActors, positions: [...positions], bounds });
+  const derived = deriveFrontlineFallback({
+    actors: datelineActors,
+    positions,
+    bounds,
+    gridSize: 24,
+    maxPairDistance: 4,
+  });
+
+  assert.equal(derived.available, true);
+  assert.ok(derived.contactLines.flat().every(([longitude, latitude]) =>
+    Number.isFinite(longitude) && longitude >= -180 && longitude <= 180 && Number.isFinite(latitude)));
+  assert.equal(JSON.stringify({ actors: datelineActors, positions: [...positions], bounds }), before);
+});
+
+test("malformed bounds fall back safely to deterministic data bounds", () => {
+  const derived = deriveFrontlineFallback({
+    actors: fieldActors,
+    positions: fieldPositions(),
+    bounds: [[0, 0], [Number.NaN, 4]],
+    gridSize: 24,
+    maxPairDistance: 6,
+  });
+
+  assert.equal(derived.available, true);
+  assert.ok(derived.contactLines.flat().every((point) => point.every(Number.isFinite)));
 });
 
 test("coincident opposing units retain influences without a contact line", () => {
@@ -397,5 +461,5 @@ test("fallback never reads combat strength, casualties, or outcome", () => {
     maxPairDistance: 10,
   });
   assert.equal(derived.influences.length, 2);
-  assert.equal(derived.pairs.length, 1);
+  assert.deepEqual(derived.pairs, []);
 });
