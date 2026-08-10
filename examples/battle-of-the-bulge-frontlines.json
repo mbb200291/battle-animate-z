@@ -1,0 +1,431 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "id": "battle_bulge_frontlines",
+    "title": "Battle of the Bulge: source anchors and unit-position demonstration",
+    "created_at": "2026-08-11",
+    "updated_at": "2026-08-11",
+    "license": "CC BY-SA 3.0; includes public-domain U.S. Army source material",
+    "source_system": "battle_json_prompt_1.2.0",
+    "wikidata_qid": "Q152206"
+  },
+  "battle": {
+    "id": "battle_bulge",
+    "name": "Battle of the Bulge",
+    "also_known_as": ["Ardennes Counteroffensive"],
+    "part_of": "Western Front of World War II",
+    "date": {
+      "label": "16 December 1944 – 25 January 1945",
+      "start": "1944-12-16",
+      "end": "1945-01-25",
+      "precision": "day",
+      "confidence": 0.95
+    },
+    "summary": "German forces launched a winter counteroffensive through the Ardennes, creating a westward salient before Allied forces contained and eliminated it.",
+    "confidence": 0.9
+  },
+  "sides": [
+    {
+      "id": "side_allied",
+      "name": "Allies",
+      "color": "#2f6fb5",
+      "belligerents": [
+        {
+          "id": "belligerent_united_states",
+          "name": "United States"
+        }
+      ]
+    },
+    {
+      "id": "side_german",
+      "name": "Germany",
+      "color": "#b84a3a",
+      "belligerents": [
+        {
+          "id": "belligerent_germany",
+          "name": "Nazi Germany",
+          "wikidata_qid": "Q7318"
+        }
+      ]
+    }
+  ],
+  "commanders": [],
+  "actors": [
+    {
+      "id": "actor_us_30_infantry",
+      "name": "U.S. 30th Infantry Division",
+      "side_id": "side_allied",
+      "kind": "division",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_us_2_infantry",
+      "name": "U.S. 2nd Infantry Division",
+      "side_id": "side_allied",
+      "kind": "division",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_us_99_infantry",
+      "name": "U.S. 99th Infantry Division",
+      "side_id": "side_allied",
+      "kind": "division",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_us_106_infantry",
+      "name": "U.S. 106th Infantry Division",
+      "side_id": "side_allied",
+      "kind": "division",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_us_7_armored",
+      "name": "U.S. 7th Armored Division",
+      "side_id": "side_allied",
+      "kind": "division",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_us_28_infantry",
+      "name": "U.S. 28th Infantry Division",
+      "side_id": "side_allied",
+      "kind": "division",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_german_1_ss_panzer_corps",
+      "name": "German I SS Panzer Corps",
+      "side_id": "side_german",
+      "kind": "corps",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_german_66_corps",
+      "name": "German LXVI Corps",
+      "side_id": "side_german",
+      "kind": "corps",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_german_58_panzer_corps",
+      "name": "German LVIII Panzer Corps",
+      "side_id": "side_german",
+      "kind": "corps",
+      "confidence": 0.85
+    },
+    {
+      "id": "actor_german_47_panzer_corps",
+      "name": "German XLVII Panzer Corps",
+      "side_id": "side_german",
+      "kind": "corps",
+      "confidence": 0.85
+    }
+  ],
+  "places": [
+    {
+      "id": "place_malmedy",
+      "name": "Malmedy",
+      "geometry": {"type": "Point", "coordinates": [6.03, 50.43]},
+      "precision": "approximate",
+      "confidence": 0.8
+    },
+    {
+      "id": "place_st_vith",
+      "name": "St. Vith",
+      "geometry": {"type": "Point", "coordinates": [6.13, 50.28]},
+      "precision": "approximate",
+      "confidence": 0.8
+    },
+    {
+      "id": "place_bastogne",
+      "name": "Bastogne",
+      "geometry": {"type": "Point", "coordinates": [5.72, 50.0]},
+      "precision": "approximate",
+      "confidence": 0.8
+    },
+    {
+      "id": "place_houffalize",
+      "name": "Houffalize",
+      "geometry": {"type": "Point", "coordinates": [5.79, 50.13]},
+      "precision": "approximate",
+      "confidence": 0.8
+    },
+    {
+      "id": "place_marche",
+      "name": "Marche-en-Famenne",
+      "geometry": {"type": "Point", "coordinates": [5.34, 50.23]},
+      "precision": "approximate",
+      "confidence": 0.8
+    }
+  ],
+  "historical_events": [
+    {
+      "id": "event_front_1944_12_16",
+      "type": "attack",
+      "title": "German counteroffensive begins",
+      "time": {
+        "label": "16 December 1944",
+        "start": "1944-12-16",
+        "precision": "day",
+        "confidence": 0.95
+      },
+      "description": "The German winter counteroffensive opened against the Allied front in the Ardennes.",
+      "actor_ids": ["actor_german_1_ss_panzer_corps", "actor_german_66_corps", "actor_german_58_panzer_corps", "actor_german_47_panzer_corps"],
+      "target_actor_ids": ["actor_us_30_infantry", "actor_us_7_armored"],
+      "place_ids": ["place_malmedy", "place_st_vith", "place_bastogne"],
+      "precision": "approximate",
+      "confidence": 0.9,
+      "source_ids": ["source_us_army_ardennes", "source_us_army_ardennes_alsace", "source_wacht_am_rhein_map"]
+    },
+    {
+      "id": "event_front_1944_12_20",
+      "type": "advance",
+      "title": "German salient expands",
+      "time": {
+        "label": "16–20 December 1944",
+        "start": "1944-12-16",
+        "end": "1944-12-20",
+        "precision": "range",
+        "confidence": 0.85
+      },
+      "description": "The dated operational map depicts the German advance and the expanded front reached by 20 December.",
+      "actor_ids": ["actor_german_1_ss_panzer_corps", "actor_german_66_corps", "actor_german_58_panzer_corps", "actor_german_47_panzer_corps"],
+      "target_actor_ids": ["actor_us_30_infantry", "actor_us_7_armored"],
+      "place_ids": ["place_malmedy", "place_st_vith", "place_bastogne", "place_houffalize"],
+      "precision": "approximate",
+      "confidence": 0.8,
+      "source_ids": ["source_us_army_ardennes", "source_us_army_ardennes_alsace", "source_wacht_am_rhein_map"]
+    },
+    {
+      "id": "event_front_1944_12_25",
+      "type": "advance",
+      "title": "Salient reaches its western extent",
+      "time": {
+        "label": "20–25 December 1944",
+        "start": "1944-12-20",
+        "end": "1944-12-25",
+        "precision": "range",
+        "confidence": 0.85
+      },
+      "description": "The dated operational map shows the front extending west toward Marche by 25 December while Allied forces continued to contest the shoulders and Bastogne sector.",
+      "actor_ids": ["actor_german_1_ss_panzer_corps", "actor_german_66_corps", "actor_german_58_panzer_corps", "actor_german_47_panzer_corps"],
+      "target_actor_ids": ["actor_us_30_infantry", "actor_us_7_armored"],
+      "place_ids": ["place_malmedy", "place_st_vith", "place_bastogne", "place_houffalize", "place_marche"],
+      "precision": "approximate",
+      "confidence": 0.8,
+      "source_ids": ["source_us_army_ardennes", "source_us_army_ardennes_alsace", "source_wacht_am_rhein_map"]
+    }
+  ],
+  "movements": [
+    {
+      "id": "movement_1_ss_panzer_16_20",
+      "event_id": "event_front_1944_12_20",
+      "actor_id": "actor_german_1_ss_panzer_corps",
+      "time": {"label": "16–20 December 1944", "start": "1944-12-16", "end": "1944-12-20", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-16", "1944-12-18", "1944-12-20"],
+      "path": {"type": "LineString", "coordinates": [[6.45, 50.4], [6.15, 50.42], [5.85, 50.42]]},
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "movement_66_corps_16_20",
+      "event_id": "event_front_1944_12_20",
+      "actor_id": "actor_german_66_corps",
+      "time": {"label": "16–20 December 1944", "start": "1944-12-16", "end": "1944-12-20", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-16", "1944-12-18", "1944-12-20"],
+      "path": {"type": "LineString", "coordinates": [[6.45, 50.29], [6.25, 50.29], [6.05, 50.28]]},
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "movement_66_corps_20_25",
+      "event_id": "event_front_1944_12_25",
+      "actor_id": "actor_german_66_corps",
+      "time": {"label": "20–25 December 1944", "start": "1944-12-20", "end": "1944-12-25", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-20", "1944-12-22", "1944-12-25"],
+      "path": {"type": "LineString", "coordinates": [[6.05, 50.28], [5.95, 50.25], [5.85, 50.22]]},
+      "precision": "inferred",
+      "confidence": 0.4
+    },
+    {
+      "id": "movement_58_panzer_16_20",
+      "event_id": "event_front_1944_12_20",
+      "actor_id": "actor_german_58_panzer_corps",
+      "time": {"label": "16–20 December 1944", "start": "1944-12-16", "end": "1944-12-20", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-16", "1944-12-18", "1944-12-20"],
+      "path": {"type": "LineString", "coordinates": [[6.45, 50.19], [6.2, 50.18], [5.95, 50.18]]},
+      "precision": "inferred",
+      "confidence": 0.4
+    },
+    {
+      "id": "movement_58_panzer_20_25",
+      "event_id": "event_front_1944_12_25",
+      "actor_id": "actor_german_58_panzer_corps",
+      "time": {"label": "20–25 December 1944", "start": "1944-12-20", "end": "1944-12-25", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-20", "1944-12-22", "1944-12-25"],
+      "path": {"type": "LineString", "coordinates": [[5.95, 50.18], [5.7, 50.19], [5.45, 50.2]]},
+      "precision": "inferred",
+      "confidence": 0.4
+    },
+    {
+      "id": "movement_47_panzer_16_20",
+      "event_id": "event_front_1944_12_20",
+      "actor_id": "actor_german_47_panzer_corps",
+      "time": {"label": "16–20 December 1944", "start": "1944-12-16", "end": "1944-12-20", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-16", "1944-12-18", "1944-12-20"],
+      "path": {"type": "LineString", "coordinates": [[6.5, 50.1], [6.15, 50.05], [5.82, 50.02]]},
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "movement_47_panzer_20_25",
+      "event_id": "event_front_1944_12_25",
+      "actor_id": "actor_german_47_panzer_corps",
+      "time": {"label": "20–25 December 1944", "start": "1944-12-20", "end": "1944-12-25", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-20", "1944-12-22", "1944-12-25"],
+      "path": {"type": "LineString", "coordinates": [[5.82, 50.02], [5.55, 50.0], [5.25, 50.08]]},
+      "precision": "inferred",
+      "confidence": 0.4
+    },
+    {
+      "id": "movement_us_30_16_20",
+      "event_id": "event_front_1944_12_20",
+      "actor_id": "actor_us_30_infantry",
+      "to_place_id": "place_malmedy",
+      "time": {"label": "16–20 December 1944", "start": "1944-12-16", "end": "1944-12-20", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-16", "1944-12-18", "1944-12-20"],
+      "path": {"type": "LineString", "coordinates": [[6.1, 50.75], [6.08, 50.58], [6.03, 50.43]]},
+      "precision": "inferred",
+      "confidence": 0.4
+    },
+    {
+      "id": "movement_us_7_armored_16_20",
+      "event_id": "event_front_1944_12_20",
+      "actor_id": "actor_us_7_armored",
+      "to_place_id": "place_st_vith",
+      "time": {"label": "16–20 December 1944", "start": "1944-12-16", "end": "1944-12-20", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-16", "1944-12-18", "1944-12-20"],
+      "path": {"type": "LineString", "coordinates": [[5.8, 50.55], [6.0, 50.4], [6.13, 50.28]]},
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "movement_us_7_armored_20_25",
+      "event_id": "event_front_1944_12_25",
+      "actor_id": "actor_us_7_armored",
+      "from_place_id": "place_st_vith",
+      "time": {"label": "20–25 December 1944", "start": "1944-12-20", "end": "1944-12-25", "precision": "range", "confidence": 0.5},
+      "waypoint_times": ["1944-12-20", "1944-12-22", "1944-12-25"],
+      "path": {"type": "LineString", "coordinates": [[6.13, 50.28], [5.9, 50.3], [5.7, 50.33]]},
+      "precision": "inferred",
+      "confidence": 0.4
+    }
+  ],
+  "frontline_snapshots": [
+    {
+      "id": "snapshot_front_1944_12_16",
+      "time": {"label": "Front line, 16 December 1944", "start": "1944-12-16", "precision": "day", "confidence": 0.8},
+      "event_id": "event_front_1944_12_16",
+      "front_lines": [{
+        "id": "front_main",
+        "geometry": {"type": "LineString", "coordinates": [[6.28, 50.82], [6.3, 50.65], [6.25, 50.55], [6.22, 50.43], [6.28, 50.3], [6.42, 50.2], [6.25, 50.08], [6.1, 49.95]]}
+      }],
+      "precision": "inferred",
+      "confidence": 0.45,
+      "source_ids": ["source_wacht_am_rhein_map"]
+    },
+    {
+      "id": "snapshot_front_1944_12_20",
+      "time": {"label": "Front line, 20 December 1944", "start": "1944-12-20", "precision": "day", "confidence": 0.8},
+      "event_id": "event_front_1944_12_20",
+      "front_lines": [{
+        "id": "front_main",
+        "geometry": {"type": "LineString", "coordinates": [[6.28, 50.82], [6.3, 50.65], [6.24, 50.54], [6.05, 50.44], [5.82, 50.38], [5.65, 50.27], [5.65, 50.13], [5.8, 50.02], [6.0, 49.95]]}
+      }],
+      "precision": "inferred",
+      "confidence": 0.45,
+      "source_ids": ["source_wacht_am_rhein_map"]
+    },
+    {
+      "id": "snapshot_front_1944_12_25",
+      "time": {"label": "Front line, 25 December 1944", "start": "1944-12-25", "precision": "day", "confidence": 0.8},
+      "event_id": "event_front_1944_12_25",
+      "front_lines": [{
+        "id": "front_main",
+        "geometry": {"type": "LineString", "coordinates": [[6.28, 50.82], [6.3, 50.65], [6.2, 50.53], [5.9, 50.4], [5.55, 50.28], [5.25, 50.22], [4.95, 50.12], [5.1, 49.98], [5.45, 49.9], [5.8, 49.9], [6.05, 49.95]]}
+      }],
+      "precision": "inferred",
+      "confidence": 0.4,
+      "source_ids": ["source_wacht_am_rhein_map"]
+    }
+  ],
+  "outcome": {
+    "summary": "The German offensive was stopped and the Allied lines were restored after the salient was eliminated.",
+    "winner_side_ids": ["side_allied"],
+    "confidence": 0.9,
+    "source_ids": ["source_us_army_ardennes"]
+  },
+  "sources": [
+    {
+      "id": "source_us_army_ardennes",
+      "title": "The Ardennes: Battle of the Bulge",
+      "url": "https://history.army.mil/Publications/Publications-Catalog/The-Ardennes-Battle-Of-The-Bulge/",
+      "retrieved_at": "2026-08-11",
+      "license": "Public domain as a U.S. Army Center of Military History publication",
+      "note": "Hugh M. Cole, U.S. Army Center of Military History, CMH Pub 7-8. Supports the campaign chronology, participating formations, German corps axes, Allied responses, and outcome. It is not used as a claim of exact geospatial coordinates."
+    },
+    {
+      "id": "source_wacht_am_rhein_map",
+      "title": "File:Wacht am Rhein map (original).svg",
+      "url": "https://commons.wikimedia.org/wiki/File:Wacht_am_Rhein_map_(original).svg",
+      "retrieved_at": "2026-08-11",
+      "license": "CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)",
+      "note": "Grandiose derivative map based on the public-domain U.S. military File:P23(map).jpg. The legend directly distinguishes front lines dated 16, 20, and 25 December 1944, labels Allied divisions and German corps, and depicts movement arrows. JSON frontline_snapshots are coarse source-map traces, while movement coordinates are low-confidence representative traces of depicted axes; the SVG is not treated as georeferenced and does not state a map projection. App runtime-derived lines are analytical renderings from actor positions and are not serialized in this JSON. No control-area polygons are asserted."
+    },
+    {
+      "id": "source_us_army_ardennes_alsace",
+      "title": "Ardennes-Alsace",
+      "url": "https://history.army.mil/portals/143/Images/Publications/catalog/72-26.pdf",
+      "retrieved_at": "2026-08-11",
+      "license": "Public domain as a U.S. Army Center of Military History publication",
+      "note": "Official U.S. Army campaign brochure. Supports the 30th Infantry Division move south toward Malmedy, the 7th Armored Division withdrawal from St. Vith, and the westward operations of I SS and LVIII Panzer Corps. It supports only broad movement axes, not the example's exact representative coordinates."
+    }
+  ],
+  "animation_hints": {
+    "map": {
+      "initial_center": [5.8, 50.32],
+      "initial_zoom": 8,
+      "bounds_padding": 0.15
+    },
+    "style": {
+      "side_colors": {"side_allied": "#2f6fb5", "side_german": "#b84a3a"},
+      "actor_icons": {
+        "actor_us_30_infantry": "infantry",
+        "actor_us_2_infantry": "infantry",
+        "actor_us_99_infantry": "infantry",
+        "actor_us_106_infantry": "infantry",
+        "actor_us_7_armored": "armor",
+        "actor_us_28_infantry": "infantry",
+        "actor_german_1_ss_panzer_corps": "armor",
+        "actor_german_66_corps": "infantry",
+        "actor_german_58_panzer_corps": "armor",
+        "actor_german_47_panzer_corps": "armor"
+      },
+      "event_icons": {"attack": "burst", "advance": "arrow"},
+      "movement_line_width": 2
+    },
+    "timeline": {
+      "default_event_duration_ms": 1800,
+      "historical_seconds_per_playback_second": 86400,
+      "idle_compression_threshold_seconds": 259200,
+      "idle_compressed_duration_ms": 1200,
+      "ordered_event_ids": ["event_front_1944_12_16", "event_front_1944_12_20", "event_front_1944_12_25"]
+    },
+    "camera": [
+      {"event_id": "event_front_1944_12_16", "center": [6.15, 50.35], "zoom": 8},
+      {"event_id": "event_front_1944_12_20", "center": [5.85, 50.3], "zoom": 8},
+      {"event_id": "event_front_1944_12_25", "center": [5.55, 50.2], "zoom": 8}
+    ]
+  }
+}

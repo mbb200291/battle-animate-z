@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "battle-of-waterloo.json"
 YALU_EXAMPLE = ROOT / "examples" / "battle-of-甲午海戰.json"
 STALINGRAD_EXAMPLE = ROOT / "examples" / "battle-of-stalingrad-frontlines.json"
+BULGE_EXAMPLE = ROOT / "examples" / "battle-of-the-bulge-frontlines.json"
 SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
 MAX_INFERRED_WITHDRAWAL_SPEED_KMH = 18
 
@@ -263,6 +264,136 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 "enclosureLineIds": ["front_main"],
             },
         )
+
+    def test_battle_of_the_bulge_hybrid_frontline_example(self):
+        self.assertTrue(BULGE_EXAMPLE.is_file())
+        battle = json.loads(BULGE_EXAMPLE.read_text(encoding="utf-8"))
+
+        self.assertEqual(battle["schema_version"], "0.4.0")
+        self.assertEqual(
+            battle["metadata"]["source_system"],
+            "battle_json_prompt_1.2.0",
+        )
+        snapshots = battle["frontline_snapshots"]
+        self.assertEqual(
+            [snapshot["time"]["start"] for snapshot in snapshots],
+            ["1944-12-16", "1944-12-20", "1944-12-25"],
+        )
+        self.assertTrue(all(snapshot["source_ids"] for snapshot in snapshots))
+        self.assertTrue(all(
+            snapshot["precision"] == "inferred" and snapshot["confidence"] <= 0.5
+            for snapshot in snapshots
+        ))
+        self.assertTrue(all("control_areas" not in snapshot for snapshot in snapshots))
+        self.assertEqual(
+            [{line["id"] for line in snapshot["front_lines"]} for snapshot in snapshots],
+            [{"front_main"}, {"front_main"}, {"front_main"}],
+        )
+
+        eligible_kinds = {"army", "corps", "division", "brigade", "regiment"}
+        eligible = [actor for actor in battle["actors"] if actor["kind"] in eligible_kinds]
+        self.assertGreaterEqual(len(eligible), 8)
+        side_counts = {
+            side["id"]: sum(actor["side_id"] == side["id"] for actor in eligible)
+            for side in battle["sides"]
+        }
+        self.assertTrue(all(count >= 2 for count in side_counts.values()))
+
+        movements = battle["movements"]
+        events_by_id = {event["id"]: event for event in battle["historical_events"]}
+        movement_actor_ids = {movement["actor_id"] for movement in movements}
+        self.assertGreaterEqual(len(movement_actor_ids), 4)
+        self.assertTrue(all(
+            movement["precision"] == "inferred" and movement["confidence"] <= 0.5
+            for movement in movements
+        ))
+        movements_by_actor = {}
+        for movement in movements:
+            movements_by_actor.setdefault(movement["actor_id"], []).append(movement)
+            self.assertTrue(
+                {"source_wacht_am_rhein_map", "source_us_army_ardennes_alsace"}
+                <= set(events_by_id[movement["event_id"]]["source_ids"]),
+            )
+            coordinates = movement["path"]["coordinates"]
+            waypoint_times = movement["waypoint_times"]
+            self.assertEqual(len(coordinates), len(waypoint_times))
+            parsed = [datetime.fromisoformat(value) for value in waypoint_times]
+            self.assertTrue(all(left < right for left, right in zip(parsed, parsed[1:])))
+        recurring = [items for items in movements_by_actor.values() if len(items) >= 2]
+        self.assertGreaterEqual(len(recurring), 2)
+        for items in recurring:
+            ordered = sorted(items, key=lambda item: item["time"]["start"])
+            self.assertLessEqual(
+                datetime.fromisoformat(ordered[0]["time"]["end"]),
+                datetime.fromisoformat(ordered[1]["time"]["start"]),
+            )
+
+        sources = {source["id"]: source for source in battle["sources"]}
+        map_source = sources["source_wacht_am_rhein_map"]
+        self.assertIn("source-map traces", map_source["note"])
+        self.assertIn("runtime-derived", map_source["note"])
+        self.assertIn("not serialized", map_source["note"])
+        self.assertIn("CC BY-SA 3.0", map_source["license"])
+        self.assertTrue(all(
+            "source_wacht_am_rhein_map" in snapshot["source_ids"]
+            for snapshot in snapshots
+        ))
+
+        errors, warnings = validate_document_with_warnings(battle)
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+        script = """
+            import fs from "node:fs";
+            import { validateBattle } from "./app/animate.js";
+            import { convergeDerivedFrontlines, deriveFrontlineFallback } from "./app/frontlines.js";
+            import { compileTimeline, sampleTimeline } from "./app/timeline.js";
+            const battle = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const diagnostics = validateBattle(battle);
+            const compiled = compileTimeline(battle);
+            const deriveAt = (iso) => {
+              const sampled = sampleTimeline(compiled, compiled.toPresentationTime(Date.parse(iso)));
+              const positions = new Map([...sampled.actorPositions].filter(([actorId]) =>
+                compiled.explicitStartingPositionActorIds.has(actorId)));
+              return { sampled, derived: deriveFrontlineFallback({
+                actors: battle.actors,
+                positions,
+                bounds: [[4.8, 49.8], [6.7, 50.9]],
+                gridSize: 40,
+              }) };
+            };
+            const between = deriveAt("1944-12-22T12:00:00Z");
+            const anchor = deriveAt("1944-12-25T00:00:00Z");
+            const converged = convergeDerivedFrontlines(
+              anchor.derived.contactLines,
+              anchor.sampled.frontline.after,
+              1,
+            );
+            console.log(JSON.stringify({
+              diagnostics,
+              keyframeCount: compiled.frontlineKeyframes.length,
+              available: between.derived.available,
+              sideIds: [...new Set(between.derived.influences.map(({ sideId }) => sideId))],
+              contactLineCount: between.derived.contactLines.length,
+              sourceAtAnchor: anchor.sampled.frontline.after.front_lines,
+              convergedAtAnchor: converged.front_lines,
+            }));
+        """
+        result = subprocess.run(
+            ["node", "--input-type=module", "-e", script, str(BULGE_EXAMPLE)],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        browser = json.loads(result.stdout)
+        self.assertEqual(browser["diagnostics"], {"errors": [], "warnings": []})
+        self.assertEqual(browser["keyframeCount"], 3)
+        self.assertTrue(browser["available"])
+        self.assertEqual(len(browser["sideIds"]), 2)
+        self.assertGreaterEqual(browser["contactLineCount"], 1)
+        self.assertEqual(browser["convergedAtAnchor"], browser["sourceAtAnchor"])
 
     def test_modern_border_asset_is_geometry_only_natural_earth(self):
         path = ROOT / "app" / "data" / "modern-borders-50m.geojson"
