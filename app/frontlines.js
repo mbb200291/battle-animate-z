@@ -305,9 +305,21 @@ function zeroCrossing(left, right, leftValue, rightValue) {
   ];
 }
 
+const POINT_EPSILON = 1e-9;
+
+const sameCoordinate = (left, right) =>
+  Math.abs(deltaLongitude(left[0], right[0])) <= POINT_EPSILON &&
+  Math.abs(left[1] - right[1]) <= POINT_EPSILON;
+
+export function ambiguousEdgePairs(values) {
+  const determinant = values[0] * values[2] - values[1] * values[3];
+  return determinant >= 0 ? [[0, 1], [2, 3]] : [[0, 3], [1, 2]];
+}
+
 function marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance) {
   const segments = [];
   const addSegment = (left, right) => {
+    if (sameCoordinate(left.point, right.point)) return;
     if (Number.isFinite(maxPairDistance)) {
       const threshold = maxPairDistance / 2;
       const beyondContact = ({ point }) =>
@@ -344,11 +356,9 @@ function marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance) {
         addSegment(crossings[0], crossings[1]);
       } else if (crossings.length === 4) {
         const byEdge = new Map(crossings.map((crossing) => [crossing.edgeIndex, crossing]));
-        const centerPositive = values.reduce((total, value) => total + value, 0) >= 0;
-        const pairs = centerPositive === (values[0] >= 0)
-          ? [[0, 1], [2, 3]]
-          : [[0, 3], [1, 2]];
-        for (const [left, right] of pairs) addSegment(byEdge.get(left), byEdge.get(right));
+        for (const [left, right] of ambiguousEdgePairs(values)) {
+          addSegment(byEdge.get(left), byEdge.get(right));
+        }
       }
     }
   }
@@ -437,6 +447,67 @@ function smoothLine(line) {
   return wrapped;
 }
 
+function cleanLine(line) {
+  const closed = line.length > 2 && sameCoordinate(line[0], line.at(-1));
+  const source = closed ? line.slice(0, -1) : line;
+  const coordinates = [];
+  for (const point of source) {
+    if (!coordinates.length || !sameCoordinate(point, coordinates.at(-1))) coordinates.push([...point]);
+  }
+  if (closed && coordinates.length > 1 && sameCoordinate(coordinates[0], coordinates.at(-1))) {
+    coordinates.pop();
+  }
+  const distinct = coordinates.filter((point, index) =>
+    coordinates.findIndex((candidate) => sameCoordinate(point, candidate)) === index);
+  if (distinct.length < (closed ? 3 : 2)) return null;
+  if (closed) coordinates.push([...coordinates[0]]);
+  return coordinates;
+}
+
+function comparePoints(left, right) {
+  if (left[0] !== right[0]) return left[0] < right[0] ? -1 : 1;
+  if (left[1] !== right[1]) return left[1] < right[1] ? -1 : 1;
+  return 0;
+}
+
+function compareLines(left, right) {
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
+    const comparison = comparePoints(left[index], right[index]);
+    if (comparison) return comparison;
+  }
+  return left.length - right.length;
+}
+
+function canonicalizeLine(line) {
+  const closed = line.length > 2 && sameCoordinate(line[0], line.at(-1));
+  if (!closed) {
+    const coordinates = line.map((point) => [...point]);
+    return comparePoints(coordinates[0], coordinates.at(-1)) <= 0 ? coordinates : coordinates.reverse();
+  }
+
+  const unique = line.slice(0, -1);
+  const minimum = unique.reduce((best, point) => comparePoints(point, best) < 0 ? point : best);
+  const candidates = [];
+  for (let start = 0; start < unique.length; start += 1) {
+    if (comparePoints(unique[start], minimum)) continue;
+    for (const direction of [1, -1]) {
+      candidates.push(Array.from(
+        { length: unique.length },
+        (_, offset) => [...unique[(start + direction * offset + unique.length) % unique.length]],
+      ));
+    }
+  }
+  candidates.sort(compareLines);
+  const canonical = candidates[0];
+  canonical.push([...canonical[0]]);
+  return canonical;
+}
+
+export function canonicalizeContactLines(lines) {
+  return lines.map(canonicalizeLine).sort(compareLines);
+}
+
 function deriveContactLines(influences, bounds, gridSize, maxPairDistance) {
   const unwrapped = unwrapInfluences(influences);
   const sideIds = [...new Set(unwrapped.map(({ sideId }) => sideId))].sort();
@@ -448,9 +519,11 @@ function deriveContactLines(influences, bounds, gridSize, maxPairDistance) {
   const ys = Array.from({ length: size }, (_, index) => minY + (maxY - minY) * index / (size - 1));
   const field = ys.map((y) => xs.map((x) =>
     nearestDistance([x, y], sideA) - nearestDistance([x, y], sideB)));
-  return stitchSegments(marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance))
+  const lines = stitchSegments(marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance))
     .map(smoothLine)
-    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    .map(cleanLine)
+    .filter(Boolean);
+  return canonicalizeContactLines(lines);
 }
 
 export function selectFrontlineInfluences(actors = [], positions = new Map()) {

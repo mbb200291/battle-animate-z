@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import * as frontlineGeometry from "../app/frontlines.js";
 import {
   deriveFrontlineFallback,
   enclosureLineIds,
@@ -319,6 +320,60 @@ test("contact filtering retains an endpoint on the inclusive half-distance bound
 
   assert.equal(derived.available, true);
   assert.ok(derived.contactLines.length > 0);
+});
+
+test("ambiguous marching cells use the bilinear asymptotic decider", () => {
+  assert.deepEqual(
+    frontlineGeometry.ambiguousEdgePairs([0.0830, -0.9238, 0.3564, -0.0287]),
+    [[0, 1], [2, 3]],
+  );
+  assert.deepEqual(
+    frontlineGeometry.ambiguousEdgePairs([1, -1, 1, -1]),
+    [[0, 1], [2, 3]],
+  );
+});
+
+test("numeric contact-line ordering stays left-to-right across ten degrees", () => {
+  const orderedBefore = frontlineGeometry.canonicalizeContactLines([
+    [[10.004, 1], [10.004, -1]],
+    [[9.995, -1], [9.995, 1]],
+  ]);
+  const orderedAfter = frontlineGeometry.canonicalizeContactLines([
+    [[10.014, 1], [10.014, -1]],
+    [[10.005, -1], [10.005, 1]],
+  ]);
+
+  assert.deepEqual(orderedBefore.map((line) => line[0][0]), [9.995, 10.004]);
+  assert.deepEqual(orderedAfter.map((line) => line[0][0]), [10.005, 10.014]);
+  assert.ok(orderedBefore[0][0][1] < orderedBefore[0].at(-1)[1]);
+  assert.ok(orderedAfter[0][0][1] < orderedAfter[0].at(-1)[1]);
+});
+
+test("grid-vertex zeroes do not emit duplicate or degenerate contact coordinates", () => {
+  const sideA = [[-1, 0], [1, 0], [0, 1]];
+  const sideB = [[0, -1], [1, 1]];
+  const actors = [
+    ...sideA.map((_, index) => ({ id: `a${index}`, side_id: "a", kind: "division" })),
+    ...sideB.map((_, index) => ({ id: `b${index}`, side_id: "b", kind: "division" })),
+  ];
+  const positions = new Map([
+    ...sideA.map((point, index) => [`a${index}`, point]),
+    ...sideB.map((point, index) => [`b${index}`, point]),
+  ]);
+  const derived = deriveFrontlineFallback({
+    actors,
+    positions,
+    bounds: [[-1, -1], [1, 1]],
+    gridSize: 3,
+  });
+
+  assert.ok(derived.contactLine.length >= 2);
+  for (const coordinates of derived.contactLines) {
+    assert.ok(new Set(coordinates.map(([x, y]) => `${x},${y}`)).size >= 2);
+    for (let index = 1; index < coordinates.length; index += 1) {
+      assert.notDeepEqual(coordinates[index], coordinates[index - 1]);
+    }
+  }
 });
 
 test("a local advance bends only the nearby derived front", () => {
