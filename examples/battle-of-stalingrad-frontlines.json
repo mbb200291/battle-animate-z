@@ -317,26 +317,18 @@
       "event_id": "event_pocket_isolated",
       "front_lines": [
         {
-          "id": "front_north",
+          "id": "front_main",
           "geometry": {
             "type": "LineString",
             "coordinates": [
               [43.55, 48.82],
               [43.9, 48.98],
               [44.35, 49.0],
-              [44.62, 48.88]
-            ]
-          }
-        },
-        {
-          "id": "front_south",
-          "geometry": {
-            "type": "LineString",
-            "coordinates": [
               [44.62, 48.88],
               [44.5, 48.55],
               [44.0, 48.42],
-              [43.55, 48.62]
+              [43.55, 48.62],
+              [43.55, 48.82]
             ]
           }
         }
@@ -357,7 +349,7 @@
       "id": "source_wikipedia_stalingrad",
       "title": "Battle of Stalingrad",
       "url": "https://en.wikipedia.org/wiki/Battle_of_Stalingrad",
-      "retrieved_at": "2026-07-25",
+      "retrieved_at": "2026-08-04",
       "license": "CC BY-SA 4.0",
       "note": "Supports broad chronology, participants, Operation Uranus, encirclement at Kalach, and the battle outcome; it is not the sole support for snapshot geometry."
     },
@@ -365,9 +357,9 @@
       "id": "source_map_stalingrad_three_dates",
       "title": "File:Battle of Stalingrad.png",
       "url": "https://commons.wikimedia.org/wiki/File:Battle_of_Stalingrad.png",
-      "retrieved_at": "2026-07-25",
+      "retrieved_at": "2026-08-04",
       "license": "Public domain (file page states CGSC public-information permission and PD-self)",
-      "note": "Direct operational map source showing German fronts for 19 November, 12 December, and 24 December 1942. Snapshot line geometry is a coarse visual approximation because the map does not state a projection. The source does not support control-area polygons, so this example intentionally omits them."
+      "note": "Direct operational map source showing German fronts for 19 November, 12 December, and 24 December 1942; its 24 December front encloses the Stalingrad pocket. Snapshot line geometry is a coarse visual approximation because the map does not state a projection. The source does not support control-area polygons, so this example intentionally omits them."
     },
     {
       "id": "source_map_uranus_preparations",

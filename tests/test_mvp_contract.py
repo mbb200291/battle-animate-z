@@ -162,8 +162,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             line["id"] for line in snapshots[-1].get("front_lines", [])
         }
         self.assertIn("front_main", first_line_ids & second_line_ids)
-        self.assertTrue({"front_north", "front_south"} <= final_line_ids)
-        self.assertNotIn("front_main", final_line_ids)
+        self.assertEqual(final_line_ids, {"front_main"})
+        final_front = snapshots[-1]["front_lines"][0]["geometry"]["coordinates"]
+        self.assertGreaterEqual(len(final_front), 4)
+        self.assertEqual(final_front[0], final_front[-1])
 
         self.assertTrue(all("control_areas" not in snapshot for snapshot in snapshots))
         self.assertNotIn(
@@ -211,11 +213,19 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         script = """
             import fs from "node:fs";
             import { validateBattle } from "./app/animate.js";
-            import { compileTimeline } from "./app/timeline.js";
+            import { compileTimeline, sampleTimeline } from "./app/timeline.js";
             const battle = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const timeline = compileTimeline(battle);
+            const finalPair = timeline.frontlineKeyframes.slice(-2);
+            const midpoint = timeline.toPresentationTime(
+                (finalPair[0].historicalMs + finalPair[1].historicalMs) / 2,
+            );
+            const frontline = sampleTimeline(timeline, midpoint).frontline;
             console.log(JSON.stringify({
                 diagnostics: validateBattle(battle),
-                axisStart: compileTimeline(battle).startingPositions.get("actor_axis_stalingrad"),
+                axisStart: timeline.startingPositions.get("actor_axis_stalingrad"),
+                finalTransition: frontline.transition,
+                enclosureLineIds: frontline.enclosureLineIds,
             }));
         """
         result = subprocess.run(
@@ -231,6 +241,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             {
                 "diagnostics": {"errors": [], "warnings": []},
                 "axisStart": [44.516, 48.709],
+                "finalTransition": "enclosure",
+                "enclosureLineIds": ["front_main"],
             },
         )
 
