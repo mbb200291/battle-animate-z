@@ -299,10 +299,13 @@ function normalizeBounds(bounds, influences) {
 
 function zeroCrossing(left, right, leftValue, rightValue) {
   const progress = leftValue === rightValue ? 0.5 : leftValue / (leftValue - rightValue);
-  return [
-    left[0] + (right[0] - left[0]) * progress,
-    left[1] + (right[1] - left[1]) * progress,
-  ];
+  return {
+    point: [
+      left[0] + (right[0] - left[0]) * progress,
+      left[1] + (right[1] - left[1]) * progress,
+    ],
+    progress,
+  };
 }
 
 const POINT_EPSILON = 1e-9;
@@ -336,20 +339,29 @@ function marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance) {
         [xs[x + 1], ys[y + 1]], [xs[x], ys[y + 1]],
       ];
       const values = [field[y][x], field[y][x + 1], field[y + 1][x + 1], field[y + 1][x]];
+      const vertexKeys = [
+        `v:${y}:${x}`, `v:${y}:${x + 1}`,
+        `v:${y + 1}:${x + 1}`, `v:${y + 1}:${x}`,
+      ];
       const edges = [
-        { key: `h:${x}:${y}`, from: 0, to: 1 },
-        { key: `v:${x + 1}:${y}`, from: 1, to: 2 },
-        { key: `h:${x}:${y + 1}`, from: 3, to: 2 },
-        { key: `v:${x}:${y}`, from: 0, to: 3 },
+        { key: `e:h:${y}:${x}`, from: 0, to: 1 },
+        { key: `e:v:${y}:${x + 1}`, from: 1, to: 2 },
+        { key: `e:h:${y + 1}:${x}`, from: 3, to: 2 },
+        { key: `e:v:${y}:${x}`, from: 0, to: 3 },
       ];
       const crossings = edges.flatMap((edge, edgeIndex) => {
         const fromValue = values[edge.from];
         const toValue = values[edge.to];
         if ((fromValue < 0) === (toValue < 0)) return [];
+        const crossing = zeroCrossing(points[edge.from], points[edge.to], fromValue, toValue);
         return [{
           edgeIndex,
-          key: edge.key,
-          point: zeroCrossing(points[edge.from], points[edge.to], fromValue, toValue),
+          key: crossing.progress <= POINT_EPSILON
+            ? vertexKeys[edge.from]
+            : crossing.progress >= 1 - POINT_EPSILON
+              ? vertexKeys[edge.to]
+              : edge.key,
+          point: crossing.point,
         }];
       });
       if (crossings.length === 2) {

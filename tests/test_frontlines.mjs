@@ -376,6 +376,20 @@ test("grid-vertex zeroes do not emit duplicate or degenerate contact coordinates
   }
 });
 
+test("grid-vertex crossings stitch one continuous diagonal contact line", () => {
+  const actors = [
+    { id: "a", side_id: "a", kind: "division" },
+    { id: "b", side_id: "b", kind: "division" },
+  ];
+  const positions = new Map([["a", [0, 1]], ["b", [1, 0]]]);
+
+  for (const gridSize of [5, 31]) {
+    const derived = deriveFrontlineFallback({ actors, positions, gridSize });
+    assert.equal(derived.contactLines.length, 1, `gridSize ${gridSize}`);
+    assert.ok(derived.contactLine.length >= 2, `gridSize ${gridSize}`);
+  }
+});
+
 test("a local advance bends only the nearby derived front", () => {
   const before = deriveFrontlineFallback({
     actors: fieldActors,
