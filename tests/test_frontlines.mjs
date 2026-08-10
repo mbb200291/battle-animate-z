@@ -262,7 +262,7 @@ test("fallback is unavailable unless eligible land influences occupy exactly two
 
   for (const derived of [oneSide, threeSides]) {
     assert.equal(derived.available, false);
-    assert.equal(derived.reason, "no-contact-line");
+    assert.equal(derived.reason, "requires-two-sides");
     assert.deepEqual(derived.pairs, []);
     assert.equal(derived.contactLine, null);
     assert.deepEqual(derived.contactLines, []);
@@ -304,6 +304,21 @@ test("influence field forms a vertical front between two unit rows", () => {
   assert.ok(derived.contactLines.flat().every(([x]) => Math.abs(x - 2) < 0.4));
   assert.deepEqual(derived.contactLine, derived.contactLines[0]);
   assert.deepEqual(derived.pairs, []);
+});
+
+test("contact filtering retains an endpoint on the inclusive half-distance boundary", () => {
+  const derived = deriveFrontlineFallback({
+    actors: [
+      { id: "a", side_id: "a", kind: "division" },
+      { id: "b", side_id: "b", kind: "division" },
+    ],
+    positions: new Map([["a", [0, 0]], ["b", [4, 0]]]),
+    gridSize: 3,
+    maxPairDistance: 4,
+  });
+
+  assert.equal(derived.available, true);
+  assert.ok(derived.contactLines.length > 0);
 });
 
 test("a local advance bends only the nearby derived front", () => {

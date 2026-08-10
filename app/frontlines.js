@@ -309,12 +309,10 @@ function marchingSegments(field, xs, ys, sideA, sideB, maxPairDistance) {
   const segments = [];
   const addSegment = (left, right) => {
     if (Number.isFinite(maxPairDistance)) {
-      const midpoint = [
-        (left.point[0] + right.point[0]) / 2,
-        (left.point[1] + right.point[1]) / 2,
-      ];
-      const contactDistance = nearestDistance(midpoint, sideA) + nearestDistance(midpoint, sideB);
-      if (contactDistance > maxPairDistance + 1e-9) return;
+      const threshold = maxPairDistance / 2;
+      const beyondContact = ({ point }) =>
+        nearestDistance(point, sideA) > threshold && nearestDistance(point, sideB) > threshold;
+      if (beyondContact(left) && beyondContact(right)) return;
     }
     segments.push({ id: segments.length, left, right });
   };
@@ -486,7 +484,7 @@ export function deriveFrontlineFallback({
   if (sideCount !== 2) {
     return {
       available: false,
-      reason: "no-contact-line",
+      reason: "requires-two-sides",
       influences,
       pairs: [],
       contactLine: null,
