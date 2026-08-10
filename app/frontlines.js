@@ -264,6 +264,54 @@ function sampleLineCoordinates(coordinates) {
   return sampled.length > 0 && denseEvery(sampled, isPoint) ? { closed: closes, coordinates: sampled } : null;
 }
 
+function spatialLineAssignment(derivedSamples, sourceSamples, sourceLines) {
+  const candidates = [];
+  for (let derivedIndex = 0; derivedIndex < derivedSamples.length; derivedIndex += 1) {
+    const from = derivedSamples[derivedIndex];
+    if (!from) continue;
+    for (let sourceIndex = 0; sourceIndex < sourceSamples.length; sourceIndex += 1) {
+      const to = sourceSamples[sourceIndex];
+      if (!to || from.closed !== to.closed) continue;
+      const aligned = from.closed
+        ? alignRing(from.coordinates, to.coordinates)
+        : alignLine(from.coordinates, to.coordinates);
+      candidates.push({
+        cost: correspondenceCost(from.coordinates, aligned),
+        derivedIndex,
+        sourceId: sourceLines[sourceIndex]?.id ?? "",
+        sourceIndex,
+      });
+    }
+  }
+  // Front counts are intentionally small. A sorted greedy assignment keeps the
+  // closest topology-compatible pairs and uses IDs/indices for deterministic ties.
+  candidates.sort((left, right) =>
+    left.cost - right.cost ||
+    left.derivedIndex - right.derivedIndex ||
+    left.sourceId.localeCompare(right.sourceId) ||
+    left.sourceIndex - right.sourceIndex);
+  const assignment = Array(derivedSamples.length);
+  const usedDerived = new Set();
+  const usedSource = new Set();
+  for (const candidate of candidates) {
+    if (usedDerived.has(candidate.derivedIndex) || usedSource.has(candidate.sourceIndex)) continue;
+    assignment[candidate.derivedIndex] = candidate.sourceIndex;
+    usedDerived.add(candidate.derivedIndex);
+    usedSource.add(candidate.sourceIndex);
+  }
+  const remainingSources = sourceLines
+    .map((sourceLine, sourceIndex) => ({ sourceId: sourceLine?.id ?? "", sourceIndex }))
+    .filter(({ sourceIndex }) => !usedSource.has(sourceIndex))
+    .sort((left, right) => left.sourceId.localeCompare(right.sourceId) || left.sourceIndex - right.sourceIndex);
+  let remainingIndex = 0;
+  for (let derivedIndex = 0; derivedIndex < assignment.length; derivedIndex += 1) {
+    if (assignment[derivedIndex] !== undefined) continue;
+    assignment[derivedIndex] = remainingSources[remainingIndex].sourceIndex;
+    remainingIndex += 1;
+  }
+  return assignment;
+}
+
 const hybridLine = (sourceLine, coordinates) => ({
   id: `hybrid:${sourceLine.id}`,
   geometry: { type: "LineString", coordinates },
@@ -307,10 +355,12 @@ export function convergeDerivedFrontlines(derivedLines, sourceSnapshot, sourceWe
   }
 
   const derivedSamples = derivedLines.map(sampleLineCoordinates);
+  const sourceAssignment = spatialLineAssignment(derivedSamples, sourceSamples, sourceLines);
   const lineTransitions = derivedLines.map((coordinates, index) => {
-    const sourceLine = sourceLines[index];
+    const sourceIndex = sourceAssignment[index];
+    const sourceLine = sourceLines[sourceIndex];
     const from = derivedSamples[index];
-    const to = sourceSamples[index];
+    const to = sourceSamples[sourceIndex];
     if (from && to && (weight === 0 || from.closed === to.closed)) {
       let morphed;
       if (weight === 0) {

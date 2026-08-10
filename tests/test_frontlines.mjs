@@ -250,6 +250,30 @@ test("compatible open fronts converge by index with synthetic metadata", () => {
   assert.ok(result.front_lines[0].geometry.coordinates.every(([x]) => Math.abs(x - 1) < 1e-9));
 });
 
+test("derived convergence spatially matches reversed source fronts deterministically", () => {
+  const derivedLines = [
+    [[0, 0], [0, 2]],
+    [[10, 0], [10, 2]],
+  ];
+  const west = line("west", [[0, 0], [0, 2]]);
+  const east = line("east", [[10, 0], [10, 2]]);
+  const forward = frontlineGeometry.convergeDerivedFrontlines(
+    derivedLines,
+    { front_lines: [west, east] },
+    0.5,
+  );
+  const reversed = frontlineGeometry.convergeDerivedFrontlines(
+    derivedLines,
+    { front_lines: [east, west] },
+    0.5,
+  );
+
+  assert.deepEqual(reversed, forward);
+  assert.deepEqual(reversed.front_lines.map(({ id }) => id), ["hybrid:west", "hybrid:east"]);
+  assert.ok(reversed.front_lines[0].geometry.coordinates.every(([x]) => Math.abs(x) < 1e-9));
+  assert.ok(reversed.front_lines[1].geometry.coordinates.every(([x]) => Math.abs(x - 10) < 1e-9));
+});
+
 test("derived convergence clamps weights without mutation and is deterministic", () => {
   const derivedLines = [[[0, 0], [0, 2]]];
   const sourceSnapshot = { front_lines: [line("main", [[2, 0], [2, 2]])] };

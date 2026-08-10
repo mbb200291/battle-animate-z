@@ -1011,10 +1011,27 @@ export function renderBattle(battle, documentRef = document) {
   const events = new Map(battle.historical_events.map((event) => [event.id, event]));
   const compiled = compileTimeline(battle);
   const initialSample = sampleTimeline(compiled, 0);
+  const frontlinePositionActorIds = new Set(battle.movements.map(({ actor_id: actorId }) => actorId));
+  for (const event of battle.historical_events) {
+    const hasPointPlace = (event.place_ids || []).some((placeId) => {
+      const geometry = places.get(placeId)?.geometry;
+      return geometry?.type === "Point" &&
+        Array.isArray(geometry.coordinates) &&
+        Number.isFinite(geometry.coordinates[0]) &&
+        Number.isFinite(geometry.coordinates[1]);
+    });
+    if (!hasPointPlace) continue;
+    for (const actorId of [...(event.actor_ids || []), ...(event.target_actor_ids || [])]) {
+      frontlinePositionActorIds.add(actorId);
+    }
+  }
+  const frontlinePositions = (positions) => new Map(
+    [...positions].filter(([actorId]) => frontlinePositionActorIds.has(actorId)),
+  );
   const initialDerived = battle.schema_version === "0.4.0"
     && deriveFrontlineFallback({
       actors: battle.actors,
-      positions: initialSample.actorPositions,
+      positions: frontlinePositions(initialSample.actorPositions),
     });
   const derivedPotential = initialDerived
     && new Set(initialDerived.influences.map(({ sideId }) => sideId)).size >= 2;
@@ -1397,7 +1414,11 @@ export function renderBattle(battle, documentRef = document) {
       if (renderLines) {
         for (const id of enclosureIds) {
           const target = frontlineEls.get(`line:${id}`);
-          if (target?.parentNode) enclosureOld.set(id, target.cloneNode(true));
+          if (target?.parentNode) {
+            const clone = target.cloneNode(true);
+            clone.removeAttribute("data-frontline-key");
+            enclosureOld.set(id, clone);
+          }
         }
       }
       const geometry = frontlineGeometry(state);
@@ -1433,6 +1454,7 @@ export function renderBattle(battle, documentRef = document) {
         for (const [key, element] of frontlineEls) {
           if (sameKeyCrossfades.has(key)) {
             const exiting = element.cloneNode(true);
+            exiting.removeAttribute("data-frontline-key");
             exiting.classList.remove("is-front-entering");
             exiting.classList.add("is-front-exiting");
             element.parentNode.append(exiting);
@@ -1547,10 +1569,11 @@ export function renderBattle(battle, documentRef = document) {
   }
 
   function currentDerivedFrontlines(sampled) {
-    const influences = selectFrontlineInfluences(battle.actors, sampled.actorPositions);
+    const positions = frontlinePositions(sampled.actorPositions);
+    const influences = selectFrontlineInfluences(battle.actors, positions);
     return deriveFrontlineFallback({
       actors: battle.actors,
-      positions: sampled.actorPositions,
+      positions,
       bounds: frontlineBounds,
       maxPairDistance: fallbackPairDistance(project, influences, map.getZoom()),
     });
@@ -1635,9 +1658,11 @@ export function renderBattle(battle, documentRef = document) {
     if (!path && !coordinates && sourceCoordinates) {
       const source = frontlineEls.get(`line:${transition.front_line.id}`);
       if (source?.parentNode) {
-        path = source.cloneNode(true);
-        path.setAttribute("class", "front-line is-derived");
-        path.setAttribute("data-frontline-key", lineKey);
+        path = svgEl(documentRef, "path", {
+          class: "front-line is-derived",
+          "data-frontline-key": lineKey,
+          d: source.getAttribute("d"),
+        });
         source.parentNode.append(path);
         frontlineEls.set(lineKey, path);
       }
@@ -1727,7 +1752,6 @@ export function renderBattle(battle, documentRef = document) {
         settleUnusedHybridCrossfades(activeTimerKeys);
         renderSourceFrontlines(sampled, mode, previousSampled);
         const sourceState = controller._frontlineStatus.state;
-        renderInfluences(derived, new Set());
         controller._frontlineStatus = { kind: "source-fallback", state: sourceState };
         return;
       } else {
@@ -2350,7 +2374,6 @@ export function renderBattle(battle, documentRef = document) {
     followEnabled: true,
     trailsEnabled: false,
     modernBordersEnabled: false,
-    FRONTLINE_MODES,
     frontlineMode: "hybrid",
     frontsEnabled: frontlinesAvailable,
     isPlaying: false,
@@ -2818,7 +2841,23 @@ function paddedCoordinateBounds(points) {
   const finite = points.filter((point) =>
     Array.isArray(point) && Number.isFinite(point[0]) && Number.isFinite(point[1]));
   if (!finite.length) return undefined;
-  const longitudes = finite.map(([longitude]) => longitude);
+  const wrappedLongitudes = finite
+    .map(([longitude]) => ((longitude % 360) + 360) % 360)
+    .sort((left, right) => left - right);
+  let largestGapIndex = 0;
+  let largestGap = -Infinity;
+  for (let index = 0; index < wrappedLongitudes.length; index += 1) {
+    const next = index === wrappedLongitudes.length - 1
+      ? wrappedLongitudes[0] + 360
+      : wrappedLongitudes[index + 1];
+    const gap = next - wrappedLongitudes[index];
+    if (gap > largestGap) {
+      largestGap = gap;
+      largestGapIndex = index;
+    }
+  }
+  const anchor = wrappedLongitudes[(largestGapIndex + 1) % wrappedLongitudes.length];
+  const longitudes = wrappedLongitudes.map((longitude) => longitude < anchor ? longitude + 360 : longitude);
   const latitudes = finite.map(([, latitude]) => latitude);
   const minX = Math.min(...longitudes);
   const maxX = Math.max(...longitudes);
