@@ -81,7 +81,9 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 3. 精細度以來源為上限。來源明載的事實直接記錄；低 confidence 不是虛構資料的許可，也不能把臆測變成合法資料。required 欄位不能省略：
    - battle.date 或 historical_events[].time 若只有粗略時間，就以來源支持的 year／month／day／hour／range 粒度填寫；若來源確實未提供時間，使用 label:"時間不詳"、precision:"unknown" 與低 confidence，不要虛構日期。
    - movement.path 既沒有直接來源支持、也不符合下方 inferred 代表性路徑規則時，省略整筆 movement；只有 path 有依據而精確時間不足時，省略選填的 movement.time 與 waypoint_times。
-   - engagement 只有在 attacker、target、action 與 result 都有來源支持時才建立；若任何一項缺少來源支持，整筆 engagement 必須省略。
+   - engagement 只有 attacker_actor_id、target_actor_id 與 type 都有來源直接支持時才建立；result 只有在來源直接支持結果時才填寫。來源未記載結果時省略 result，仍可保留有來源支持的 engagement。
+   - historical_events[].source_ids 必須是非空陣列，outcome.source_ids 必須是非空陣列；每筆 engagement.source_ids 必須是非空陣列，即使 schema 將 engagement.source_ids 列為選填。
+   - movements 沒有 source_ids；每筆 movement 必須由其 event_id 所連結 historical_event 的 source_ids 支持。
 4. inferred movement 只限來源確認單位由 A 到 B 的行動或階段先後順序時使用；標 precision:"inferred"、confidence <= 0.5，座標只是代表位置，不是精確 footprint。
 5. 不得為了動畫平滑而編造單位、事件、時間、轉折點或路徑；降低 confidence 也不能為這些內容創造來源依據。
 6. frontline_snapshots 是選填；沒有直接支持該時刻戰線或控制區的來源時，省略 frontline_snapshots。只有直接支持特定日期／時刻戰線的來源地圖才可建立；沿該來源地圖描繪的幾何可標 precision:"inferred" 且 confidence <= 0.5，source_ids 必須指向該地圖。
@@ -108,18 +110,21 @@ places[]: *id *name *geometry *precision *confidence, wikidata_qid
 historical_events[]: *id *type *title *time *description *actor_ids *place_ids *precision *confidence *source_ids, target_actor_ids
   - type 只能是：advance, retreat, attack, defend, capture, surrender, reinforcement, bombardment, landing, other
   - title 是短標題；description 放完整敘述；time 是物件：*label *precision *confidence, start, end
+  - 每筆 source_ids 必須是非空陣列，且只引用直接支持該事件的來源。
 movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id, to_place_id, time, waypoint_times
   - 每個 movement 都「必須」有 event_id，對應到某個 historical_events.id（否則動畫不會顯示這段移動）。
+  - movements 沒有 source_ids；每筆 movement 必須由其 event_id 所連結 historical_event 的 source_ids 支持。
   - path 是 LineString：{"type":"LineString","coordinates":[[lon,lat],...]}（至少 2 個點）。
   - time 使用與 historical_events.time 相同結構。
   - waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增；每個時間必須落在 movement.time 範圍內。
   - 只有在來源已確認事件確實發生及先後順序時，才能推估代表性路徑或時間；movement 必須標 precision:"inferred"，time.precision 使用 hour／range 等時間粒度，且 time.confidence <= 0.5。
-engagements[]（選填；只有來源明確支持「誰打誰、結果如何」時才提供）:
+engagements[]（選填；只有來源明確支持「誰以何種方式攻擊誰」時才提供）:
   *id *event_id *attacker_actor_id *target_actor_id *type *confidence, result, result_actor_id, at_place_id, time, source_ids
   - type 只能是：fire, bombardment, ram, torpedo, charge, melee, other
-  - result 只能是：hit, miss, damaged, disabled, sunk, repelled, captured, none
+  - result 只能是：hit, miss, damaged, disabled, sunk, repelled, captured, none；只有來源直接支持結果時才填寫。
   - event_id 對應某個 historical_events.id（交火會在該事件顯示）。
-  - attacker、target、type 與 result 任一缺少來源支持時，不要建立該 engagement。
+  - attacker_actor_id、target_actor_id 與 type 都有來源直接支持時才建立 engagement；來源未記載結果時只省略 result，不要刪除其他證據充分的 engagement。
+  - schema 雖將 source_ids 列為選填，本提示詞仍要求每筆 engagement.source_ids 是非空陣列，且只引用直接支持該交戰的來源。
   - 當 result 為 sunk / disabled / captured，用 result_actor_id 指出「被擊沉／失能的是哪個 actor」（不填則預設為 target）。
 frontline_snapshots[]（選填）:
   *id *time *precision *confidence *source_ids, event_id, front_lines, control_areas
@@ -135,6 +140,7 @@ frontline_snapshots[]（選填）:
 outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
   - casualties[] 每項：*side_id *label *confidence, min, max
+  - source_ids 必須是非空陣列，且只引用直接支持結果摘要、勝方與傷亡欄位的來源。
 sources[]: *id *title *url *retrieved_at *license, note
   - 用 retrieved_at（不要用 accessed_at）；不要放 type。
   - retrieved_at 必須填寫實際取得資料的日期（YYYY-MM-DD），不得照抄範例日期。
@@ -165,8 +171,8 @@ animation_hints: *map *style *timeline, camera
    （kind 用 ship / division / brigade…），需要時用 parent_id 歸到上級單位。
 2. 針對來源明確記載的戰役階段，讓師／旅級單位以代表位置建立 movements；每個已記載階段為有移動的單位
    補一條 movement（帶對應的 event_id）。同一單位跨階段保持相同 actor id。不要為了讓動畫連續而新增來源未記載的階段或行動。
-3. 來源明確記載對抗雙方與結果時，才用 engagements 記錄哪個單位打哪個、用什麼方式、結果如何。app 會在對應事件
-   畫出交火線，並讓被擊沉／失能的單位淡出。
+3. 來源明確記載 attacker_actor_id、target_actor_id 與 type 時，才用 engagements 記錄哪個單位以何種方式攻擊哪個單位；
+   result 僅在來源直接支持時填寫。app 會在對應事件畫出交火線，並在有 sunk／disabled／captured 結果時讓相關單位淡出。
 4. 對來源已確認發生及先後順序的事件，可為不同階段建立代表性近似 Point 以避免標記重疊，
    但必須標 inferred + 低 confidence；不得為了畫面效果新增事件。
 5. 陸上師／旅的 Point 或 movement 座標是該時刻的代表位置，不是該單位的精確空間範圍；
@@ -174,13 +180,15 @@ animation_hints: *map *style *timeline, camera
 
 資料來源不限於單一 wiki 條目，可彙整其他百科、條目章節與戰役專文。推估僅限於代表性幾何與時間，
 而且來源已確認事件確實發生及先後順序；凡屬推估，務必標 precision:"inferred" 且 confidence 偏低
-（例如 <= 0.5）。沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略，
-不得用低 confidence 包裝臆測內容。
+（例如 <= 0.5）。沒有來源支持的 actor、engagement 或艦種／兵種分類必須省略；只有 result 缺少來源支持時只省略 result，
+不要壓掉其他證據充分的 engagement，也不得用低 confidence 包裝臆測內容。
 
 ===== 輸出前品質檢查（只在內部執行，不要輸出）=====
 - schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.2.0"。
 - required 欄位、受控 enum、id 參照、GeoJSON 座標順序及 additionalProperties:false 是否全部符合。
-- movement、engagement、actor 分類與 result 是否都有相應來源，推估是否只限代表性幾何與時間且 confidence <= 0.5。
+- historical_events[].source_ids、outcome.source_ids 與每筆 engagement.source_ids 是否都是非空陣列，且只引用直接支持該物件的來源。
+- 每筆 movement 是否由 event_id 所連結 historical_event 的非空 source_ids 支持，而未新增 schema 不允許的 movement.source_ids。
+- engagement 的 attacker_actor_id、target_actor_id 與 type 是否有來源；result 若存在是否有直接來源，若無是否只省略 result；推估是否只限代表性幾何與時間且 confidence <= 0.5。
 - 若輸出 frontline_snapshots，每筆是否有直接支持該時刻戰線或控制區的來源、至少一種合法幾何，且同一實體跨快照使用穩定 id。
 - 是否避免由結果敘述、勝負、包圍或突破等概括文字生成精確戰線或控制區。
 - 是否完全避免把 app 依單位點位推導的戰線寫進 frontline_snapshots。

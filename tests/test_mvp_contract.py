@@ -95,6 +95,24 @@ def frontline_document():
 
 
 class BattleAnimationMvpContractTest(unittest.TestCase):
+    def _readme_prompt_sample(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        prompt_match = re.search(
+            r"## Generate JSON With AI — Battle JSON Prompt 1\.2\.0.*?"
+            r"````text\n(?P<prompt>.*?)\n````",
+            readme,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(prompt_match)
+        prompt = prompt_match.group("prompt")
+        sample_match = re.search(
+            r"===== 輸出格式範本.*?=====\n(?P<json>\{.*?\n\})\n\n===== 資料來源 =====",
+            prompt,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(sample_match)
+        return readme, prompt, json.loads(sample_match.group("json"))
+
     def _minimal_timed_document(self):
         document = deepcopy(json.loads(EXAMPLE.read_text(encoding="utf-8")))
         document["schema_version"] = "0.3.0"
@@ -583,15 +601,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         )
 
     def test_readme_prompt_v12_teaches_hybrid_frontline_evidence(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        prompt_match = re.search(
-            r"## Generate JSON With AI — Battle JSON Prompt 1\.2\.0.*?"
-            r"````text\n(?P<prompt>.*?)\n````",
-            readme,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(prompt_match)
-        prompt = prompt_match.group("prompt")
+        readme, prompt, sample = self._readme_prompt_sample()
 
         for required in (
             "Battle JSON Prompt 1.2.0",
@@ -608,7 +618,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "required 欄位不能省略",
             "省略整筆 movement",
             "也不符合下方 inferred 代表性路徑規則",
-            "若任何一項缺少來源支持，整筆 engagement 必須省略",
+            "engagement 只有 attacker_actor_id、target_actor_id 與 type 都有來源直接支持時才建立",
+            "result 只有在來源直接支持結果時才填寫",
+            "來源未記載結果時省略 result，仍可保留有來源支持的 engagement",
+            "historical_events[].source_ids 必須是非空陣列",
+            "outcome.source_ids 必須是非空陣列",
+            "每筆 engagement.source_ids 必須是非空陣列",
+            "movements 沒有 source_ids；每筆 movement 必須由其 event_id 所連結 historical_event 的 source_ids 支持",
             "waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增",
             "不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱",
             'precision:"inferred"',
@@ -623,7 +639,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "閒置時間壓縮",
             "推估僅限於代表性幾何與時間",
             "來源已確認事件確實發生及先後順序",
-            "沒有來源支持的 actor、engagement、result 或艦種／兵種分類必須省略",
+            "沒有來源支持的 actor、engagement 或艦種／兵種分類必須省略",
+            "只有 result 缺少來源支持時只省略 result",
             "frontline_snapshots[]（選填）",
             "*id *time *precision *confidence *source_ids, event_id, front_lines, control_areas",
             "front_lines[]: *id *geometry",
@@ -652,6 +669,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertNotIn(obsolete, prompt)
         self.assertNotIn('"prompt_version"', prompt)
+        self.assertNotIn("attacker、target、action", prompt)
+        self.assertNotIn("attacker、target、type 與 result 任一缺少來源支持", prompt)
         self.assertNotIn("Battle JSON Prompt 1.1.0", prompt)
         self.assertNotIn("battle_json_prompt_1.1.0", prompt)
         self.assertEqual(set(re.findall(r"confidence <= (0\.\d+)", prompt)), {"0.5"})
@@ -679,21 +698,32 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         for stale_emoji in ("🚢", "⛵", "🪖", "🐎", "💥", "🛡️", "✈️", "🏰", "🚩"):
             self.assertNotIn(stale_emoji, prompt)
 
-        sample_match = re.search(
-            r"===== 輸出格式範本.*?=====\n(?P<json>\{.*?\n\})\n\n===== 資料來源 =====",
-            prompt,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(sample_match)
-        sample = json.loads(sample_match.group("json"))
-        self.assertEqual(validate_document_with_warnings(sample), ([], []))
-
         script = """
-            import { validateBattle } from "./app/animate.js";
+            import { deriveFrontlineFallback } from "./app/frontlines.js";
+            import { compileTimeline, sampleTimeline } from "./app/timeline.js";
             let input = "";
             process.stdin.setEncoding("utf8");
             for await (const chunk of process.stdin) input += chunk;
-            console.log(JSON.stringify(validateBattle(JSON.parse(input))));
+            const battle = JSON.parse(input);
+            const deriveAt = (document) => {
+              const timeline = compileTimeline(document);
+              const presentationMs = timeline.toPresentationTime(Date.parse("1900-01-01T10:30:00Z"));
+              const sampled = sampleTimeline(timeline, presentationMs);
+              const derived = deriveFrontlineFallback({
+                actors: document.actors,
+                positions: sampled.actorPositions,
+              });
+              return {
+                available: derived.available,
+                influences: derived.influences.map(({ actorId, sideId }) => ({ actorId, sideId })),
+                contactLineCount: derived.contactLines.length,
+              };
+            };
+            const mutated = JSON.parse(JSON.stringify(battle));
+            mutated.actors.forEach((actor, index) => {
+              actor.kind = index % 2 === 0 ? "unit" : "ship";
+            });
+            console.log(JSON.stringify({ eligible: deriveAt(battle), mutated: deriveAt(mutated) }));
         """
         result = subprocess.run(
             ["node", "--input-type=module", "-e", script],
@@ -704,31 +734,35 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads(result.stdout), {"errors": [], "warnings": []})
+        production_frontlines = json.loads(result.stdout)
+        eligible = production_frontlines["eligible"]
+        self.assertTrue(eligible["available"])
+        self.assertEqual(len(eligible["influences"]), 4)
+        self.assertEqual({item["sideId"] for item in eligible["influences"]}, {"side_a", "side_b"})
+        self.assertGreater(eligible["contactLineCount"], 0)
+        self.assertEqual(
+            production_frontlines["mutated"],
+            {"available": False, "influences": [], "contactLineCount": 0},
+        )
 
         sides = {side["id"] for side in sample["sides"]}
-        LAND_KINDS = {"army", "corps", "division", "brigade", "regiment"}
-        actors_by_id = {actor["id"]: actor for actor in sample["actors"]}
+        eligible_actor_ids = {item["actorId"] for item in eligible["influences"]}
         for side_id in sides:
             self.assertGreaterEqual(
                 sum(
-                    actor["side_id"] == side_id and actor["kind"] in LAND_KINDS
-                    for actor in sample["actors"]
+                    item["sideId"] == side_id
+                    for item in eligible["influences"]
                 ),
                 2,
             )
 
-        ineligible_sample = deepcopy(sample)
-        for index, actor in enumerate(ineligible_sample["actors"]):
-            actor["kind"] = "unit" if index % 2 == 0 else "ship"
-        self.assertFalse({
-            actor["id"]
-            for actor in ineligible_sample["actors"]
-            if actor["kind"] in LAND_KINDS
-        })
-
         movements_by_actor = {}
+        events_by_id = {event["id"]: event for event in sample["historical_events"]}
+        self.assertTrue(all(event["source_ids"] for event in events_by_id.values()))
+        self.assertTrue(sample["outcome"]["source_ids"])
+        self.assertTrue(all(engagement["source_ids"] for engagement in sample.get("engagements", [])))
         for movement in sample["movements"]:
+            self.assertTrue(events_by_id[movement["event_id"]]["source_ids"])
             self.assertEqual(
                 len(movement["path"]["coordinates"]),
                 len(movement["waypoint_times"]),
@@ -736,7 +770,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             movements_by_actor.setdefault(movement["actor_id"], []).append(movement)
         recurring_actor_ids = []
         for actor_id, movements in movements_by_actor.items():
-            if actors_by_id[actor_id]["kind"] not in LAND_KINDS:
+            if actor_id not in eligible_actor_ids:
                 continue
             ordered = sorted(movements, key=lambda movement: movement["time"]["start"])
             if len(ordered) < 2 or len({movement["event_id"] for movement in ordered}) < 2:
@@ -780,14 +814,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             self.assertIn(required, readme)
 
     def test_readme_embedded_v040_sample_validates_in_python_and_browser(self):
-        readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        sample_match = re.search(
-            r"===== 輸出格式範本.*?=====\n(?P<json>\{.*?\n\})\n\n===== 資料來源 =====",
-            readme,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(sample_match)
-        sample = json.loads(sample_match.group("json"))
+        _readme, _prompt, sample = self._readme_prompt_sample()
 
         errors, warnings = validate_document_with_warnings(sample)
         self.assertEqual(errors, [])
