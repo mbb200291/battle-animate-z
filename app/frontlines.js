@@ -258,18 +258,16 @@ function midpoint(left, right) {
 }
 
 export function selectFrontlineInfluences(actors = [], positions = new Map()) {
+  const eligible = actors.filter(({ kind, id, side_id: sideId }) =>
+    typeof id === "string" &&
+    LAND_KINDS.has(kind) &&
+    typeof sideId === "string" &&
+    isPoint(positions.get(id)));
   const positionedParents = new Set(
-    actors.filter(({ parent_id: parentId, id }) =>
-      typeof parentId === "string" && isPoint(positions.get(id)))
-      .map(({ parent_id: parentId }) => parentId),
+    eligible.map(({ parent_id: parentId }) => parentId).filter((parentId) => typeof parentId === "string"),
   );
-  return actors
-    .filter(({ kind, id, side_id: sideId }) =>
-      typeof id === "string" &&
-      LAND_KINDS.has(kind) &&
-      typeof sideId === "string" &&
-      isPoint(positions.get(id)) &&
-      !positionedParents.has(id))
+  return eligible
+    .filter(({ id }) => !positionedParents.has(id))
     .map(({ id: actorId, side_id: sideId }) => ({
       actorId,
       sideId,

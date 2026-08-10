@@ -237,6 +237,19 @@ test("frontline influences select positioned leaf land units", () => {
   ]);
 });
 
+test("ineligible positioned children do not suppress eligible land parents", () => {
+  const actors = [
+    { id: "corps", side_id: "a", kind: "corps" },
+    { id: "ship", parent_id: "corps", side_id: "a", kind: "ship" },
+    { id: "enemy", side_id: "b", kind: "division" },
+  ];
+  const positions = new Map([["corps", [0, 0]], ["ship", [1, 0]], ["enemy", [4, 0]]]);
+
+  assert.deepEqual(selectFrontlineInfluences(actors, positions).map(({ actorId }) => actorId), [
+    "corps", "enemy",
+  ]);
+});
+
 test("fallback is unavailable unless eligible land influences occupy exactly two sides", () => {
   const oneSide = deriveFrontlineFallback({
     actors: [{ id: "a", side_id: "a", kind: "division" }],
