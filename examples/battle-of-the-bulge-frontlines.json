@@ -59,36 +59,8 @@
       "confidence": 0.85
     },
     {
-      "id": "actor_us_2_infantry",
-      "name": "U.S. 2nd Infantry Division",
-      "side_id": "side_allied",
-      "kind": "division",
-      "confidence": 0.85
-    },
-    {
-      "id": "actor_us_99_infantry",
-      "name": "U.S. 99th Infantry Division",
-      "side_id": "side_allied",
-      "kind": "division",
-      "confidence": 0.85
-    },
-    {
-      "id": "actor_us_106_infantry",
-      "name": "U.S. 106th Infantry Division",
-      "side_id": "side_allied",
-      "kind": "division",
-      "confidence": 0.85
-    },
-    {
       "id": "actor_us_7_armored",
       "name": "U.S. 7th Armored Division",
-      "side_id": "side_allied",
-      "kind": "division",
-      "confidence": 0.85
-    },
-    {
-      "id": "actor_us_28_infantry",
-      "name": "U.S. 28th Infantry Division",
       "side_id": "side_allied",
       "kind": "division",
       "confidence": 0.85
@@ -380,7 +352,7 @@
       "url": "https://commons.wikimedia.org/wiki/File:Wacht_am_Rhein_map_(original).svg",
       "retrieved_at": "2026-08-11",
       "license": "CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)",
-      "note": "Grandiose derivative map based on the public-domain U.S. military File:P23(map).jpg. The legend directly distinguishes front lines dated 16, 20, and 25 December 1944, labels Allied divisions and German corps, and depicts movement arrows. JSON frontline_snapshots are coarse source-map traces, while movement coordinates are low-confidence representative traces of depicted axes; the SVG is not treated as georeferenced and does not state a map projection. App runtime-derived lines are analytical renderings from actor positions and are not serialized in this JSON. No control-area polygons are asserted."
+      "note": "Grandiose derivative map based on the public-domain U.S. military File:P23(map).jpg. The legend directly distinguishes front lines dated 16, 20, and 25 December 1944, labels Allied divisions and German corps, and depicts movement arrows. JSON frontline_snapshots are coarse source-map traces, while movement coordinates are low-confidence representative traces of depicted axes; the SVG is not treated as georeferenced and does not state a map projection. App runtime-derived lines are analytical renderings from actor positions and are not serialized in this JSON. The fixture retains only formations with explicit movement placement, favoring evidence over unit density. No control-area polygons are asserted."
     },
     {
       "id": "source_us_army_ardennes_alsace",
@@ -401,11 +373,7 @@
       "side_colors": {"side_allied": "#2f6fb5", "side_german": "#b84a3a"},
       "actor_icons": {
         "actor_us_30_infantry": "infantry",
-        "actor_us_2_infantry": "infantry",
-        "actor_us_99_infantry": "infantry",
-        "actor_us_106_infantry": "infantry",
         "actor_us_7_armored": "armor",
-        "actor_us_28_infantry": "infantry",
         "actor_german_1_ss_panzer_corps": "armor",
         "actor_german_66_corps": "infantry",
         "actor_german_58_panzer_corps": "armor",

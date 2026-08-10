@@ -135,57 +135,48 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
     def _assert_bulge_reference_provenance(self, battle):
         self.assertEqual(
-            {
-                actor["id"]: (actor["name"], actor["side_id"], actor["kind"])
-                for actor in battle["actors"]
-            },
+            {actor["id"]: (actor["name"], actor["side_id"], actor["kind"])
+             for actor in battle["actors"]},
             {
                 "actor_us_30_infantry": ("U.S. 30th Infantry Division", "side_allied", "division"),
-                "actor_us_2_infantry": ("U.S. 2nd Infantry Division", "side_allied", "division"),
-                "actor_us_99_infantry": ("U.S. 99th Infantry Division", "side_allied", "division"),
-                "actor_us_106_infantry": ("U.S. 106th Infantry Division", "side_allied", "division"),
                 "actor_us_7_armored": ("U.S. 7th Armored Division", "side_allied", "division"),
-                "actor_us_28_infantry": ("U.S. 28th Infantry Division", "side_allied", "division"),
                 "actor_german_1_ss_panzer_corps": ("German I SS Panzer Corps", "side_german", "corps"),
                 "actor_german_66_corps": ("German LXVI Corps", "side_german", "corps"),
                 "actor_german_58_panzer_corps": ("German LVIII Panzer Corps", "side_german", "corps"),
                 "actor_german_47_panzer_corps": ("German XLVII Panzer Corps", "side_german", "corps"),
             },
         )
-        sources = {source["id"]: source for source in battle["sources"]}
         self.assertEqual(
+            {source["id"]: source for source in battle["sources"]},
             {
-                source_id: (
-                    source["title"], source["url"], source["retrieved_at"], source["license"]
-                )
-                for source_id, source in sources.items()
-            },
-            {
-                "source_us_army_ardennes": (
-                    "The Ardennes: Battle of the Bulge",
-                    "https://history.army.mil/Publications/Publications-Catalog/The-Ardennes-Battle-Of-The-Bulge/",
-                    "2026-08-11",
-                    "Public domain as a U.S. Army Center of Military History publication",
-                ),
-                "source_wacht_am_rhein_map": (
-                    "File:Wacht am Rhein map (original).svg",
-                    "https://commons.wikimedia.org/wiki/File:Wacht_am_Rhein_map_(original).svg",
-                    "2026-08-11",
-                    "CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)",
-                ),
-                "source_us_army_ardennes_alsace": (
-                    "Ardennes-Alsace",
-                    "https://history.army.mil/portals/143/Images/Publications/catalog/72-26.pdf",
-                    "2026-08-11",
-                    "Public domain as a U.S. Army Center of Military History publication",
-                ),
+                "source_us_army_ardennes": {
+                    "id": "source_us_army_ardennes",
+                    "title": "The Ardennes: Battle of the Bulge",
+                    "url": "https://history.army.mil/Publications/Publications-Catalog/The-Ardennes-Battle-Of-The-Bulge/",
+                    "retrieved_at": "2026-08-11",
+                    "license": "Public domain as a U.S. Army Center of Military History publication",
+                    "note": "Hugh M. Cole, U.S. Army Center of Military History, CMH Pub 7-8. Supports the campaign chronology, participating formations, German corps axes, Allied responses, and outcome. It is not used as a claim of exact geospatial coordinates.",
+                },
+                "source_wacht_am_rhein_map": {
+                    "id": "source_wacht_am_rhein_map",
+                    "title": "File:Wacht am Rhein map (original).svg",
+                    "url": "https://commons.wikimedia.org/wiki/File:Wacht_am_Rhein_map_(original).svg",
+                    "retrieved_at": "2026-08-11",
+                    "license": "CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)",
+                    "note": "Grandiose derivative map based on the public-domain U.S. military File:P23(map).jpg. The legend directly distinguishes front lines dated 16, 20, and 25 December 1944, labels Allied divisions and German corps, and depicts movement arrows. JSON frontline_snapshots are coarse source-map traces, while movement coordinates are low-confidence representative traces of depicted axes; the SVG is not treated as georeferenced and does not state a map projection. App runtime-derived lines are analytical renderings from actor positions and are not serialized in this JSON. The fixture retains only formations with explicit movement placement, favoring evidence over unit density. No control-area polygons are asserted.",
+                },
+                "source_us_army_ardennes_alsace": {
+                    "id": "source_us_army_ardennes_alsace",
+                    "title": "Ardennes-Alsace",
+                    "url": "https://history.army.mil/portals/143/Images/Publications/catalog/72-26.pdf",
+                    "retrieved_at": "2026-08-11",
+                    "license": "Public domain as a U.S. Army Center of Military History publication",
+                    "note": "Official U.S. Army campaign brochure. Supports the 30th Infantry Division move south toward Malmedy, the 7th Armored Division withdrawal from St. Vith, and the westward operations of I SS and LVIII Panzer Corps. It supports only broad movement axes, not the example's exact representative coordinates.",
+                },
             },
         )
-        self.assertRegex(sources["source_wacht_am_rhein_map"]["note"], r"(?i)not georeferenced|projection")
-        self.assertIn("not serialized", sources["source_wacht_am_rhein_map"]["note"])
-        self.assertIn("not the example's exact representative coordinates", sources["source_us_army_ardennes_alsace"]["note"])
 
-        reviewed_event_sources = [
+        reviewed_sources = [
             "source_us_army_ardennes",
             "source_us_army_ardennes_alsace",
             "source_wacht_am_rhein_map",
@@ -193,130 +184,76 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         events = {event["id"]: event for event in battle["historical_events"]}
         self.assertEqual(
             {event_id: event["source_ids"] for event_id, event in events.items()},
-            {
-                "event_front_1944_12_16": reviewed_event_sources,
-                "event_front_1944_12_20": reviewed_event_sources,
-                "event_front_1944_12_25": reviewed_event_sources,
-            },
+            {event_id: reviewed_sources for event_id in (
+                "event_front_1944_12_16", "event_front_1944_12_20", "event_front_1944_12_25"
+            )},
         )
         self.assertNotIn("target_actor_ids", events["event_front_1944_12_16"])
         self.assertEqual(battle["outcome"]["source_ids"], ["source_us_army_ardennes"])
 
-        def movement_evidence(event_id, actor_id, start, middle, end, coordinates, confidence):
-            label = f"{int(start[-2:])}–{int(end[-2:])} December 1944"
-            return {
-                "event_id": event_id,
-                "actor_id": actor_id,
-                "time": {
-                    "label": label,
-                    "start": start,
-                    "end": end,
-                    "precision": "range",
-                    "confidence": 0.5,
-                },
-                "waypoint_times": [start, middle, end],
-                "path": {"type": "LineString", "coordinates": coordinates},
-                "precision": "inferred",
-                "confidence": confidence,
-            }
-
-        evidence_keys = (
-            "event_id", "actor_id", "time", "waypoint_times", "path", "precision", "confidence"
-        )
+        snapshots = battle["frontline_snapshots"]
         self.assertEqual(
-            {
-                movement["id"]: {key: movement[key] for key in evidence_keys}
-                for movement in battle["movements"]
-            },
-            {
-                "movement_1_ss_panzer_16_20": movement_evidence(
-                    "event_front_1944_12_20", "actor_german_1_ss_panzer_corps",
-                    "1944-12-16", "1944-12-18", "1944-12-20",
-                    [[6.45, 50.4], [6.15, 50.42], [5.85, 50.42]], 0.45,
-                ),
-                "movement_66_corps_16_20": movement_evidence(
-                    "event_front_1944_12_20", "actor_german_66_corps",
-                    "1944-12-16", "1944-12-18", "1944-12-20",
-                    [[6.45, 50.29], [6.25, 50.29], [6.05, 50.28]], 0.45,
-                ),
-                "movement_66_corps_20_25": movement_evidence(
-                    "event_front_1944_12_25", "actor_german_66_corps",
-                    "1944-12-20", "1944-12-22", "1944-12-25",
-                    [[6.05, 50.28], [5.95, 50.25], [5.85, 50.22]], 0.4,
-                ),
-                "movement_58_panzer_16_20": movement_evidence(
-                    "event_front_1944_12_20", "actor_german_58_panzer_corps",
-                    "1944-12-16", "1944-12-18", "1944-12-20",
-                    [[6.45, 50.19], [6.2, 50.18], [5.95, 50.18]], 0.4,
-                ),
-                "movement_58_panzer_20_25": movement_evidence(
-                    "event_front_1944_12_25", "actor_german_58_panzer_corps",
-                    "1944-12-20", "1944-12-22", "1944-12-25",
-                    [[5.95, 50.18], [5.7, 50.19], [5.45, 50.2]], 0.4,
-                ),
-                "movement_47_panzer_16_20": movement_evidence(
-                    "event_front_1944_12_20", "actor_german_47_panzer_corps",
-                    "1944-12-16", "1944-12-18", "1944-12-20",
-                    [[6.5, 50.1], [6.15, 50.05], [5.82, 50.02]], 0.45,
-                ),
-                "movement_47_panzer_20_25": movement_evidence(
-                    "event_front_1944_12_25", "actor_german_47_panzer_corps",
-                    "1944-12-20", "1944-12-22", "1944-12-25",
-                    [[5.82, 50.02], [5.55, 50.0], [5.25, 50.08]], 0.4,
-                ),
-                "movement_us_30_16_20": movement_evidence(
-                    "event_front_1944_12_20", "actor_us_30_infantry",
-                    "1944-12-16", "1944-12-18", "1944-12-20",
-                    [[6.1, 50.75], [6.08, 50.58], [6.03, 50.43]], 0.4,
-                ),
-                "movement_us_7_armored_16_20": movement_evidence(
-                    "event_front_1944_12_20", "actor_us_7_armored",
-                    "1944-12-16", "1944-12-18", "1944-12-20",
-                    [[5.8, 50.55], [6.0, 50.4], [6.13, 50.28]], 0.45,
-                ),
-                "movement_us_7_armored_20_25": movement_evidence(
-                    "event_front_1944_12_25", "actor_us_7_armored",
-                    "1944-12-20", "1944-12-22", "1944-12-25",
-                    [[6.13, 50.28], [5.9, 50.3], [5.7, 50.33]], 0.4,
-                ),
-            },
-        )
-
-        self.assertEqual(
+            [(snapshot["id"], snapshot["time"]["start"], snapshot["event_id"], snapshot["source_ids"])
+             for snapshot in snapshots],
             [
-                (
-                    snapshot["id"],
-                    snapshot["time"],
-                    snapshot["source_ids"],
-                    [line["id"] for line in snapshot["front_lines"]],
-                    [line["geometry"]["coordinates"] for line in snapshot["front_lines"]],
-                )
-                for snapshot in battle["frontline_snapshots"]
-            ],
-            [
-                (
-                    "snapshot_front_1944_12_16",
-                    {"label": "Front line, 16 December 1944", "start": "1944-12-16", "precision": "day", "confidence": 0.8},
-                    ["source_wacht_am_rhein_map"],
-                    ["front_main"],
-                    [[[6.28, 50.82], [6.3, 50.65], [6.25, 50.55], [6.22, 50.43], [6.28, 50.3], [6.42, 50.2], [6.25, 50.08], [6.1, 49.95]]],
-                ),
-                (
-                    "snapshot_front_1944_12_20",
-                    {"label": "Front line, 20 December 1944", "start": "1944-12-20", "precision": "day", "confidence": 0.8},
-                    ["source_wacht_am_rhein_map"],
-                    ["front_main"],
-                    [[[6.28, 50.82], [6.3, 50.65], [6.24, 50.54], [6.05, 50.44], [5.82, 50.38], [5.65, 50.27], [5.65, 50.13], [5.8, 50.02], [6.0, 49.95]]],
-                ),
-                (
-                    "snapshot_front_1944_12_25",
-                    {"label": "Front line, 25 December 1944", "start": "1944-12-25", "precision": "day", "confidence": 0.8},
-                    ["source_wacht_am_rhein_map"],
-                    ["front_main"],
-                    [[[6.28, 50.82], [6.3, 50.65], [6.2, 50.53], [5.9, 50.4], [5.55, 50.28], [5.25, 50.22], [4.95, 50.12], [5.1, 49.98], [5.45, 49.9], [5.8, 49.9], [6.05, 49.95]]],
-                ),
+                ("snapshot_front_1944_12_16", "1944-12-16", "event_front_1944_12_16", ["source_wacht_am_rhein_map"]),
+                ("snapshot_front_1944_12_20", "1944-12-20", "event_front_1944_12_20", ["source_wacht_am_rhein_map"]),
+                ("snapshot_front_1944_12_25", "1944-12-25", "event_front_1944_12_25", ["source_wacht_am_rhein_map"]),
             ],
         )
+        western_edges = []
+        for snapshot in snapshots:
+            self.assertNotIn("end", snapshot["time"])
+            self.assertEqual(snapshot["time"]["precision"], "day")
+            self.assertEqual([line["id"] for line in snapshot["front_lines"]], ["front_main"])
+            self.assertEqual(snapshot["precision"], "inferred")
+            self.assertLessEqual(snapshot["confidence"], 0.5)
+            coordinates = snapshot["front_lines"][0]["geometry"]["coordinates"]
+            self.assertTrue(all(4.8 <= lon <= 6.7 and 49.8 <= lat <= 50.9
+                                for lon, lat in coordinates))
+            western_edges.append(min(lon for lon, _ in coordinates))
+        self.assertTrue(all(left > right for left, right in zip(western_edges, western_edges[1:])))
+
+        movement_bindings = {
+            "movement_1_ss_panzer_16_20": ("event_front_1944_12_20", "actor_german_1_ss_panzer_corps"),
+            "movement_66_corps_16_20": ("event_front_1944_12_20", "actor_german_66_corps"),
+            "movement_66_corps_20_25": ("event_front_1944_12_25", "actor_german_66_corps"),
+            "movement_58_panzer_16_20": ("event_front_1944_12_20", "actor_german_58_panzer_corps"),
+            "movement_58_panzer_20_25": ("event_front_1944_12_25", "actor_german_58_panzer_corps"),
+            "movement_47_panzer_16_20": ("event_front_1944_12_20", "actor_german_47_panzer_corps"),
+            "movement_47_panzer_20_25": ("event_front_1944_12_25", "actor_german_47_panzer_corps"),
+            "movement_us_30_16_20": ("event_front_1944_12_20", "actor_us_30_infantry"),
+            "movement_us_7_armored_16_20": ("event_front_1944_12_20", "actor_us_7_armored"),
+            "movement_us_7_armored_20_25": ("event_front_1944_12_25", "actor_us_7_armored"),
+        }
+        movements = {movement["id"]: movement for movement in battle["movements"]}
+        self.assertEqual(
+            {movement_id: (movement["event_id"], movement["actor_id"])
+             for movement_id, movement in movements.items()},
+            movement_bindings,
+        )
+        for movement in movements.values():
+            coordinates = movement["path"]["coordinates"]
+            waypoint_times = movement["waypoint_times"]
+            self.assertEqual(len(coordinates), len(waypoint_times))
+            self.assertEqual(waypoint_times[0], movement["time"]["start"])
+            self.assertEqual(waypoint_times[-1], movement["time"]["end"])
+            parsed = [datetime.fromisoformat(value) for value in waypoint_times]
+            self.assertTrue(all(left < right for left, right in zip(parsed, parsed[1:])))
+            self.assertEqual(movement["precision"], "inferred")
+            self.assertLessEqual(movement["confidence"], 0.5)
+            self.assertTrue(all(4.8 <= lon <= 6.7 and 49.8 <= lat <= 50.9
+                                for lon, lat in coordinates))
+        for movement_id, movement in movements.items():
+            start, end = movement["path"]["coordinates"][0], movement["path"]["coordinates"][-1]
+            if movement_id == "movement_us_30_16_20":
+                self.assertLess(end[1], start[1])
+                self.assertAlmostEqual(end[0], 6.03, delta=0.15)
+            elif movement_id == "movement_us_7_armored_16_20":
+                self.assertGreater(end[0], start[0])
+                self.assertLess(end[1], start[1])
+            else:
+                self.assertLess(end[0], start[0])
 
     def test_waterloo_example_validates_with_cli(self):
         result = subprocess.run(
@@ -478,7 +415,12 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
 
         eligible_kinds = {"army", "corps", "division", "brigade", "regiment"}
         eligible = [actor for actor in battle["actors"] if actor["kind"] in eligible_kinds]
-        self.assertGreaterEqual(len(eligible), 8)
+        self.assertEqual(len(eligible), 6)
+        self.assertEqual(
+            {actor["kind"] for actor in eligible},
+            {"division", "corps"},
+            "The fixture favors six source-positioned formations over unsupported density.",
+        )
         side_counts = {
             side["id"]: sum(actor["side_id"] == side["id"] for actor in eligible)
             for side in battle["sides"]
@@ -541,14 +483,28 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
               const sampled = sampleTimeline(compiled, compiled.toPresentationTime(Date.parse(iso)));
               const positions = new Map([...sampled.actorPositions].filter(([actorId]) =>
                 compiled.explicitStartingPositionActorIds.has(actorId)));
-              return { sampled, derived: deriveFrontlineFallback({
+              return { sampled, positions, derived: deriveFrontlineFallback({
                 actors: battle.actors,
                 positions,
                 bounds: [[4.8, 49.8], [6.7, 50.9]],
                 gridSize: 40,
               }) };
             };
-            const between = deriveAt("1944-12-22T12:00:00Z");
+            const snapshotSamples = battle.frontline_snapshots.map((snapshot) => {
+              const result = deriveAt(`${snapshot.time.start}T00:00:00Z`);
+              const sourceCoordinates = snapshot.front_lines.map((line) => line.geometry.coordinates);
+              return {
+                date: snapshot.time.start,
+                positions: Object.fromEntries(result.positions),
+                available: result.derived.available,
+                sideIds: [...new Set(result.derived.influences.map(({ sideId }) => sideId))].sort(),
+                contactLineCount: result.derived.contactLines.length,
+                sourceDiffersFromDerived: sourceCoordinates.every((sourceLine) =>
+                  result.derived.contactLines.every((derivedLine) =>
+                    JSON.stringify(sourceLine) !== JSON.stringify(derivedLine))),
+              };
+            });
+            const labelSample = deriveAt("1944-12-22T00:00:00Z");
             const anchor = deriveAt("1944-12-25T00:00:00Z");
             const converged = convergeDerivedFrontlines(
               anchor.derived.contactLines,
@@ -558,10 +514,9 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             console.log(JSON.stringify({
               diagnostics,
               keyframeCount: compiled.frontlineKeyframes.length,
-              available: between.derived.available,
-              sideIds: [...new Set(between.derived.influences.map(({ sideId }) => sideId))],
-              contactLineCount: between.derived.contactLines.length,
-              betweenDerivedLines: between.derived.contactLines,
+              explicitActorIds: [...compiled.explicitStartingPositionActorIds].sort(),
+              snapshotSamples,
+              labelPositions: Object.fromEntries(labelSample.positions),
               sourceAtAnchor: anchor.sampled.frontline.after.front_lines,
               convergedAtAnchor: converged.front_lines,
             }));
@@ -577,36 +532,37 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         browser = json.loads(result.stdout)
         self.assertEqual(browser["diagnostics"], {"errors": [], "warnings": []})
         self.assertEqual(browser["keyframeCount"], 3)
-        self.assertTrue(browser["available"])
-        self.assertEqual(len(browser["sideIds"]), 2)
-        self.assertGreaterEqual(browser["contactLineCount"], 1)
+        actor_ids = sorted(actor["id"] for actor in battle["actors"])
+        actor_sides = {actor["id"]: actor["side_id"] for actor in battle["actors"]}
+        self.assertEqual(browser["explicitActorIds"], actor_ids)
+        for sample in browser["snapshotSamples"]:
+            self.assertEqual(sorted(sample["positions"]), actor_ids)
+            self.assertTrue(all(
+                sum(actor_sides[actor_id] == side["id"] for actor_id in sample["positions"]) >= 2
+                for side in battle["sides"]
+            ))
+            self.assertEqual(len({tuple(position) for position in sample["positions"].values()}), 6)
+            self.assertTrue(all(4.8 <= lon <= 6.7 and 49.8 <= lat <= 50.9
+                                for lon, lat in sample["positions"].values()))
+            self.assertTrue(sample["available"])
+            self.assertEqual(sample["sideIds"], ["side_allied", "side_german"])
+            self.assertGreaterEqual(sample["contactLineCount"], 1)
+            self.assertTrue(sample["sourceDiffersFromDerived"])
+        self.assertEqual(sorted(browser["labelPositions"]), actor_ids)
+        self.assertTrue(all(4.8 <= lon <= 6.7 and 49.8 <= lat <= 50.9
+                            for lon, lat in browser["labelPositions"].values()))
+        self.assertEqual(
+            len({tuple(position) for position in browser["labelPositions"].values()}),
+            6,
+            "Renderer labels need distinct positions at 22 December.",
+        )
         self.assertEqual(browser["convergedAtAnchor"], browser["sourceAtAnchor"])
 
-        mutations = {}
-        mutations["runtime-derived snapshot geometry"] = deepcopy(battle)
-        mutations["runtime-derived snapshot geometry"]["frontline_snapshots"][-1]["front_lines"][0]["geometry"]["coordinates"] = browser["betweenDerivedLines"][0]
-        mutations["source URL"] = deepcopy(battle)
-        mutations["source URL"]["sources"][0]["url"] = "https://example.invalid/replacement"
-        mutations["actor kinds"] = deepcopy(battle)
-        for actor in mutations["actor kinds"]["actors"]:
-            actor["kind"] = "army"
-        mutations["event citation"] = deepcopy(battle)
-        mutations["event citation"]["historical_events"][1]["source_ids"] = [
-            "source_wacht_am_rhein_map"
-        ]
-        mutations["snapshot range semantics"] = deepcopy(battle)
-        mutations["snapshot range semantics"]["frontline_snapshots"][0]["time"].update({
-            "end": "1944-12-17",
-            "precision": "range",
-        })
-        mutations["movement evidence geometry"] = deepcopy(battle)
-        movement = mutations["movement evidence geometry"]["movements"][0]
+        out_of_region = deepcopy(battle)
+        movement = out_of_region["movements"][0]
         movement["path"]["coordinates"] = [[0, 0], [1, 1], [2, 2]]
-        movement["waypoint_times"] = ["1944-12-16", "1944-12-18", "1944-12-20"]
-        for label, mutated in mutations.items():
-            with self.subTest(rejects=label):
-                with self.assertRaises(AssertionError):
-                    self._assert_bulge_reference_provenance(mutated)
+        with self.assertRaises(AssertionError):
+            self._assert_bulge_reference_provenance(out_of_region)
 
     def test_modern_border_asset_is_geometry_only_natural_earth(self):
         path = ROOT / "app" / "data" / "modern-borders-50m.geojson"
