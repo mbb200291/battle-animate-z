@@ -162,6 +162,45 @@ function ringArc(unique, start, end) {
   return arc;
 }
 
+function scoreRingArcCorrespondence(open, ring, start, end) {
+  const size = ring.length;
+  const edgeLength = (index) => {
+    const next = (index + 1) % size;
+    return Math.hypot(
+      deltaLongitude(ring[index][0], ring[next][0]),
+      ring[next][1] - ring[index][1],
+    );
+  };
+  let totalLength = 0;
+  for (let index = start; index !== end; index = (index + 1) % size) {
+    totalLength += edgeLength(index);
+  }
+  if (!(totalLength > 0) || !Number.isFinite(totalLength)) return Infinity;
+
+  let cost = 0;
+  let segment = start;
+  let segmentStart = 0;
+  let segmentLength = edgeLength(segment);
+  for (let sample = 0; sample < open.length; sample += 1) {
+    const distance = totalLength * sample / (open.length - 1);
+    while (segment !== end && segmentStart + segmentLength < distance) {
+      segmentStart += segmentLength;
+      segment = (segment + 1) % size;
+      segmentLength = edgeLength(segment);
+    }
+    const next = (segment + 1) % size;
+    const progress = segmentLength ? (distance - segmentStart) / segmentLength : 0;
+    const longitude = wrapLongitude(ring[segment][0] +
+      deltaLongitude(ring[segment][0], ring[next][0]) * progress);
+    const latitude = ring[segment][1] + (ring[next][1] - ring[segment][1]) * progress;
+    cost += deltaLongitude(open[sample][0], longitude) ** 2 +
+      (open[sample][1] - latitude) ** 2;
+  }
+  return cost +
+    deltaLongitude(open[0][0], ring[start][0]) ** 2 + (open[0][1] - ring[start][1]) ** 2 +
+    deltaLongitude(open.at(-1)[0], ring[end][0]) ** 2 + (open.at(-1)[1] - ring[end][1]) ** 2;
+}
+
 function alignOpenLineToRing(open, ring) {
   const unique = ring.slice(0, -1);
   let best = null;
@@ -170,18 +209,19 @@ function alignOpenLineToRing(open, ring) {
     for (let start = 0; start < direction.length; start += 1) {
       for (let end = 0; end < direction.length; end += 1) {
         if (start === end) continue;
-        const body = resampleLine(ringArc(direction, start, end), open.length);
-        if (!body.length) continue;
-        const cost = correspondenceCost(open, body) +
-          correspondenceCost([open[0], open.at(-1)], [body[0], body.at(-1)]);
+        const cost = scoreRingArcCorrespondence(open, direction, start, end);
         if (cost < bestCost) {
-          best = { body, closure: ringArc(direction, end, start) };
+          best = { direction, start, end };
           bestCost = cost;
         }
       }
     }
   }
-  return best;
+  if (!best) return null;
+  return {
+    body: resampleLine(ringArc(best.direction, best.start, best.end), open.length),
+    closure: ringArc(best.direction, best.end, best.start),
+  };
 }
 
 function partialArc(points, progress) {

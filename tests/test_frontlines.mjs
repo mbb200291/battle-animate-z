@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import * as frontlineGeometry from "../app/frontlines.js";
@@ -248,6 +249,17 @@ test("concave target alignment uses the global endpoint and body correspondence 
     [4.209818587917273, 1.599336310037185],
     [-2.0697901393123903, 2.6422873338651027],
   ]);
+});
+
+test("global ring candidate scoring does not allocate or resample candidate arcs", () => {
+  const source = readFileSync(new URL("../app/frontlines.js", import.meta.url), "utf8");
+  const alignment = source.slice(
+    source.indexOf("function alignOpenLineToRing"),
+    source.indexOf("function partialArc"),
+  );
+  assert.equal((alignment.match(/resampleLine\(/g) || []).length, 1);
+  assert.equal((alignment.match(/ringArc\(/g) || []).length, 2);
+  assert.match(alignment, /scoreRingArcCorrespondence\(open, direction, start, end\)/);
 });
 
 test("stable open-to-closed interpolation is dateline safe", () => {
