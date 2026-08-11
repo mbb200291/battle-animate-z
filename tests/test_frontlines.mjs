@@ -5,6 +5,8 @@ import test from "node:test";
 import * as frontlineGeometry from "../app/frontlines.js";
 import {
   deriveFrontlineFallback,
+  _frontlineAlignmentCacheStats,
+  _resetFrontlineAlignmentCache,
   interpolateFrontlineSnapshots,
   isClosedFrontline,
   resampleLine,
@@ -255,11 +257,36 @@ test("global ring candidate scoring does not allocate or resample candidate arcs
   const source = readFileSync(new URL("../app/frontlines.js", import.meta.url), "utf8");
   const alignment = source.slice(
     source.indexOf("function alignOpenLineToRing"),
-    source.indexOf("function partialArc"),
+    source.indexOf("function prepareOpenToClosed"),
   );
   assert.equal((alignment.match(/resampleLine\(/g) || []).length, 1);
   assert.equal((alignment.match(/ringArc\(/g) || []).length, 2);
   assert.match(alignment, /scoreRingArcCorrespondence\(open, direction, start, end\)/);
+});
+
+test("stable geometry reuses one alignment while content mutation invalidates the bounded cache", () => {
+  _resetFrontlineAlignmentCache();
+  const before = { front_lines: [line("pocket", [[0, 0], [2, 0], [2, 2]])] };
+  const after = { front_lines: [line("pocket", [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]])] };
+  const first = interpolateFrontlineSnapshots(before, after, 0.25).interpolatedLines[0].geometry.coordinates;
+  interpolateFrontlineSnapshots(before, after, 0.5);
+  interpolateFrontlineSnapshots(structuredClone(before), structuredClone(after), 0.75);
+  assert.deepEqual(_frontlineAlignmentCacheStats(), { misses: 1, size: 1 });
+  assert.deepEqual(
+    interpolateFrontlineSnapshots(before, after, 0.25).interpolatedLines[0].geometry.coordinates,
+    first,
+  );
+
+  before.front_lines[0].geometry.coordinates[1][0] = 3;
+  interpolateFrontlineSnapshots(before, after, 0.5);
+  assert.deepEqual(_frontlineAlignmentCacheStats(), { misses: 2, size: 2 });
+
+  for (let index = 0; index < 20; index += 1) {
+    const shifted = structuredClone(before);
+    shifted.front_lines[0].geometry.coordinates[0][0] = index + 10;
+    interpolateFrontlineSnapshots(shifted, after, 0.5);
+  }
+  assert.equal(_frontlineAlignmentCacheStats().size, 16);
 });
 
 test("stable open-to-closed interpolation is dateline safe", () => {

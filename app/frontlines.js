@@ -6,6 +6,18 @@ const PRECISION_RANK = new Map([
   ["disputed", 3],
   ["unknown", 4],
 ]);
+const OPEN_RING_ALIGNMENT_CACHE_LIMIT = 16;
+const openRingAlignmentCache = new Map();
+let openRingAlignmentCacheMisses = 0;
+
+export function _frontlineAlignmentCacheStats() {
+  return { misses: openRingAlignmentCacheMisses, size: openRingAlignmentCache.size };
+}
+
+export function _resetFrontlineAlignmentCache() {
+  openRingAlignmentCache.clear();
+  openRingAlignmentCacheMisses = 0;
+}
 
 function denseEvery(array, predicate) {
   if (!Array.isArray(array)) return false;
@@ -224,6 +236,26 @@ function alignOpenLineToRing(open, ring) {
   };
 }
 
+function prepareOpenToClosed(openCoordinates, ringCoordinates) {
+  const key = JSON.stringify([openCoordinates, ringCoordinates]);
+  const cached = openRingAlignmentCache.get(key);
+  if (cached) {
+    openRingAlignmentCache.delete(key);
+    openRingAlignmentCache.set(key, cached);
+    return cached;
+  }
+  const open = resampleLine(openCoordinates);
+  const ring = resampleRing(ringCoordinates);
+  const target = open.length && ring.length ? alignOpenLineToRing(open, ring) : null;
+  const prepared = { open, ring, target };
+  openRingAlignmentCache.set(key, prepared);
+  openRingAlignmentCacheMisses += 1;
+  if (openRingAlignmentCache.size > OPEN_RING_ALIGNMENT_CACHE_LIMIT) {
+    openRingAlignmentCache.delete(openRingAlignmentCache.keys().next().value);
+  }
+  return prepared;
+}
+
 function partialArc(points, progress) {
   const sampled = resampleLine(points, 33);
   if (!sampled.length) return [];
@@ -237,12 +269,10 @@ function partialArc(points, progress) {
 }
 
 function interpolateOpenToClosed(openCoordinates, ringCoordinates, progress) {
-  const open = resampleLine(openCoordinates);
-  const ring = resampleRing(ringCoordinates);
+  if (progress <= 0) return resampleLine(openCoordinates).map((point) => [...point]);
+  if (progress >= 1) return resampleRing(ringCoordinates);
+  const { open, ring, target } = prepareOpenToClosed(openCoordinates, ringCoordinates);
   if (!open.length || !ring.length) return null;
-  if (progress <= 0) return open.map((point) => [...point]);
-  if (progress >= 1) return ring;
-  const target = alignOpenLineToRing(open, ring);
   if (!target) return null;
   const body = open.map((point, index) => interpolatePoint(point, target.body[index], progress));
   const midpoint = Math.floor(target.closure.length / 2);
