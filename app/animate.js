@@ -1599,7 +1599,7 @@ export function renderBattle(battle, documentRef = document) {
     }
     if (controller.frontlineMode === "source") {
       renderSourceFrontlines(sampled, mode, previousSampled);
-      if (!sampled.frontline) controller._frontlineStatus = { kind: "source-unavailable" };
+      if (!sampled.frontline) controller._frontlineStatus = { kind: "derived-unavailable" };
     } else if (controller.frontlineMode === "derived") {
       renderDerivedFrontlines(sampled);
     } else {
@@ -1626,7 +1626,6 @@ export function renderBattle(battle, documentRef = document) {
       "source-interpolation": "SOURCE INTERPOLATION · animation between historical anchors",
       derived: "DERIVED FROM UNIT POSITIONS · ≤35% confidence",
       "derived-unavailable": "INSUFFICIENT EVIDENCE · frontline unavailable",
-      "source-unavailable": "INSUFFICIENT EVIDENCE · frontline unavailable",
     };
     if (summaries[status.kind]) {
       summary.textContent = summaries[status.kind];
@@ -1647,7 +1646,8 @@ export function renderBattle(battle, documentRef = document) {
       .filter(Boolean))];
     const transitionLabel = transition === "crossfade"
       ? "Crossfade"
-      : transition === "enclosure" ? "Enclosure reveal" : "Interpolated";
+      : transition === "enclosure" ? "Enclosure reveal"
+        : before === after ? "Snapshot" : "Interpolated";
     if (details) {
       details.textContent = [
         time,

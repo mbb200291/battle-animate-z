@@ -1271,13 +1271,14 @@ test("frontline inspector uses exact source-first provenance summaries", () => {
   controller.seek(1000);
   assert.equal(summary(), "SOURCE INTERPOLATION · animation between historical anchors");
   controller.setFrontlineMode("source");
+  controller.seek(0);
+  assert.equal(controller._frontlineStatus.kind, "derived-unavailable");
+  assert.equal(summary(), "INSUFFICIENT EVIDENCE · frontline unavailable");
   controller.seek(500);
   assert.equal(controller._frontlineStatus.kind, "source-snapshot");
+  assert.match(document.getElementById("frontline-details").textContent, /Snapshot/);
   controller.seek(1000);
   assert.equal(controller._frontlineStatus.kind, "source-interpolation");
-  controller.seek(0);
-  assert.equal(controller._frontlineStatus.kind, "source-unavailable");
-  assert.equal(summary(), "INSUFFICIENT EVIDENCE · frontline unavailable");
 
   const unavailableBattle = frontlineFallbackBattleFixture();
   unavailableBattle.actors = unavailableBattle.actors.filter(({ id }) => id === "alpha" || id === "bravo");
@@ -1639,7 +1640,7 @@ test("frontline inspector shows source-backed provenance and interpolation safel
   const controller = renderBattle(battle, document);
   controller.setFrontlineMode("source");
   assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE SNAPSHOT");
-  assert.match(document.getElementById("frontline-details").textContent, /exact.*Interpolated/);
+  assert.match(document.getElementById("frontline-details").textContent, /exact.*Snapshot/);
   controller.seek(500);
 
   const status = document.getElementById("frontline-status");
