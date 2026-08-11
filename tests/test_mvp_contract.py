@@ -513,6 +513,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 date: snapshot.time.start,
                 positions: Object.fromEntries(result.positions),
                 available: result.derived.available,
+                reason: result.derived.reason,
                 sideIds: [...new Set(result.derived.influences.map(({ sideId }) => sideId))].sort(),
                 contactLineCount: result.derived.contactLines.length,
                 sourceDiffersFromDerived: sourceCoordinates.every((sourceLine) =>
@@ -536,6 +537,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
               labelPositions: Object.fromEntries(midpoint.positions),
               midpoint: {
                 available: midpoint.derived.available,
+                reason: midpoint.derived.reason,
                 sideIds: [...new Set(midpoint.derived.influences.map(({ sideId }) => sideId))].sort(),
                 contactLineCount: midpoint.derived.contactLines.length,
               },
@@ -555,9 +557,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         browser = json.loads(result.stdout)
         self.assertEqual(browser["diagnostics"], {"errors": [], "warnings": []})
         self.assertEqual(browser["keyframeCount"], 3)
-        self.assertTrue(browser["midpoint"]["available"])
+        self.assertFalse(browser["midpoint"]["available"])
+        self.assertEqual(browser["midpoint"]["reason"], "interleaved-sides")
         self.assertEqual(browser["midpoint"]["sideIds"], ["side_allied", "side_german"])
-        self.assertGreaterEqual(browser["midpoint"]["contactLineCount"], 1)
+        self.assertEqual(browser["midpoint"]["contactLineCount"], 0)
         actor_ids = sorted(actor["id"] for actor in battle["actors"])
         actor_sides = {actor["id"]: actor["side_id"] for actor in battle["actors"]}
         self.assertEqual(browser["explicitActorIds"], actor_ids)
@@ -570,9 +573,15 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             self.assertEqual(len({tuple(position) for position in sample["positions"].values()}), 6)
             self.assertTrue(all(4.8 <= lon <= 6.7 and 49.8 <= lat <= 50.9
                                 for lon, lat in sample["positions"].values()))
-            self.assertTrue(sample["available"])
             self.assertEqual(sample["sideIds"], ["side_allied", "side_german"])
-            self.assertGreaterEqual(sample["contactLineCount"], 1)
+            if sample["date"] == "1944-12-25":
+                self.assertFalse(sample["available"])
+                self.assertEqual(sample["reason"], "interleaved-sides")
+                self.assertEqual(sample["contactLineCount"], 0)
+            else:
+                self.assertTrue(sample["available"])
+                self.assertIsNone(sample["reason"])
+                self.assertEqual(sample["contactLineCount"], 1)
             self.assertTrue(sample["sourceDiffersFromDerived"])
         self.assertEqual(sorted(browser["labelPositions"]), actor_ids)
         self.assertTrue(all(4.8 <= lon <= 6.7 and 49.8 <= lat <= 50.9
@@ -590,12 +599,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self._assert_bulge_reference_provenance(out_of_region)
 
-        cross_time_derived = deepcopy(battle)
-        cross_time_derived["frontline_snapshots"][-1]["front_lines"][0]["geometry"][
-            "coordinates"
-        ] = browser["crossTimeDerivedLines"][0]
-        with self.assertRaises(AssertionError):
-            self._assert_bulge_reference_provenance(cross_time_derived)
+        self.assertEqual(browser["crossTimeDerivedLines"], [])
 
     def test_modern_border_asset_is_geometry_only_natural_earth(self):
         path = ROOT / "app" / "data" / "modern-borders-50m.geojson"

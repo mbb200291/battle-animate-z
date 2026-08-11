@@ -502,10 +502,27 @@ function frontlineFallbackBattleFixture() {
   battle.actors[0].kind = "division";
   battle.actors[1].kind = "brigade";
   battle.actors.push(
+    { id: "alpha_support", name: "Alpha support", kind: "division", side_id: "blue", commander_ids: [] },
+    { id: "bravo_support", name: "Bravo support", kind: "brigade", side_id: "red", commander_ids: [] },
     { id: "fleet", name: "Fleet", kind: "fleet", side_id: "blue", commander_ids: [] },
     { id: "observer", name: "Observer", kind: "person", side_id: "red", commander_ids: [] },
   );
+  battle.movements[0].path.coordinates = [[0, 0], [0, 0]];
+  battle.movements[1].path.coordinates = [[0, 0], [0, 0]];
+  battle.movements[2].path.coordinates = [[1, 0], [1, 0]];
   battle.movements.push(
+    {
+      ...structuredClone(battle.movements[0]),
+      id: "alpha_support_hold",
+      actor_id: "alpha_support",
+      path: { type: "LineString", coordinates: [[0, 1], [0, 1]] },
+    },
+    {
+      ...structuredClone(battle.movements[0]),
+      id: "bravo_support_hold",
+      actor_id: "bravo_support",
+      path: { type: "LineString", coordinates: [[1, 1], [1, 1]] },
+    },
     {
       ...structuredClone(battle.movements[0]),
       id: "fleet_hold",
@@ -526,12 +543,15 @@ function frontlineFallbackBattleFixture() {
 
 function antimeridianFrontlineBattleFixture() {
   const battle = frontlineFallbackBattleFixture();
-  battle.actors = battle.actors.filter(({ id }) => id === "alpha" || id === "bravo");
+  const actorIds = new Set(["alpha", "alpha_support", "bravo", "bravo_support"]);
+  battle.actors = battle.actors.filter(({ id }) => actorIds.has(id));
   battle.movements = battle.movements.filter(({ actor_id: actorId }) =>
-    actorId === "alpha" || actorId === "bravo");
+    actorIds.has(actorId));
   for (const movement of battle.movements) {
-    const longitude = movement.actor_id === "alpha" ? 179.8 : -179.8;
-    movement.path.coordinates = [[longitude, 0], [longitude, 0]];
+    const actor = battle.actors.find(({ id }) => id === movement.actor_id);
+    const longitude = actor.side_id === "blue" ? 179.8 : -179.8;
+    const latitude = movement.actor_id.endsWith("support") ? 1 : 0;
+    movement.path.coordinates = [[longitude, latitude], [longitude, latitude]];
   }
   battle.places[0].geometry.coordinates = [179.8, 0];
   battle.places[1].geometry.coordinates = [-179.8, 0];
@@ -1186,7 +1206,7 @@ test("source and derived frontline modes never borrow from each other", () => {
     /^DERIVED FROM UNIT POSITIONS · LOW CONFIDENCE$/);
 });
 
-test("derived mode renders every disconnected contact line", () => {
+test("derived mode rejects disconnected contact lines", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
@@ -1196,12 +1216,11 @@ test("derived mode renders every disconnected contact line", () => {
   controller.setFrontlineMode("derived");
 
   const lines = descendants(svg).filter((element) => element.classList.contains("front-line"));
-  assert.equal(lines.length, 2);
-  assert.deepEqual(lines.map((line) => line.getAttribute("data-frontline-key")),
-    ["derived:line:0", "derived:line:1"]);
+  assert.equal(lines.length, 0);
+  assert.equal(controller._frontlineStatus.kind, "derived-unavailable");
 });
 
-test("mixed hybrid convergence isolates one morph from one local crossfade", () => {
+test("mixed hybrid falls back to source when derived topology is ambiguous", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
@@ -1210,15 +1229,10 @@ test("mixed hybrid convergence isolates one morph from one local crossfade", () 
 
   controller.renderAt(250, { mode: "playback" });
 
-  const primary = descendants(svg).filter((element) =>
-    /^hybrid:line:/.test(element.getAttribute("data-frontline-key") || ""));
-  const secondary = descendants(svg).filter((element) =>
-    /^hybrid:derived:/.test(element.getAttribute("data-frontline-key") || ""));
-  assert.equal(primary.length, 2);
-  assert.equal(secondary.length, 1);
-  assert.equal(controller._frontTransitionTimers.size, 1);
-  assert.equal(primary.filter((line) =>
-    line.classList.contains("is-front-entering") || line.classList.contains("is-front-exiting")).length, 1);
+  const lines = descendants(svg).filter((element) => element.classList.contains("front-line"));
+  assert.equal(lines.length, 2);
+  assert.equal(lines.every((line) => line.classList.contains("is-source-backed")), true);
+  assert.equal(controller._frontlineStatus.kind, "source-fallback");
 });
 
 test("hybrid renderer spatially matches source fronts supplied in reverse order", () => {
@@ -1233,7 +1247,7 @@ test("hybrid renderer spatially matches source fronts supplied in reverse order"
   controller.seek(146.4466094);
 
   const centers = descendants(svg)
-    .filter((element) => /^hybrid:line:/.test(element.getAttribute("data-frontline-key") || ""))
+    .filter((element) => element.classList.contains("front-line"))
     .map((line) => {
       const values = line.getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number);
       const xs = values.filter((_, index) => index % 2 === 0)
@@ -1241,13 +1255,13 @@ test("hybrid renderer spatially matches source fronts supplied in reverse order"
       return xs.reduce((total, x) => total + x, 0) / xs.length;
     })
     .sort((left, right) => left - right);
-  assert.equal(controller._frontlineStatus.sourceWeight.toFixed(6), "0.500000");
+  assert.equal(controller._frontlineStatus.kind, "source-fallback");
   assert.equal(centers.length, 2);
   assert.ok(centers[0] < 2, `west front collapsed to ${centers[0]}`);
   assert.ok(centers[1] > 8, `east front collapsed to ${centers[1]}`);
 });
 
-test("derived grid stays data-bound through pan, zoom, and later availability", () => {
+test("sparse derived grid stays unavailable through pan, zoom, and seek", () => {
   const battle = frontlineFallbackBattleFixture();
   battle.actors = battle.actors.filter(({ id }) => id === "alpha" || id === "bravo");
   battle.movements = battle.movements.filter(({ actor_id: actorId }) =>
@@ -1267,54 +1281,17 @@ test("derived grid stays data-bound through pan, zoom, and later availability", 
   const paths = () => descendants(svg)
     .filter((element) => element.classList.contains("front-line"))
     .map((line) => line.getAttribute("d"));
-  const geographicPaths = () => {
-    const scale = 2 ** (maps[0].zoom - 8);
-    return paths().map((path) => {
-      const values = path.match(/-?\d+(?:\.\d+)?/g).map(Number);
-      return Array.from({ length: values.length / 2 }, (_, index) => [
-        Number((maps[0].center[1]
-          + (values[index * 2] - 400 - maps[0].projectionOffset) / (100 * scale)).toFixed(2)),
-        Number((maps[0].center[0]
-          + (300 - values[index * 2 + 1]) / (100 * scale)).toFixed(2)),
-      ]);
-    });
-  };
-  const initial = paths();
-  const initialGeography = geographicPaths();
-  const assertStableGeography = () => {
-    const current = geographicPaths();
-    assert.equal(current.length, initialGeography.length);
-    current.forEach((line, lineIndex) => {
-      assert.equal(line.length, initialGeography[lineIndex].length);
-      line.forEach((point, pointIndex) => {
-        assert.ok(Math.abs(point[0] - initialGeography[lineIndex][pointIndex][0]) <= 0.011);
-        assert.ok(Math.abs(point[1] - initialGeography[lineIndex][pointIndex][1]) <= 0.011);
-      });
-    });
-  };
+  assert.deepEqual(paths(), []);
+  assert.equal(controller._frontlineStatus.kind, "derived-unavailable");
 
   maps[0].projectionOffset = 25;
   maps[0].fire("move");
-  const panned = paths();
-  assert.notDeepEqual(panned, initial);
-  assertStableGeography();
+  assert.deepEqual(paths(), []);
 
   maps[0].zoom = 9;
   maps[0].fire("zoomend");
-  assert.notDeepEqual(paths(), panned);
-  assertStableGeography();
-
-  const changing = frontlineFallbackBattleFixture();
-  changing.movements.find(({ actor_id: id }) => id === "alpha").path.coordinates = [[0, 0], [0, 0]];
-  changing.movements.find(({ actor_id: id }) => id === "bravo").path.coordinates = [[0, 0], [0, 0.4]];
-  const otherDocument = new FakeDocument(clock.window);
-  installLeaflet();
-  const changingController = renderBattle(changing, otherDocument);
-  const changingSvg = otherDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  assert.equal(otherDocument.getElementById("fronts-button").disabled, false);
-  assert.equal(descendants(changingSvg).some((element) => element.classList.contains("front-line")), false);
-  changingController.seek(1000);
-  assert.equal(descendants(changingSvg).some((element) => element.classList.contains("front-line")), true);
+  controller.seek(1000);
+  assert.deepEqual(paths(), []);
 });
 
 test("hybrid uses exact source anchors and a U-shaped source correction between them", () => {
@@ -1391,9 +1368,9 @@ test("hybrid control areas reuse source topology crossfade timing", () => {
 });
 
 test("hybrid delays changed enclosure areas without fabricating a source line reveal", () => {
-  const battle = enclosureBattleFixture();
-  battle.actors[0].kind = "division";
-  battle.actors[1].kind = "brigade";
+  const battle = hybridFrontlineBattleFixture();
+  battle.frontline_snapshots[0].front_lines[0].geometry.coordinates = [[0, -1], [0, 1]];
+  battle.frontline_snapshots[1].front_lines[0].geometry.coordinates = [[1, -1], [2, 0], [1, 1], [1, -1]];
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
@@ -1610,7 +1587,7 @@ test("hybrid replaces timer ownership when one-sided and paired transitions trad
     element.getAttribute("data-frontline-key") === "hybrid:derived:0"), false);
 });
 
-test("hybrid area topology settlement cannot orphan a newer line crossfade", () => {
+test("source fallback area topology settlement leaves no stale artifacts", () => {
   const battle = multiContourBattleFixture({ source: true, mixed: true });
   battle.frontline_snapshots[0].control_areas[0].id = "departing_area";
   battle.frontline_snapshots[1].control_areas[0].id = "current_area";
@@ -1628,23 +1605,20 @@ test("hybrid area topology settlement cannot orphan a newer line crossfade", () 
   const areaTimer = controller._frontTransitionTimers.get("topology");
   assert.equal(clock.timeoutDelays.get(areaTimer), 500);
   controller.renderAt(1900, { mode: "playback" });
-  const lineTimer = controller._frontTransitionTimers.get("hybrid:0");
-  assert.equal(clock.timeoutDelays.get(lineTimer), 500);
   const settleAreas = clock.timeouts.get(areaTimer);
-  const settleLines = clock.timeouts.get(lineTimer);
 
   settleAreas();
   controller.renderAt(1950, { mode: "playback" });
-  settleLines();
   clock.flushTimeouts();
 
   const hybridPaths = descendants(svg).filter((element) =>
-    /^hybrid:(?:line|derived):/.test(element.getAttribute("data-frontline-key") || ""));
+    element.classList.contains("front-line"));
   assert.deepEqual(hybridPaths.map((path) => path.getAttribute("data-frontline-key")),
-    ["hybrid:line:0", "hybrid:line:1"]);
+    ["line:west_front", "line:east_front"]);
   assert.equal(hybridPaths.some((path) =>
     path.classList.contains("is-front-entering") || path.classList.contains("is-front-exiting")), false);
   assert.equal(controller._frontTransitionTimers.size, 0);
+  assert.equal(controller._frontlineStatus.kind, "source-fallback");
 });
 
 test("hybrid keeps source control areas and falls back to source interpolation without enough units", () => {
@@ -1866,7 +1840,8 @@ test("land fallback defaults on and renders only eligible influences with a deri
 
   assert.equal(controller.frontsEnabled, true);
   assert.equal(document.getElementById("fronts-button").disabled, false);
-  assert.deepEqual(influences.map((element) => element.getAttribute("data-front-actor-id")).sort(), ["alpha", "bravo"]);
+  assert.deepEqual(influences.map((element) => element.getAttribute("data-front-actor-id")).sort(),
+    ["alpha", "alpha_support", "bravo", "bravo_support"]);
   assert.equal(influences.every((element) => element.getAttribute("r") === "28"), true);
   assert.ok(line);
   assert.equal(label.textContent, "DERIVED FROM UNIT POSITIONS · ≤35%");
@@ -1874,7 +1849,8 @@ test("land fallback defaults on and renders only eligible influences with a deri
 
 test("derived frontlines exclude actors positioned only by the global place fallback", () => {
   const battle = frontlineFallbackBattleFixture();
-  battle.movements = battle.movements.filter(({ actor_id: actorId }) => actorId !== "bravo");
+  battle.movements = battle.movements.filter(({ actor_id: actorId }) =>
+    actorId !== "bravo" && actorId !== "bravo_support");
   for (const event of battle.historical_events) {
     event.actor_ids = event.actor_ids.filter((actorId) => actorId !== "bravo");
     event.target_actor_ids = event.target_actor_ids.filter((actorId) => actorId !== "bravo");
@@ -1896,7 +1872,8 @@ test("derived frontlines exclude actors positioned only by the global place fall
 
 test("a later located event does not legitimize an earlier global fallback position", () => {
   const battle = frontlineFallbackBattleFixture();
-  battle.movements = battle.movements.filter(({ actor_id: actorId }) => actorId !== "bravo");
+  battle.movements = battle.movements.filter(({ actor_id: actorId }) =>
+    actorId !== "bravo" && actorId !== "bravo_support");
   battle.historical_events[0].place_ids = [];
   battle.historical_events[1].target_actor_ids = ["bravo"];
   const clock = new FrameClock();
@@ -1912,7 +1889,7 @@ test("a later located event does not legitimize an earlier global fallback posit
   assert.equal(descendants(svg).some((element) => element.classList.contains("front-line")), false);
 });
 
-test("an actor with an event Point location remains eligible for a derived frontline", () => {
+test("an actor with an event Point remains eligible when the derived line is unavailable", () => {
   const battle = frontlineFallbackBattleFixture();
   battle.movements = battle.movements.filter(({ actor_id: actorId }) => actorId !== "bravo");
   const clock = new FrameClock();
@@ -1925,8 +1902,8 @@ test("an actor with an event Point location remains eligible for a derived front
 
   assert.equal(controller.compiled.explicitStartingPositionActorIds.has("bravo"), true);
   assert.equal(controller.frontsEnabled, true);
-  assert.ok(descendants(svg).find((element) =>
-    element.classList.contains("front-line") && element.classList.contains("is-derived")));
+  assert.equal(descendants(svg).some((element) => element.classList.contains("front-line")), false);
+  assert.equal(controller._frontlineStatus.kind, "derived-unavailable");
   assert.ok(descendants(svg).find((element) =>
     element.getAttribute("data-front-actor-id") === "bravo"));
 });
@@ -1965,6 +1942,7 @@ test("hybrid source fallback omits unavailable derived influence circles", () =>
 test("one-side fallback leaves the overall frontline control unavailable", () => {
   const battle = frontlineFallbackBattleFixture();
   battle.actors.find(({ id }) => id === "bravo").side_id = "blue";
+  battle.actors.find(({ id }) => id === "bravo_support").side_id = "blue";
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
@@ -2144,6 +2122,10 @@ test("fallback availability is independent of Mercator latitude distortion", () 
       [[0, latitude], [0, latitude]];
     battle.movements.find(({ actor_id: actorId }) => actorId === "bravo").path.coordinates =
       [[0, latitude + 1], [0, latitude + 1]];
+    battle.movements.find(({ actor_id: actorId }) => actorId === "alpha_support").path.coordinates =
+      [[0, latitude + 0.25], [0, latitude + 0.25]];
+    battle.movements.find(({ actor_id: actorId }) => actorId === "bravo_support").path.coordinates =
+      [[0, latitude + 1.25], [0, latitude + 1.25]];
     battle.animation_hints.map.initial_center = [0, latitude];
     const clock = new FrameClock();
     const document = new FakeDocument(clock.window);
@@ -3644,7 +3626,7 @@ test("near-zoom clustered units suppress secondary labels and restore them when 
   controller.destroy();
 });
 
-test("zoom 8 staggers primary unit and frontline confidence labels at source anchors and derived midpoints", () => {
+test("zoom 8 shows source confidence labels but rejects ambiguous Bulge derived midpoints", () => {
   const battle = JSON.parse(readFileSync(new URL(
     "../examples/battle-of-the-bulge-frontlines.json",
     import.meta.url,
@@ -3680,7 +3662,7 @@ test("zoom 8 staggers primary unit and frontline confidence labels at source anc
       (element.classList.contains("unit-label") && !element.parentNode.classList.contains("is-hidden"))
       || element.classList.contains("frontline-confidence-label"));
     assert.equal(labels.filter((label) => label.classList.contains("unit-label")).length, 6);
-    assert.ok(labels.some((label) => label.classList.contains("frontline-confidence-label")));
+    assert.equal(labels.some((label) => label.classList.contains("frontline-confidence-label")), mode === "source");
     const transforms = labels.map((label) => label.getAttribute("transform"));
     map.fire("zoomend");
     assert.deepEqual(labels.map((label) => label.getAttribute("transform")), transforms);
