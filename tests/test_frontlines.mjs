@@ -871,6 +871,29 @@ test("derived fallback rejects multiple candidate contours", () => {
   assert.deepEqual(result.contactLines, []);
 });
 
+test("derived fallback rejects a single closed candidate contour", () => {
+  const result = deriveFrontlineFallback({
+    actors: [
+      { id: "a1", side_id: "a", kind: "division" },
+      { id: "a2", side_id: "a", kind: "division" },
+      { id: "b1", side_id: "b", kind: "division" },
+      { id: "b2", side_id: "b", kind: "division" },
+    ],
+    positions: new Map([
+      ["a1", [0, 0]], ["a2", [0, 5e-7]],
+      ["b1", [4e-7, 0]], ["b2", [4e-7, 5e-7]],
+    ]),
+    bounds: [[-1e-7, -1e-7], [5e-7, 6e-7]],
+    gridSize: 8,
+    maxPairDistance: 10,
+  });
+
+  assert.equal(result.available, false);
+  assert.equal(result.reason, "ambiguous-contact-topology");
+  assert.equal(result.contactLine, null);
+  assert.deepEqual(result.contactLines, []);
+});
+
 test("influence field unwraps dateline bounds and does not mutate inputs", () => {
   const datelineActors = [...fieldActors];
   const positions = new Map([
