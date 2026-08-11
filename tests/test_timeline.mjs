@@ -91,6 +91,19 @@ function frontlineBattle(snapshots = [
   });
 }
 
+function sourceCoverageBattle() {
+  return battle({
+    historical_events: [event("coverage_bounds", iso(0), iso(30))],
+    frontline_snapshots: [
+      frontlineSnapshot("front_100", 10),
+      frontlineSnapshot("front_200", 20),
+    ],
+    animation_hints: {
+      timeline: { historical_seconds_per_playback_second: 6_000 },
+    },
+  });
+}
+
 function closeFrontline(snapshot, lineId = "line") {
   const line = snapshot.front_lines.find(({ id }) => id === lineId);
   line.geometry.coordinates = [[0, 0], [1, 0], [1, 1], [0, 0]];
@@ -106,6 +119,36 @@ test("frontline snapshots compile into chronological keyframes and interpolate b
   assert.equal(sample.frontline.after.id, "front_10");
   assert.equal(sample.frontline.progress, 0.5);
   assert.equal(sample.frontline.transition, "interpolate");
+});
+
+test("frontline sampling has no source state before its first snapshot", () => {
+  const timeline = compileTimeline(sourceCoverageBattle());
+
+  assert.equal(sampleTimeline(timeline, 50).frontline, null);
+  assert.equal(sampleTimeline(timeline, 100).frontline.before.id, "front_100");
+
+  const oneSnapshotBattle = sourceCoverageBattle();
+  oneSnapshotBattle.frontline_snapshots.length = 1;
+  const oneSnapshotTimeline = compileTimeline(oneSnapshotBattle);
+  assert.equal(sampleTimeline(oneSnapshotTimeline, 50).frontline, null);
+  assert.equal(sampleTimeline(oneSnapshotTimeline, 250).frontline.before.id, "front_100");
+});
+
+test("frontline sampling interpolates between anchors and holds the final source", () => {
+  const timeline = compileTimeline(sourceCoverageBattle());
+  const middle = sampleTimeline(timeline, 150).frontline;
+  assert.equal(middle.before.id, "front_100");
+  assert.equal(middle.after.id, "front_200");
+  assert.equal(middle.progress, 0.5);
+  assert.equal(middle.transition, "interpolate");
+
+  const anchor = sampleTimeline(timeline, 200).frontline;
+  assert.equal(anchor.before.id, "front_200");
+  assert.equal(anchor.after, anchor.before);
+
+  const final = sampleTimeline(timeline, 250).frontline;
+  assert.equal(final.before.id, "front_200");
+  assert.equal(final.after, final.before);
 });
 
 test("frontline keyframes define bounds without becoming active event ranges", () => {
@@ -158,6 +201,12 @@ test("frontline keyframes use source order to break equal-time ties", () => {
     timeline.frontlineKeyframes.map(({ id, sourceIndex }) => [id, sourceIndex]),
     [["first", 2], ["later_source", 0], ["earlier_source", 1]],
   );
+  const exact = sampleTimeline(
+    timeline,
+    toPresentationTime(timeline, parseBattleTime(iso(10))),
+  ).frontline;
+  assert.equal(exact.before.id, "earlier_source");
+  assert.equal(exact.after, exact.before);
 });
 
 test("frontline stable-ID or unsafe topology changes crossfade", () => {

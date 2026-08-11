@@ -425,7 +425,8 @@ function sampleFrontline(timeline, historicalMs) {
     transition: "interpolate",
     enclosureLineIds: [],
   });
-  if (historicalMs <= keyframes[0].historicalMs) {
+  if (historicalMs < keyframes[0].historicalMs) return null;
+  if (historicalMs === keyframes[0].historicalMs) {
     return settled(keyframes[0].snapshot);
   }
   const exact = keyframes.findLast((keyframe) => keyframe.historicalMs === historicalMs);
