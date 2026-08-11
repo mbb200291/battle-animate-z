@@ -4,7 +4,6 @@ import test from "node:test";
 import * as frontlineGeometry from "../app/frontlines.js";
 import {
   deriveFrontlineFallback,
-  enclosureLineIds,
   interpolateFrontlineSnapshots,
   isClosedFrontline,
   resampleLine,
@@ -42,42 +41,6 @@ test("isClosedFrontline rejects degenerate and malformed coordinates without mut
   assert.equal(isClosedFrontline(null), false);
   assert.equal(isClosedFrontline(valid), true);
   assert.equal(JSON.stringify(valid), before);
-});
-
-test("enclosureLineIds returns stable open-to-closed IDs in source order", () => {
-  const before = {
-    front_lines: [
-      line("second", [[10, 0], [11, 1], [10, 1], [10, 2]]),
-      line("first", [[0, 0], [2, 0], [1, 1], [0, 1]]),
-      line("reopened", [[20, 0], [22, 0], [21, 1], [20, 0]]),
-      line(undefined, [[30, 0], [32, 0], [31, 1], [30, 1]]),
-    ],
-  };
-  const after = {
-    front_lines: [
-      line("first", [[0, 0], [2, 0], [1, 1], [0, 0]]),
-      line("second", [[10, 0], [11, 1], [10, 1], [10, 0]]),
-      line("reopened", [[20, 0], [22, 0], [21, 1], [20, 2]]),
-      line(undefined, [[30, 0], [32, 0], [31, 1], [30, 0]]),
-    ],
-  };
-  const inputs = JSON.stringify([before, after]);
-
-  const ids = enclosureLineIds(before, after);
-
-  assert.deepEqual(ids, ["second", "first"]);
-  assert.notEqual(ids, enclosureLineIds(before, after));
-  assert.equal(JSON.stringify([before, after]), inputs);
-});
-
-test("enclosureLineIds excludes non-LineStrings and malformed or missing matches", () => {
-  const malformed = { id: "bad", geometry: { type: "LineString", coordinates: null } };
-  const polygon = { id: "polygon", geometry: { type: "Polygon", coordinates: [] } };
-  assert.deepEqual(enclosureLineIds(
-    { front_lines: [malformed, polygon, line("missing", [[0, 0], [1, 0], [1, 1], [0, 1]])] },
-    { front_lines: [line("bad", [[0, 0], [2, 0], [1, 1], [0, 0]]), polygon] },
-  ), []);
-  assert.deepEqual(enclosureLineIds(null, null), []);
 });
 
 test("resampleLine includes endpoints and returns fresh coordinates", () => {
@@ -216,6 +179,57 @@ test("transition metadata keeps approximate over exact precision", () => {
   );
   assert.equal(result.interpolatedLines[0].precision, "approximate");
   assert.equal(result.interpolatedLines[0].confidence, 0.6);
+});
+
+test("stable open line extends along its target ring and closes only at the anchor", () => {
+  const before = { front_lines: [line("pocket", [[0, 0], [2, 0], [2, 2]])] };
+  const after = { front_lines: [line("pocket", [[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]])] };
+  const inputs = JSON.stringify([before, after]);
+  const samples = [0.25, 0.5, 0.75].map((progress) =>
+    interpolateFrontlineSnapshots(before, after, progress).interpolatedLines[0].geometry.coordinates);
+  const end = interpolateFrontlineSnapshots(before, after, 1).interpolatedLines[0].geometry.coordinates;
+
+  assert.equal(samples.every((coordinates) => !isClosedFrontline(coordinates)), true);
+  assert.equal(new Set(samples.map(JSON.stringify)).size, 3);
+  assert.notDeepEqual(samples[0][0], samples[1][0]);
+  assert.notDeepEqual(samples[1][0], samples[2][0]);
+  assert.notDeepEqual(samples[0].at(-1), samples[1].at(-1));
+  assert.notDeepEqual(samples[1].at(-1), samples[2].at(-1));
+  assert.equal(isClosedFrontline(end), true);
+  assert.deepEqual(end, resampleRing(after.front_lines[0].geometry.coordinates));
+  assert.deepEqual(
+    interpolateFrontlineSnapshots(before, after, 0.5).interpolatedLines[0].geometry.coordinates,
+    samples[1],
+  );
+  assert.equal(JSON.stringify([before, after]), inputs);
+});
+
+test("stable open-to-closed interpolation is dateline safe", () => {
+  const before = { front_lines: [line("pocket", [[179, 0], [-179, 0], [-179, 2]])] };
+  const after = { front_lines: [line("pocket", [[179, 0], [-179, 0], [-179, 2], [179, 2], [179, 0]])] };
+  const middle = interpolateFrontlineSnapshots(before, after, 0.5).interpolatedLines[0].geometry.coordinates;
+  assert.equal(middle.every(([longitude, latitude]) =>
+    Number.isFinite(longitude) && Number.isFinite(latitude) && Math.abs(longitude) >= 170), true);
+  assert.equal(isClosedFrontline(middle), false);
+});
+
+test("unsafe open-closed correspondence uses the existing crossfade", () => {
+  const open = line("pocket", [[0, 0], [2, 0], [2, 2]]);
+  const closed = line("pocket", [[0, 0], [2, 0], [2, 2], [0, 0]]);
+  const cases = [
+    [{ front_lines: [open, line("other", [[3, 0], [3, 2]])] },
+      { front_lines: [closed, line("other", [[3, 0], [4, 1], [3, 0]])] }],
+    [{ front_lines: [open] }, { front_lines: [closed, line("extra", [[3, 0], [4, 1], [3, 0]])] }],
+    [{ front_lines: [open] }, { front_lines: [line("renamed", closed.geometry.coordinates)] }],
+    [{ front_lines: [open] }, { front_lines: [{ id: "pocket", geometry: { type: "LineString", coordinates: null } }] }],
+    [{ front_lines: [closed] }, { front_lines: [open] }],
+  ];
+  for (const [before, after] of cases) {
+    const result = interpolateFrontlineSnapshots(before, after, 0.5);
+    assert.deepEqual(result.interpolatedLines, []);
+    assert.equal(result.exitingLines.length, before.front_lines.length);
+    assert.equal(result.enteringLines.length, after.front_lines.length);
+  }
 });
 
 const actors = [

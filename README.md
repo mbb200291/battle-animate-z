@@ -319,7 +319,7 @@ Versions `0.3.0` and `0.4.0` use continuous historical-time playback（連續歷
 
 An inferred line traced from a dated source map remains source-backed evidence: its `frontline_snapshots[].source_ids` cite that map and its precision/confidence describe the tracing. An app-derived line is different—it is calculated at runtime from representative unit positions, has no historical source claim, and must never be copied into `frontline_snapshots`.
 
-當相同穩定 ID 的開放戰線變為閉合包圍圈時，舊線會淡出，目標輪廓則逐步揭示；這只是 renderer 衍生的顯示效果，不表示來源提供了中間合圍路徑，因此不需更改 schema、提示詞或範例資料。其他戰線分裂或合併仍以 crossfade 顯示。拖曳或跳轉時間軸，以及系統偏好減少動態效果時，會立即顯示目標輪廓。
+只有前後快照各有一條相同穩定 ID 的戰線時，開放戰線才會在兩個來源錨點之間沿目標輪廓延伸，並且只在後一個錨點完全閉合。中間形狀只是來源錨點之間的顯示插值，不表示來源提供了中間合圍路徑。其他戰線分裂、合併或不安全的對應仍以 crossfade 顯示；拖曳、反向跳轉與系統偏好減少動態效果時，都會直接顯示相同的取樣幾何，不播放額外揭示效果。
 
 ### Map background
 

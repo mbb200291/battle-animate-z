@@ -153,6 +153,68 @@ function alignRing(from, to) {
   return best.concat([[...best[0]]]);
 }
 
+function ringArc(unique, start, end) {
+  const arc = [unique[start]];
+  for (let index = start; index !== end;) {
+    index = (index + 1) % unique.length;
+    arc.push(unique[index]);
+  }
+  return arc;
+}
+
+function alignOpenLineToRing(open, ring) {
+  const unique = ring.slice(0, -1);
+  let best = null;
+  let bestCost = Infinity;
+  for (const direction of [unique, [...unique].reverse()]) {
+    const nearest = (point) => direction.map((candidate, index) => ({
+      index,
+      cost: deltaLongitude(point[0], candidate[0]) ** 2 + (point[1] - candidate[1]) ** 2,
+    })).sort((left, right) => left.cost - right.cost || left.index - right.index)
+      .slice(0, 4).map(({ index }) => index);
+    for (const start of nearest(open[0])) {
+      for (const end of nearest(open.at(-1))) {
+        if (start === end) continue;
+        const body = resampleLine(ringArc(direction, start, end), open.length);
+        if (!body.length) continue;
+        const cost = correspondenceCost(open, body);
+        if (cost < bestCost) {
+          best = { body, closure: ringArc(direction, end, start) };
+          bestCost = cost;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function partialArc(points, progress) {
+  const sampled = resampleLine(points, 33);
+  if (!sampled.length) return [];
+  const position = (sampled.length - 1) * progress;
+  const whole = Math.floor(position);
+  const result = sampled.slice(0, whole + 1);
+  if (whole < sampled.length - 1) {
+    result.push(interpolatePoint(sampled[whole], sampled[whole + 1], position - whole));
+  }
+  return result;
+}
+
+function interpolateOpenToClosed(openCoordinates, ringCoordinates, progress) {
+  const open = resampleLine(openCoordinates);
+  const ring = resampleRing(ringCoordinates);
+  if (!open.length || !ring.length) return null;
+  if (progress >= 1) return ring;
+  const target = alignOpenLineToRing(open, ring);
+  if (!target) return null;
+  const body = open.map((point, index) => interpolatePoint(point, target.body[index], progress));
+  const midpoint = Math.floor(target.closure.length / 2);
+  const fromRight = partialArc(target.closure.slice(0, midpoint + 1), progress);
+  const fromLeft = partialArc([...target.closure.slice(midpoint)].reverse(), progress);
+  const coordinates = [...fromLeft.reverse(), ...body, ...fromRight];
+  return coordinates.filter((point, index) => index === 0 || !sameCoordinate(point, coordinates[index - 1]));
+}
+
 const metadata = (fromSnapshot, toSnapshot, fromItem, toItem) => ({
   precision: lessCertain(
     fromItem.precision ?? fromSnapshot.precision,
@@ -167,6 +229,31 @@ const metadata = (fromSnapshot, toSnapshot, fromItem, toItem) => ({
 function interpolateLines(fromSnapshot, toSnapshot, progress, output) {
   const from = fromSnapshot.front_lines ?? [];
   const to = toSnapshot.front_lines ?? [];
+  const topologyChanges = from.some((line) => {
+    const next = to.find(({ id }) => id === line.id);
+    return next && isClosedFrontline(line.geometry?.coordinates) !==
+      isClosedFrontline(next.geometry?.coordinates);
+  });
+  if (topologyChanges) {
+    const oldLine = from[0];
+    const newLine = to[0];
+    const coordinates = from.length === 1 && to.length === 1 && oldLine?.id === newLine?.id &&
+      oldLine.geometry?.type === "LineString" && newLine.geometry?.type === "LineString" &&
+      !isClosedFrontline(oldLine.geometry.coordinates) && isClosedFrontline(newLine.geometry.coordinates)
+      ? interpolateOpenToClosed(oldLine.geometry.coordinates, newLine.geometry.coordinates, progress)
+      : null;
+    if (coordinates && (progress >= 1 || !isClosedFrontline(coordinates))) {
+      output.interpolatedLines.push({
+        id: oldLine.id,
+        geometry: { type: "LineString", coordinates },
+        ...metadata(fromSnapshot, toSnapshot, oldLine, newLine),
+      });
+    } else {
+      output.exitingLines.push(...from);
+      output.enteringLines.push(...to);
+    }
+    return;
+  }
   const toById = new Map(to.map((item) => [item.id, item]));
   const matched = new Set();
   for (const oldLine of from) {
@@ -257,21 +344,14 @@ export function isClosedFrontline(coordinates) {
 
 export function enclosureLineIds(beforeSnapshot, afterSnapshot) {
   const before = Array.isArray(beforeSnapshot?.front_lines) ? beforeSnapshot.front_lines : [];
-  const after = Array.isArray(afterSnapshot?.front_lines) ? afterSnapshot.front_lines : [];
-  const afterById = new Map(after.map((line) => [line?.id, line]));
-  return before.flatMap((line) => {
+  const afterById = new Map((Array.isArray(afterSnapshot?.front_lines)
+    ? afterSnapshot.front_lines : []).map((line) => [line?.id, line]));
+  return before.filter((line) => {
     const next = afterById.get(line?.id);
-    return typeof line?.id === "string" &&
-      line.geometry?.type === "LineString" &&
-      next?.geometry?.type === "LineString" &&
-      Array.isArray(line.geometry.coordinates) &&
-      line.geometry.coordinates.length >= 2 &&
-      line.geometry.coordinates.every(isPoint) &&
-      !isClosedFrontline(line.geometry.coordinates) &&
-      isClosedFrontline(next.geometry.coordinates)
-      ? [line.id]
-      : [];
-  });
+    return typeof line?.id === "string" && line.geometry?.type === "LineString" &&
+      next?.geometry?.type === "LineString" && !isClosedFrontline(line.geometry.coordinates) &&
+      isClosedFrontline(next.geometry.coordinates);
+  }).map(({ id }) => id);
 }
 
 const distance = (left, right) =>

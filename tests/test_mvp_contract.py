@@ -2053,13 +2053,14 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertIn(phrase, readme)
 
-    def test_readme_explains_enclosure_reveal_is_display_only(self):
+    def test_readme_explains_source_enclosure_interpolation_is_display_only(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
         for phrase in (
-            "開放戰線變為閉合包圍圈",
+            "沿目標輪廓延伸",
             "不表示來源提供了中間合圍路徑",
-            "減少動態效果",
+            "只在後一個錨點完全閉合",
+            "不播放額外揭示效果",
         ):
             self.assertIn(phrase, readme)
 
