@@ -100,7 +100,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
     def _readme_prompt_sample(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         prompt_match = re.search(
-            r"## Generate JSON With AI — Battle JSON Prompt 1\.2\.0.*?"
+            r"## Generate JSON With AI — Battle JSON Prompt 1\.3\.0.*?"
             r"````text\n(?P<prompt>.*?)\n````",
             readme,
             re.DOTALL,
@@ -927,13 +927,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
-    def test_readme_prompt_v12_teaches_hybrid_frontline_evidence(self):
+    def test_readme_prompt_v13_teaches_source_first_frontline_evidence(self):
         readme, prompt, sample = self._readme_prompt_sample()
 
         for required in (
-            "Battle JSON Prompt 1.2.0",
+            "Battle JSON Prompt 1.3.0",
             'schema_version 固定使用字串 "0.4.0"',
-            'metadata.source_system 固定使用字串 "battle_json_prompt_1.2.0"',
+            'metadata.source_system 固定使用字串 "battle_json_prompt_1.3.0"',
             "只輸出「一個 JSON 物件」",
             "唯一例外",
             "不要新增 prompt_version",
@@ -974,20 +974,27 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "control_areas[]: *id *side_id *geometry",
             "直接支持該時刻戰線或控制區的來源",
             "不得從戰果敘述推導出精確包圍圈",
-            "跨快照保持相同的戰線與控制區 id",
             "不得從 casualties、strength 或 outcome 推算 control_areas",
             "0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件",
             "本提示詞只輸出 0.4.0",
             "不得從單位點位生成 frontline_snapshots",
-            "推導戰線只由 app 執行時計算，不得寫回 JSON",
             "同一單位跨階段保持相同 actor id",
-            "AI 只整理來源事實與有限、受證據支持的推估",
+            "AI 只整理有來源支持的事實與明確由證據支持的推估",
             "低 confidence 不是虛構資料的許可",
             "不得為了動畫平滑而編造單位、事件、時間、轉折點或路徑",
             "只有直接支持特定日期／時刻戰線的來源地圖才可建立",
             "來源同時支持細緻單位／movements 與來源戰線快照時，兩者都要保留",
+            "同一條戰線只有在來源支持連續性時，才跨 snapshot 沿用相同 id",
+            "不得從單位位置推導突出部、包圍圈或控制區",
+            "只有文字記載而沒有地圖輪廓時，只建立事件，不建立戰線幾何",
+            "推導戰線不得寫入 frontline_snapshots",
+            "來源錨點之間只做來源幾何的時間插值",
+            "每個來源錨點保留原始幾何",
+            "source_ids、precision 與 confidence",
         ):
             self.assertIn(required, prompt)
+        self.assertEqual(sample["schema_version"], "0.4.0")
+        self.assertEqual(sample["metadata"]["source_system"], "battle_json_prompt_1.3.0")
         for obsolete in (
             "battle-animation-schema v0.1.0／v0.2.0／v0.3.0",
             '基本資料使用 "0.1.0"',
