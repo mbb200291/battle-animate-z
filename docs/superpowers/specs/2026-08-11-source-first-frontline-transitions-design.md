@@ -106,7 +106,7 @@ The inspector must distinguish four states without presenting animation output a
 
 - `SOURCE SNAPSHOT`
 - `SOURCE INTERPOLATION · animation between historical anchors`
-- `DERIVED FROM UNIT POSITIONS · <=35% confidence`
+- `DERIVED FROM UNIT POSITIONS · ≤35% confidence`
 - `INSUFFICIENT EVIDENCE · frontline unavailable`
 
 Map labels remain concise; detailed source, confidence, and transition explanation stays in the inspector. Derived diagnostic mode remains visibly distinct from source-backed geometry.

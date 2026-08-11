@@ -18,7 +18,7 @@
 - Modify `tests/test_frontlines.mjs`: pure safety-gate and endpoint-closure geometry contracts.
 - Modify `tests/test_timeline.mjs`: source coverage boundary contracts.
 - Modify `tests/test_renderer.mjs`: Hybrid routing, provenance, scrubbing, reduced-motion, and lifecycle integration.
-- Modify `README.md`: Prompt 1.2 guidance for stable IDs and source-only historical geometry.
+- Modify `README.md`: Prompt 1.3 guidance for stable IDs and source-only historical geometry.
 - Modify `tests/test_mvp_contract.py`: lock the prompt rules and preserve example/schema compatibility.
 
 ### Task 1: Preserve the Current Work and Create the Feature Branch
