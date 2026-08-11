@@ -209,6 +209,20 @@ test("frontline keyframes use source order to break equal-time ties", () => {
   assert.equal(exact.after, exact.before);
 });
 
+test("frontline sampling uses the last source snapshot at an earliest equal-time anchor", () => {
+  const battle = sourceCoverageBattle();
+  battle.frontline_snapshots = [
+    frontlineSnapshot("first_source", 10),
+    frontlineSnapshot("last_source", 10),
+  ];
+  const timeline = compileTimeline(battle);
+
+  assert.equal(sampleTimeline(timeline, 50).frontline, null);
+  const exact = sampleTimeline(timeline, 100).frontline;
+  assert.equal(exact.before.id, "last_source");
+  assert.equal(exact.after, exact.before);
+});
+
 test("frontline stable-ID or unsafe topology changes crossfade", () => {
   const changedIds = compileTimeline(frontlineBattle([
     frontlineSnapshot("before", 0, ["line"]),

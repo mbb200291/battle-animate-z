@@ -426,9 +426,6 @@ function sampleFrontline(timeline, historicalMs) {
     enclosureLineIds: [],
   });
   if (historicalMs < keyframes[0].historicalMs) return null;
-  if (historicalMs === keyframes[0].historicalMs) {
-    return settled(keyframes[0].snapshot);
-  }
   const exact = keyframes.findLast((keyframe) => keyframe.historicalMs === historicalMs);
   if (exact) return settled(exact.snapshot);
   const afterIndex = keyframes.findIndex((keyframe) => keyframe.historicalMs > historicalMs);
