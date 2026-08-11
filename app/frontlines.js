@@ -167,17 +167,13 @@ function alignOpenLineToRing(open, ring) {
   let best = null;
   let bestCost = Infinity;
   for (const direction of [unique, [...unique].reverse()]) {
-    const nearest = (point) => direction.map((candidate, index) => ({
-      index,
-      cost: deltaLongitude(point[0], candidate[0]) ** 2 + (point[1] - candidate[1]) ** 2,
-    })).sort((left, right) => left.cost - right.cost || left.index - right.index)
-      .slice(0, 4).map(({ index }) => index);
-    for (const start of nearest(open[0])) {
-      for (const end of nearest(open.at(-1))) {
+    for (let start = 0; start < direction.length; start += 1) {
+      for (let end = 0; end < direction.length; end += 1) {
         if (start === end) continue;
         const body = resampleLine(ringArc(direction, start, end), open.length);
         if (!body.length) continue;
-        const cost = correspondenceCost(open, body);
+        const cost = correspondenceCost(open, body) +
+          correspondenceCost([open[0], open.at(-1)], [body[0], body.at(-1)]);
         if (cost < bestCost) {
           best = { body, closure: ringArc(direction, end, start) };
           bestCost = cost;

@@ -1131,9 +1131,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         for required in (
             "`hybrid→source→derived→off`",
             "`hybrid` is the default",
-            "U-shaped convergence",
-            "exact source geometry at each dated anchor",
-            "hybrid falls back to source interpolation",
+            "source-only interpolation between anchors",
+            "unit positions never alter those intervals",
+            "Before the first source snapshot",
+            "holds the final known source geometry",
             "exist only in the renderer",
             "An inferred line traced from a dated source map remains source-backed evidence",
             "An app-derived line is different",

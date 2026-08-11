@@ -225,6 +225,31 @@ test("open-to-closed growth starts at the exact open line and extends from its m
   assert.equal(isClosedFrontline(quarter), false);
 });
 
+test("concave target alignment uses the global endpoint and body correspondence minimum", () => {
+  const before = { front_lines: [line("pocket", [
+    [-5.362723904661834, -5.17459156550467],
+    [5.80724401306361, 5.673660378903151],
+    [0.3750094408169389, -0.5777085106819868],
+    [0.5740727400407195, 1.2604319527745247],
+  ])] };
+  const after = { front_lines: [line("pocket", [
+    [5.067466323496774, 0],
+    [1.1008601662469004, 3.3880992103900978],
+    [-4.154227266756814, 3.0182227802982973],
+    [-0.6040977436435473, -0.43890270182911717],
+    [1.4767668100088394, -4.545020899411023],
+    [5.067466323496774, 0],
+  ])] };
+  const coordinates = interpolateFrontlineSnapshots(before, after, 0.5)
+    .interpolatedLines[0].geometry.coordinates;
+  assert.deepEqual([coordinates[0], coordinates[20], coordinates[40], coordinates.at(-1)], [
+    [-1.7581842914361214, -1.8741297494562514],
+    [-1.7309429495359296, -3.545604757980969],
+    [4.209818587917273, 1.599336310037185],
+    [-2.0697901393123903, 2.6422873338651027],
+  ]);
+});
+
 test("stable open-to-closed interpolation is dateline safe", () => {
   const before = { front_lines: [line("pocket", [[179, 0], [-179, 0], [-179, 2]])] };
   const after = { front_lines: [line("pocket", [[179, 0], [-179, 0], [-179, 2], [179, 2], [179, 0]])] };
