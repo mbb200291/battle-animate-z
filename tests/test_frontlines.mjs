@@ -204,6 +204,27 @@ test("stable open line extends along its target ring and closes only at the anch
   assert.equal(JSON.stringify([before, after]), inputs);
 });
 
+test("open-to-closed growth starts at the exact open line and extends from its morphed endpoints", () => {
+  const before = { front_lines: [line("pocket", [[-2, -1], [0, 0], [2, -1]])] };
+  const after = { front_lines: [line("pocket", [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]])] };
+  const open = resampleLine(before.front_lines[0].geometry.coordinates);
+  const zero = interpolateFrontlineSnapshots(before, after, 0).interpolatedLines[0].geometry.coordinates;
+  const epsilon = interpolateFrontlineSnapshots(before, after, 1e-6)
+    .interpolatedLines[0].geometry.coordinates;
+  const quarter = interpolateFrontlineSnapshots(before, after, 0.25)
+    .interpolatedLines[0].geometry.coordinates;
+
+  assert.deepEqual(zero, open);
+  assert.notEqual(zero, open);
+  assert.notEqual(zero[0], open[0]);
+  assert.ok(Math.hypot(epsilon[0][0] - zero[0][0], epsilon[0][1] - zero[0][1]) < 1e-4);
+  assert.ok(Math.hypot(epsilon.at(-1)[0] - zero.at(-1)[0], epsilon.at(-1)[1] - zero.at(-1)[1]) < 1e-4);
+  assert.notDeepEqual(quarter[0], zero[0]);
+  assert.notDeepEqual(quarter.at(-1), zero.at(-1));
+  assert.equal(isClosedFrontline(epsilon), false);
+  assert.equal(isClosedFrontline(quarter), false);
+});
+
 test("stable open-to-closed interpolation is dateline safe", () => {
   const before = { front_lines: [line("pocket", [[179, 0], [-179, 0], [-179, 2]])] };
   const after = { front_lines: [line("pocket", [[179, 0], [-179, 0], [-179, 2], [179, 2], [179, 0]])] };

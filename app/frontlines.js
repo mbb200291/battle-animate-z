@@ -204,13 +204,16 @@ function interpolateOpenToClosed(openCoordinates, ringCoordinates, progress) {
   const open = resampleLine(openCoordinates);
   const ring = resampleRing(ringCoordinates);
   if (!open.length || !ring.length) return null;
+  if (progress <= 0) return open.map((point) => [...point]);
   if (progress >= 1) return ring;
   const target = alignOpenLineToRing(open, ring);
   if (!target) return null;
   const body = open.map((point, index) => interpolatePoint(point, target.body[index], progress));
   const midpoint = Math.floor(target.closure.length / 2);
-  const fromRight = partialArc(target.closure.slice(0, midpoint + 1), progress);
-  const fromLeft = partialArc([...target.closure.slice(midpoint)].reverse(), progress);
+  const fromRight = partialArc(target.closure.slice(0, midpoint + 1), progress)
+    .map((point) => interpolatePoint(body.at(-1), point, progress));
+  const fromLeft = partialArc([...target.closure.slice(midpoint)].reverse(), progress)
+    .map((point) => interpolatePoint(body[0], point, progress));
   const coordinates = [...fromLeft.reverse(), ...body, ...fromRight];
   return coordinates.filter((point, index) => index === 0 || !sameCoordinate(point, coordinates[index - 1]));
 }

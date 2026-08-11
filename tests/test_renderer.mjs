@@ -3240,3 +3240,106 @@ test("frontline topology CSS crossfades entering and exiting geometry for 500ms"
   assert.match(css, /@keyframes front-fade-in/);
   assert.match(css, /@keyframes front-fade-out/);
 });
+test("destroy is idempotent and cancels frames and listeners exactly once", () => {
+  const { clock, controller, document, maps } = setup();
+  controller.play();
+  const frame = controller._frame;
+  controller.destroy();
+  controller.destroy();
+
+  assert.ok(clock.cancelled.includes(frame));
+  assert.equal(document.listeners.get("keydown")?.size ?? 0, 0);
+  assert.equal(maps[0].offCount, 1);
+  assert.equal(maps[0].removeCount, 1);
+});
+
+test("destroy clears the public frontline inspector state", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(frontlineBattleFixture(), document);
+  const status = document.getElementById("frontline-status");
+  const summary = document.getElementById("frontline-summary");
+  const details = document.getElementById("frontline-details");
+  const sources = document.getElementById("frontline-sources");
+  assert.equal(status.hidden, false);
+  assert.notEqual(summary.textContent, "");
+  assert.notEqual(details.textContent, "");
+  assert.notEqual(sources.children.length, 0);
+
+  controller.destroy();
+
+  assert.equal(status.hidden, true);
+  assert.equal(summary.textContent, "");
+  assert.equal(details.textContent, "");
+  assert.equal(sources.children.length, 0);
+  assert.equal(controller.frontlineMode, "hybrid");
+  assert.equal(document.getElementById("fronts-button").textContent, "Fronts: hybrid");
+  assert.equal(document.getElementById("fronts-button").getAttribute("aria-pressed"), "false");
+  assert.equal(document.getElementById("fronts-button").disabled, true);
+});
+
+test("destroy tears down owned controls and timeline handlers and blocks public re-entry", () => {
+  const { clock, controller, document, maps } = setup();
+  wirePlaybackControls(controller, document);
+  const timelineButton = document.querySelectorAll("#timeline button")[1];
+  const eventCard = document.getElementById("event-card-stack").children[0];
+  controller.destroy();
+  const flyCount = maps[0].flyCalls.length + maps[0].pointFlyCalls.length;
+
+  document.getElementById("play-button").dispatch("click");
+  timelineButton.dispatch("click");
+  controller.play();
+  controller.seek(900);
+  assert.equal(clock.callbacks.size, 0);
+  assert.equal(maps[0].flyCalls.length + maps[0].pointFlyCalls.length, flyCount);
+  assert.equal(document.getElementById("modern-borders-button").onclick, null);
+  assert.equal(document.getElementById("focus-event-button").onclick, null);
+  assert.equal(timelineButton.listeners.get("click")?.size ?? 0, 0);
+  assert.equal(eventCard.listeners.get("keydown")?.size ?? 0, 0);
+});
+
+test("control teardown clears only handlers it owns", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const controller = {
+    followEnabled: true, toggle() {}, pause() {}, seek() {}, prev() {}, next() {}, setSpeed() {}, setFollowEnabled() {},
+  };
+  const teardown = wirePlaybackControls(controller, document);
+  const foreignHandler = () => {};
+  document.getElementById("play-button").onclick = foreignHandler;
+  teardown();
+  assert.equal(document.getElementById("play-button").onclick, foreignHandler);
+});
+
+test("empty timelines reset progress and use a sentinel current index", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(battleFixture(), document);
+  const empty = battleFixture();
+  empty.historical_events = [];
+  empty.movements = [];
+  empty.engagements = [];
+  empty.animation_hints.timeline.ordered_event_ids = [];
+  const controller = renderBattle(empty, document);
+
+  assert.equal(controller.currentIndex, -1);
+  assert.equal(document.getElementById("event-progress").textContent, "0 / 0");
+});
+
+test("render replacement cannot be damaged by a stale controller destroy", () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const mapEl = document.getElementById("battle-map");
+  const first = renderBattle(battleFixture(), document);
+  const second = renderBattle(battleFixture(), document);
+
+  assert.equal(maps[0].removeCount, 1);
+  assert.equal(mapEl._battleController, second);
+  first.destroy();
+  assert.equal(maps[0].removeCount, 1);
+  assert.equal(maps[1].removeCount, 0);
+  assert.equal(mapEl._battleController, second);
+});
