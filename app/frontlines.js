@@ -733,6 +733,54 @@ export function selectFrontlineInfluences(actors = [], positions = new Map()) {
     .sort((left, right) => left.actorId < right.actorId ? -1 : left.actorId > right.actorId ? 1 : 0);
 }
 
+function unavailableDerived(reason, influences) {
+  return {
+    available: false,
+    reason,
+    influences,
+    pairs: [],
+    contactLine: null,
+    contactLines: [],
+    precision: "inferred",
+    confidence: 0.35,
+    label: "DERIVED FROM UNIT POSITIONS",
+  };
+}
+
+function separatedSideRanges(influences) {
+  const groups = new Map();
+  for (const influence of influences) {
+    if (!groups.has(influence.sideId)) groups.set(influence.sideId, []);
+    groups.get(influence.sideId).push(influence);
+  }
+  const sides = [...groups.values()];
+  if (sides.some((items) => items.length < 2)) return null;
+
+  const longitudeAnchor = influences[0].position[0];
+  const centroid = (items) => items.reduce(
+    ([x, y], { position }) => [
+      x + (longitudeAnchor + normalizeLongitudeDelta(position[0] - longitudeAnchor)) / items.length,
+      y + position[1] / items.length,
+    ],
+    [0, 0],
+  );
+  const [leftCenter, rightCenter] = sides.map(centroid);
+  const axis = [
+    normalizeLongitudeDelta(rightCenter[0] - leftCenter[0]),
+    rightCenter[1] - leftCenter[1],
+  ];
+  const length = Math.hypot(...axis);
+  if (!(length > 0)) return false;
+  const project = ({ position }) =>
+    (normalizeLongitudeDelta(position[0] - leftCenter[0]) * axis[0]
+      + (position[1] - leftCenter[1]) * axis[1]) / length;
+  const ranges = sides.map((items) => {
+    const values = items.map(project);
+    return [Math.min(...values), Math.max(...values)];
+  });
+  return ranges[0][1] < ranges[1][0] || ranges[1][1] < ranges[0][0];
+}
+
 export function deriveFrontlineFallback({
   actors = [],
   positions = new Map(),
@@ -742,26 +790,22 @@ export function deriveFrontlineFallback({
 } = {}) {
   const influences = selectFrontlineInfluences(actors, positions);
   const sideCount = new Set(influences.map(({ sideId }) => sideId)).size;
-  if (sideCount !== 2) {
-    return {
-      available: false,
-      reason: "requires-two-sides",
-      influences,
-      pairs: [],
-      contactLine: null,
-      contactLines: [],
-      precision: "inferred",
-      confidence: 0.35,
-      label: "DERIVED FROM UNIT POSITIONS",
-    };
-  }
+  if (sideCount !== 2) return unavailableDerived("requires-two-sides", influences);
+
+  const separated = separatedSideRanges(influences);
+  if (separated === null) return unavailableDerived("requires-two-per-side", influences);
+  if (!separated) return unavailableDerived("interleaved-sides", influences);
 
   const contactLines = deriveContactLines(influences, bounds, gridSize, maxPairDistance);
-  const contactLine = contactLines[0] ?? null;
+  if (contactLines.length === 0) return unavailableDerived("no-contact-line", influences);
+  if (contactLines.length !== 1 || isClosedFrontline(contactLines[0])) {
+    return unavailableDerived("ambiguous-contact-topology", influences);
+  }
+  const contactLine = contactLines[0];
 
   return {
-    available: contactLines.length > 0,
-    reason: contactLine ? null : "no-contact-line",
+    available: true,
+    reason: null,
     influences,
     pairs: [],
     contactLine,

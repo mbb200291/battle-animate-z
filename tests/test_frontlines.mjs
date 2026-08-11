@@ -681,19 +681,58 @@ test("influence field forms a vertical front between two unit rows", () => {
 
   assert.equal(derived.available, true);
   assert.equal(derived.reason, null);
-  assert.ok(derived.contactLines.length >= 1);
+  assert.equal(derived.contactLines.length, 1);
   assert.ok(derived.contactLines.flat().every(([x]) => Math.abs(x - 2) < 0.4));
   assert.deepEqual(derived.contactLine, derived.contactLines[0]);
   assert.deepEqual(derived.pairs, []);
 });
 
+test("derived fallback requires two positioned actors per side", () => {
+  const result = deriveFrontlineFallback({
+    actors: [
+      { id: "a1", kind: "division", side_id: "a" },
+      { id: "b1", kind: "division", side_id: "b" },
+      { id: "b2", kind: "division", side_id: "b" },
+    ],
+    positions: new Map([["a1", [0, 0]], ["b1", [2, 0]], ["b2", [2, 2]]]),
+    bounds: [[-1, -1], [3, 3]],
+    maxPairDistance: 6,
+  });
+
+  assert.equal(result.available, false);
+  assert.equal(result.reason, "requires-two-per-side");
+  assert.equal(result.confidence, 0.35);
+  assert.equal(result.contactLine, null);
+  assert.deepEqual(result.contactLines, []);
+});
+
+test("derived fallback rejects interleaved side projections", () => {
+  const result = deriveFrontlineFallback({
+    actors: fieldActors,
+    positions: new Map([
+      ["a1", [0, 0]], ["a2", [3, 2]],
+      ["b1", [1, 0]], ["b2", [2, 2]],
+    ]),
+    bounds: [[-1, -1], [4, 3]],
+    maxPairDistance: 6,
+  });
+
+  assert.equal(result.available, false);
+  assert.equal(result.reason, "interleaved-sides");
+  assert.equal(result.contactLine, null);
+  assert.deepEqual(result.contactLines, []);
+});
+
 test("contact filtering retains an endpoint on the inclusive half-distance boundary", () => {
   const derived = deriveFrontlineFallback({
     actors: [
-      { id: "a", side_id: "a", kind: "division" },
-      { id: "b", side_id: "b", kind: "division" },
+      { id: "a1", side_id: "a", kind: "division" },
+      { id: "a2", side_id: "a", kind: "division" },
+      { id: "b1", side_id: "b", kind: "division" },
+      { id: "b2", side_id: "b", kind: "division" },
     ],
-    positions: new Map([["a", [0, 0]], ["b", [4, 0]]]),
+    positions: new Map([["a1", [0, 0]], ["a2", [0, 1]], ["b1", [4, 0]], ["b2", [4, 1]]]),
+    bounds: [[0, 0], [4, 1]],
     gridSize: 3,
     maxPairDistance: 4,
   });
@@ -729,7 +768,7 @@ test("numeric contact-line ordering stays left-to-right across ten degrees", () 
   assert.ok(orderedAfter[0][0][1] < orderedAfter[0].at(-1)[1]);
 });
 
-test("grid-vertex zeroes do not emit duplicate or degenerate contact coordinates", () => {
+test("grid-vertex zeroes from interleaved sides are conservatively unavailable", () => {
   const sideA = [[-1, 0], [1, 0], [0, 1]];
   const sideB = [[0, -1], [1, 1]];
   const actors = [
@@ -747,21 +786,22 @@ test("grid-vertex zeroes do not emit duplicate or degenerate contact coordinates
     gridSize: 3,
   });
 
-  assert.ok(derived.contactLine.length >= 2);
-  for (const coordinates of derived.contactLines) {
-    assert.ok(new Set(coordinates.map(([x, y]) => `${x},${y}`)).size >= 2);
-    for (let index = 1; index < coordinates.length; index += 1) {
-      assert.notDeepEqual(coordinates[index], coordinates[index - 1]);
-    }
-  }
+  assert.equal(derived.available, false);
+  assert.equal(derived.reason, "interleaved-sides");
+  assert.deepEqual(derived.contactLines, []);
 });
 
 test("grid-vertex crossings stitch one continuous diagonal contact line", () => {
   const actors = [
-    { id: "a", side_id: "a", kind: "division" },
-    { id: "b", side_id: "b", kind: "division" },
+    { id: "a1", side_id: "a", kind: "division" },
+    { id: "a2", side_id: "a", kind: "division" },
+    { id: "b1", side_id: "b", kind: "division" },
+    { id: "b2", side_id: "b", kind: "division" },
   ];
-  const positions = new Map([["a", [0, 1]], ["b", [1, 0]]]);
+  const positions = new Map([
+    ["a1", [0, 1]], ["a2", [-0.1, 1.1]],
+    ["b1", [1, 0]], ["b2", [1.1, -0.1]],
+  ]);
 
   for (const gridSize of [5, 31]) {
     const derived = deriveFrontlineFallback({ actors, positions, gridSize });
@@ -812,33 +852,31 @@ test("derived contours are deterministic and independent of actor and map order"
   assert.deepEqual(reversed, forward);
 });
 
-test("derived contours close around an enclosed side", () => {
-  const enclosureActors = [
-    { id: "a1", side_id: "a", kind: "division" },
-    { id: "a2", side_id: "a", kind: "division" },
-    ...["b1", "b2", "b3", "b4", "b5", "b6"].map((id) => ({ id, side_id: "b", kind: "division" })),
-  ];
-  const enclosurePositions = new Map([
-    ["a1", [-0.75, 0]], ["a2", [0.75, 0]],
-    ["b1", [-4, -4]], ["b2", [0, -4]], ["b3", [4, -4]],
-    ["b4", [4, 4]], ["b5", [0, 4]], ["b6", [-4, 4]],
-  ]);
-  const derived = deriveFrontlineFallback({
-    actors: enclosureActors,
-    positions: enclosurePositions,
-    bounds: [[-5, -5], [5, 5]],
-    gridSize: 40,
+test("derived fallback rejects multiple candidate contours", () => {
+  const result = deriveFrontlineFallback({
+    actors: ["a1", "a2", "a3", "b1", "b2", "b3"]
+      .map((id) => ({ id, side_id: id[0], kind: "division" })),
+    positions: new Map([
+      ["a1", [0, 8]], ["a2", [0, 6]], ["a3", [0, 1]],
+      ["b1", [4, 7]], ["b2", [4, 6]], ["b3", [5, 4]],
+    ]),
+    bounds: [[-1, -1], [6, 11]],
+    gridSize: 24,
+    maxPairDistance: 6,
   });
 
-  assert.ok(derived.contactLines.some((coordinates) => isClosedFrontline(coordinates)));
+  assert.equal(result.available, false);
+  assert.equal(result.reason, "ambiguous-contact-topology");
+  assert.equal(result.contactLine, null);
+  assert.deepEqual(result.contactLines, []);
 });
 
 test("influence field unwraps dateline bounds and does not mutate inputs", () => {
   const datelineActors = [...fieldActors];
   const positions = new Map([
-    ["a1", [179, 0]], ["a2", [179, 4]], ["b1", [-179, 0]], ["b2", [-179, 4]],
+    ["a1", [179.5, 0]], ["a2", [179.5, 4]], ["b1", [-179.5, 0]], ["b2", [-179.5, 4]],
   ]);
-  const bounds = [[178, -1], [-178, 5]];
+  const bounds = [[177, -1], [-177, 5]];
   const before = JSON.stringify({ actors: datelineActors, positions: [...positions], bounds });
   const derived = deriveFrontlineFallback({
     actors: datelineActors,
@@ -890,12 +928,13 @@ test("one side or over-distance enemies retain influences without a contact line
   assert.equal(oneSide.contactLine, null);
 
   const distant = deriveFrontlineFallback({
-    actors: [actors[0], actors[2]],
-    positions: new Map([["a1", [0, 0]], ["b1", [20, 0]]]),
+    actors: [actors[0], actors[1], actors[2], { id: "b2", side_id: "b", kind: "division" }],
+    positions: new Map([["a1", [0, 0]], ["a2", [0, 2]], ["b1", [20, 0]], ["b2", [20, 2]]]),
     maxPairDistance: 10,
   });
-  assert.equal(distant.influences.length, 2);
+  assert.equal(distant.influences.length, 4);
   assert.equal(distant.contactLine, null);
+  assert.equal(distant.reason, "no-contact-line");
   assert.deepEqual(distant.pairs, []);
 });
 
