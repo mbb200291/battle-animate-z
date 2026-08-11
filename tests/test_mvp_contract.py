@@ -1,3 +1,4 @@
+import hashlib
 import json
 import math
 import re
@@ -200,6 +201,21 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 ("snapshot_front_1944_12_20", "1944-12-20", "event_front_1944_12_20", ["source_wacht_am_rhein_map"]),
                 ("snapshot_front_1944_12_25", "1944-12-25", "event_front_1944_12_25", ["source_wacht_am_rhein_map"]),
             ],
+        )
+        self.assertEqual(
+            {
+                snapshot["time"]["start"]: hashlib.sha256(json.dumps(
+                    [line["geometry"]["coordinates"] for line in snapshot["front_lines"]],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")).hexdigest()
+                for snapshot in snapshots
+            },
+            {
+                "1944-12-16": "48ed0317a1e871f6e0e8af04258e5b65e23878220fd2fdc80fbf44c222b9252e",
+                "1944-12-20": "60a0fc336210828f66634bfaf83fa4e5484e89449b6840f32d7df5d02db7a05f",
+                "1944-12-25": "a49f31959ce928099daa9f3cc2f44b6af25ec468235381af8d262629670b36e5",
+            },
         )
         western_edges = []
         for snapshot in snapshots:
@@ -504,7 +520,8 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                     JSON.stringify(sourceLine) !== JSON.stringify(derivedLine))),
               };
             });
-            const labelSample = deriveAt("1944-12-22T00:00:00Z");
+            const midpoint = deriveAt("1944-12-22T00:00:00Z");
+            const crossTime = deriveAt("1944-12-23T12:00:00Z");
             const anchor = deriveAt("1944-12-25T00:00:00Z");
             const converged = convergeDerivedFrontlines(
               anchor.derived.contactLines,
@@ -516,7 +533,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
               keyframeCount: compiled.frontlineKeyframes.length,
               explicitActorIds: [...compiled.explicitStartingPositionActorIds].sort(),
               snapshotSamples,
-              labelPositions: Object.fromEntries(labelSample.positions),
+              labelPositions: Object.fromEntries(midpoint.positions),
+              midpoint: {
+                available: midpoint.derived.available,
+                sideIds: [...new Set(midpoint.derived.influences.map(({ sideId }) => sideId))].sort(),
+                contactLineCount: midpoint.derived.contactLines.length,
+              },
+              crossTimeDerivedLines: crossTime.derived.contactLines,
               sourceAtAnchor: anchor.sampled.frontline.after.front_lines,
               convergedAtAnchor: converged.front_lines,
             }));
@@ -532,6 +555,9 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         browser = json.loads(result.stdout)
         self.assertEqual(browser["diagnostics"], {"errors": [], "warnings": []})
         self.assertEqual(browser["keyframeCount"], 3)
+        self.assertTrue(browser["midpoint"]["available"])
+        self.assertEqual(browser["midpoint"]["sideIds"], ["side_allied", "side_german"])
+        self.assertGreaterEqual(browser["midpoint"]["contactLineCount"], 1)
         actor_ids = sorted(actor["id"] for actor in battle["actors"])
         actor_sides = {actor["id"]: actor["side_id"] for actor in battle["actors"]}
         self.assertEqual(browser["explicitActorIds"], actor_ids)
@@ -563,6 +589,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         movement["path"]["coordinates"] = [[0, 0], [1, 1], [2, 2]]
         with self.assertRaises(AssertionError):
             self._assert_bulge_reference_provenance(out_of_region)
+
+        cross_time_derived = deepcopy(battle)
+        cross_time_derived["frontline_snapshots"][-1]["front_lines"][0]["geometry"][
+            "coordinates"
+        ] = browser["crossTimeDerivedLines"][0]
+        with self.assertRaises(AssertionError):
+            self._assert_bulge_reference_provenance(cross_time_derived)
 
     def test_modern_border_asset_is_geometry_only_natural_earth(self):
         path = ROOT / "app" / "data" / "modern-borders-50m.geojson"

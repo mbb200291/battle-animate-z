@@ -128,6 +128,22 @@ class FakeElement {
   }
 
   scrollIntoView(options) { this.scrollOptions = options; }
+
+  getBoundingClientRect() {
+    let x = Number(this.getAttribute("x") || 0);
+    let y = Number(this.getAttribute("y") || 0);
+    for (let node = this; node; node = node.parentNode) {
+      const transform = node.getAttribute?.("transform") || "";
+      const match = /translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)\s*\)/.exec(transform);
+      if (match) {
+        x += Number(match[1]);
+        y += Number(match[2]);
+      }
+    }
+    const fontSize = this.classList.contains("frontline-confidence-label") ? 11 : 13;
+    const width = this.textContent.length * fontSize * 0.58;
+    return { left: x, right: x + width, top: y - fontSize, bottom: y + 2, width, height: fontSize + 2 };
+  }
 }
 
 function descendants(root) {
@@ -2084,22 +2100,44 @@ test("antimeridian fitBounds stays on the circular battle world copy", () => {
   assert.ok(influenceXs.every((x) => x > 300 && x < 500));
 });
 
-test("fallback pairing becomes more conservative when zoomed in", () => {
-  const battle = frontlineFallbackBattleFixture();
-  battle.animation_hints.map.initial_zoom = 12;
-  const clock = new FrameClock();
-  const document = new FakeDocument(clock.window);
-  installLeaflet();
-  renderBattle(battle, document);
-  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  const all = descendants(svg);
+test("same battle time keeps hybrid derived geography stable across zoom", () => {
+  const renderAtZoom = (zoom) => {
+    const battle = hybridFrontlineBattleFixture();
+    battle.animation_hints.map.initial_zoom = zoom;
+    const clock = new FrameClock();
+    const document = new FakeDocument(clock.window);
+    const maps = installLeaflet();
+    const controller = renderBattle(battle, document);
+    controller.seek(500);
+    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+    const scale = 2 ** (maps[0].zoom - 8);
+    const contactLines = descendants(svg)
+      .filter((element) => element.classList.contains("front-line"))
+      .map((element) => element.getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number))
+      .map((values) => values.reduce((line, value, index) => {
+        if (index % 2 === 0) {
+          line.push([maps[0].center[1] + (value - 400) / (100 * scale)]);
+        } else {
+          line.at(-1).push(maps[0].center[0] + (300 - value) / (100 * scale));
+        }
+        return line;
+      }, []));
+    return { kind: controller._frontlineStatus.kind, contactLines };
+  };
 
-  assert.equal(all.filter((element) => element.classList.contains("front-influence")).length, 2);
-  assert.equal(all.some((element) =>
-    element.classList.contains("front-line") && element.classList.contains("is-derived")), false);
+  const zoom8 = renderAtZoom(8);
+  const zoom12 = renderAtZoom(12);
+  assert.equal(zoom8.kind, "hybrid");
+  assert.equal(zoom12.kind, zoom8.kind);
+  assert.deepEqual(zoom12.contactLines.map((line) => line.length),
+    zoom8.contactLines.map((line) => line.length));
+  zoom8.contactLines.forEach((line, lineIndex) => line.forEach((point, pointIndex) =>
+    point.forEach((value, axis) => assert.ok(
+      Math.abs(zoom12.contactLines[lineIndex][pointIndex][axis] - value) <= 0.0006,
+    ))));
 });
 
-test("fallback pairing stays screen-bounded at high Mercator latitudes", () => {
+test("fallback availability is independent of Mercator latitude distortion", () => {
   const renderAtLatitude = (latitude) => {
     const battle = frontlineFallbackBattleFixture();
     battle.movements.find(({ actor_id: actorId }) => actorId === "alpha").path.coordinates =
@@ -2110,14 +2148,12 @@ test("fallback pairing stays screen-bounded at high Mercator latitudes", () => {
     const clock = new FrameClock();
     const document = new FakeDocument(clock.window);
     installLeaflet(undefined, { mercator: true });
-    renderBattle(battle, document);
-    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-    return descendants(svg).some((element) =>
-      element.classList.contains("front-line") && element.classList.contains("is-derived"));
+    const controller = renderBattle(battle, document);
+    return controller._frontlineStatus.kind;
   };
 
-  assert.equal(renderAtLatitude(0), true);
-  assert.equal(renderAtLatitude(75), false);
+  assert.equal(renderAtLatitude(0), "derived");
+  assert.equal(renderAtLatitude(75), "derived");
 });
 
 test("land actors without sampled coordinates do not enable fallback", () => {
@@ -3605,6 +3641,58 @@ test("near-zoom clustered units suppress secondary labels and restore them when 
   map.zoom = 9;
   map.fire("zoomend");
   assert.equal(subLabels.some((label) => label.classList.contains("is-collision-hidden")), false);
+  controller.destroy();
+});
+
+test("zoom 8 staggers primary unit and frontline confidence labels at source anchors and derived midpoints", () => {
+  const battle = JSON.parse(readFileSync(new URL(
+    "../examples/battle-of-the-bulge-frontlines.json",
+    import.meta.url,
+  ), "utf8"));
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  const maps = installLeaflet();
+  const controller = renderBattle(battle, document);
+  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+  const map = maps[0];
+
+  const overlaps = () => {
+    const labels = descendants(svg).filter((element) =>
+      (element.classList.contains("unit-label") && !element.parentNode.classList.contains("is-hidden"))
+      || element.classList.contains("frontline-confidence-label"));
+    const collisions = [];
+    for (let left = 0; left < labels.length; left += 1) {
+      const a = labels[left].getBoundingClientRect();
+      for (let right = left + 1; right < labels.length; right += 1) {
+        const b = labels[right].getBoundingClientRect();
+        if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) {
+          collisions.push([labels[left].textContent, labels[right].textContent]);
+        }
+      }
+    }
+    return collisions;
+  };
+  const check = (iso, mode) => {
+    controller.setFrontlineMode(mode);
+    controller.seek(controller.compiled.toPresentationTime(Date.parse(iso)));
+    map.fire("zoomend");
+    const labels = descendants(svg).filter((element) =>
+      (element.classList.contains("unit-label") && !element.parentNode.classList.contains("is-hidden"))
+      || element.classList.contains("frontline-confidence-label"));
+    assert.equal(labels.filter((label) => label.classList.contains("unit-label")).length, 6);
+    assert.ok(labels.some((label) => label.classList.contains("frontline-confidence-label")));
+    const transforms = labels.map((label) => label.getAttribute("transform"));
+    map.fire("zoomend");
+    assert.deepEqual(labels.map((label) => label.getAttribute("transform")), transforms);
+    return { mode, iso, collisions: overlaps() };
+  };
+
+  assert.equal(map.getZoom(), 8);
+  const results = [
+    check("1944-12-20T00:00:00Z", "source"),
+    check("1944-12-22T00:00:00Z", "derived"),
+  ];
+  assert.deepEqual(results.map(({ collisions }) => collisions), [[], []], JSON.stringify(results));
   controller.destroy();
 });
 

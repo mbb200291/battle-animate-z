@@ -8,14 +8,13 @@ import {
   deriveFrontlineFallback,
   enclosureLineIds,
   interpolateFrontlineSnapshots,
-  selectFrontlineInfluences,
 } from "./frontlines.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const FRONT_CROSSFADE_MS = 500;
 const FRONT_ENCLOSURE_REVEAL_MS = 900;
 const FRONT_INFLUENCE_RADIUS = 28;
-const FRONT_PAIR_MAX_PX = 160;
+const FRONT_PAIR_MAX_DISTANCE = 1.6;
 let frontEnclosureSequence = 0;
 
 export const FRONTLINE_MODES = Object.freeze(["hybrid", "source", "derived", "off"]);
@@ -23,27 +22,6 @@ export const FRONTLINE_MODES = Object.freeze(["hybrid", "source", "derived", "of
 export function nextFrontlineMode(mode) {
   const index = FRONTLINE_MODES.indexOf(mode);
   return FRONTLINE_MODES[(index < 0 ? 0 : index + 1) % FRONTLINE_MODES.length];
-}
-
-function fallbackPairDistance(project, influences, zoom) {
-  let pixelsPerDegree = 0;
-  for (const { position: [longitude, latitude] } of influences) {
-    const origin = project([longitude, latitude]);
-    const east = project([longitude + 1, latitude]);
-    const latitudeStep = latitude >= 0
-      ? Math.min(1, 89.9 - latitude)
-      : Math.max(-1, -89.9 - latitude);
-    const poleward = project([longitude, latitude + latitudeStep]);
-    pixelsPerDegree = Math.max(
-      pixelsPerDegree,
-      Math.hypot(east.x - origin.x, east.y - origin.y),
-      latitudeStep
-        ? Math.hypot(poleward.x - origin.x, poleward.y - origin.y) / Math.abs(latitudeStep)
-        : 0,
-    );
-  }
-  const zoomLimit = Math.max(0.25, 4 * (2 ** (8 - zoom)));
-  return pixelsPerDegree ? Math.min(zoomLimit, FRONT_PAIR_MAX_PX / pixelsPerDegree) : zoomLimit;
 }
 
 const DEFAULT_ICONS = {
@@ -1568,12 +1546,11 @@ export function renderBattle(battle, documentRef = document) {
 
   function currentDerivedFrontlines(sampled) {
     const positions = frontlinePositions(sampled);
-    const influences = selectFrontlineInfluences(battle.actors, positions);
     return deriveFrontlineFallback({
       actors: battle.actors,
       positions,
       bounds: frontlineBounds,
-      maxPairDistance: fallbackPairDistance(project, influences, map.getZoom()),
+      maxPairDistance: FRONT_PAIR_MAX_DISTANCE,
     });
   }
 
@@ -1924,6 +1901,7 @@ export function renderBattle(battle, documentRef = document) {
       g.setAttribute("transform", `translate(${point.x} ${point.y})`);
     }
     suppressSecondaryLabelCollisions();
+    staggerPrimaryAndFrontlineLabels();
   }
 
   function suppressSecondaryLabelCollisions() {
@@ -1940,6 +1918,38 @@ export function renderBattle(battle, documentRef = document) {
         Math.abs(point.x - accepted.x) < 80 && Math.abs(point.y - accepted.y) < 26);
       subLabel.classList.toggle("is-collision-hidden", collides);
       if (!collides) occupied.push(point);
+    }
+  }
+
+  function staggerPrimaryAndFrontlineLabels() {
+    const labels = [];
+    if (map.getZoom() >= 8) {
+      for (const [actorId, { label }] of unitEls) {
+        if (actorPositions.has(actorId)) labels.push(label);
+      }
+    }
+    if (controller.frontsEnabled) {
+      labels.push(...[...frontlineEls.entries()]
+        .filter(([, element]) => element.parentNode
+          && element.classList.contains("frontline-confidence-label"))
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([, element]) => element));
+    }
+
+    const occupied = [];
+    const overlaps = (left, right) => left.left < right.right + 4
+      && left.right + 4 > right.left
+      && left.top < right.bottom + 4
+      && left.bottom + 4 > right.top;
+    for (const label of labels) {
+      label.removeAttribute("transform");
+      let box = label.getBoundingClientRect();
+      for (let step = 1; occupied.some((other) => overlaps(box, other)); step += 1) {
+        const offset = Math.ceil(step / 2) * 18 * (step % 2 ? -1 : 1);
+        label.setAttribute("transform", `translate(0 ${offset})`);
+        box = label.getBoundingClientRect();
+      }
+      occupied.push(box);
     }
   }
 
@@ -2502,6 +2512,7 @@ export function renderBattle(battle, documentRef = document) {
         button.textContent = `Fronts: ${mode}`;
       }
       if (this.sampledState) renderFrontlines(this.sampledState, "seek", this.sampledState);
+      if (this.sampledState) staggerPrimaryAndFrontlineLabels();
       updateFrontlineInspector(this);
       return this.frontlineMode;
     },
