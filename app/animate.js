@@ -4,7 +4,6 @@ import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
 import { buildFocusPlan } from "./map-view.js";
 import {
-  convergeDerivedFrontlines,
   deriveFrontlineFallback,
   enclosureLineIds,
   interpolateFrontlineSnapshots,
@@ -1263,29 +1262,8 @@ export function renderBattle(battle, documentRef = document) {
   function clearFrontTransitions(owner) {
     for (const timer of owner._frontTransitionTimers.values()) cancelTimeout(timer);
     owner._frontTransitionTimers.clear();
-    owner._hybridCrossfadeSelections?.clear();
     settleTopologyTransition();
     settleEnclosureTransition();
-  }
-
-  function settleUnusedHybridCrossfades(activeTimerKeys) {
-    const keys = new Set([
-      ...controller._frontTransitionTimers.keys(),
-      ...controller._hybridCrossfadeSelections.keys(),
-    ]);
-    for (const key of keys) {
-      if (!key.startsWith("hybrid:") || activeTimerKeys.has(key)) continue;
-      const timer = controller._frontTransitionTimers.get(key);
-      if (timer !== undefined) cancelTimeout(timer);
-      controller._frontTransitionTimers.delete(key);
-      controller._hybridCrossfadeSelections.delete(key);
-      const index = key.slice("hybrid:".length);
-      const primary = frontlineEls.get(`hybrid:line:${index}`);
-      primary?.classList.remove("is-front-entering", "is-front-exiting");
-      const secondaryKey = `hybrid:derived:${index}`;
-      frontlineEls.get(secondaryKey)?.remove();
-      frontlineEls.delete(secondaryKey);
-    }
   }
 
   function frontlineGeometry(state) {
@@ -1372,7 +1350,10 @@ export function renderBattle(battle, documentRef = document) {
     const active = new Set();
     controller._frontlineStatus = null;
     if (state) {
-      controller._frontlineStatus = { kind: "source", state };
+      controller._frontlineStatus = {
+        kind: state.before === state.after ? "source-snapshot" : "source-interpolation",
+        state,
+      };
       const enclosure = mode === "playback" && !reducedMotion
         ? crossedEnclosure(previousSampled, sampled)
         : null;
@@ -1589,199 +1570,9 @@ export function renderBattle(battle, documentRef = document) {
     });
   }
 
-  function renderHybridLine(key, coordinates, active, className = "front-line is-derived") {
-    active.add(key);
-    const path = keyedFrontlineElement(key, frontLineLayer, "path", className);
-    path.setAttribute("class", className);
-    path.setAttribute("d", toFrontlinePath(coordinates));
-    return path;
-  }
-
-  function renderOneSidedHybridTransition(transition, index, active, mode, activeTimerKeys) {
-    const derivedCoordinates = transition.derivedLine;
-    const sourceCoordinates = transition.front_line?.geometry?.coordinates;
-    const useSource = controller._frontlineStatus.sourceWeight >= 0.5;
-    const coordinates = useSource ? sourceCoordinates : derivedCoordinates;
-    const selection = `single:${coordinates ? (useSource ? "source" : "derived") : "hidden"}`;
-    const timerKey = `hybrid:${index}`;
-    const lineKey = `hybrid:line:${index}`;
-    activeTimerKeys.add(timerKey);
-
-    if (mode !== "playback" || reducedMotion) {
-      if (coordinates) renderHybridLine(lineKey, coordinates, active);
-      controller._hybridCrossfadeSelections.set(timerKey, selection);
-      return;
-    }
-
-    const prior = controller._frontTransitionTimers.get(timerKey);
-    const priorSelection = controller._hybridCrossfadeSelections.get(timerKey);
-    if (prior === undefined && priorSelection === selection) {
-      if (coordinates) renderHybridLine(lineKey, coordinates, active);
-      return;
-    }
-    if (prior !== undefined && priorSelection === selection) {
-      const path = frontlineEls.get(lineKey);
-      if (path) {
-        active.add(lineKey);
-        if (coordinates) path.setAttribute("d", toFrontlinePath(coordinates));
-      }
-      return;
-    }
-    if (prior !== undefined) cancelTimeout(prior);
-
-    let path = frontlineEls.get(lineKey);
-    if (!path && !coordinates && sourceCoordinates) {
-      const source = frontlineEls.get(`line:${transition.front_line.id}`);
-      if (source?.parentNode) {
-        path = svgEl(documentRef, "path", {
-          class: "front-line is-derived",
-          "data-frontline-key": lineKey,
-          d: source.getAttribute("d"),
-        });
-        source.parentNode.append(path);
-        frontlineEls.set(lineKey, path);
-      }
-    }
-    if (coordinates) path = renderHybridLine(lineKey, coordinates, active);
-    else if (path) active.add(lineKey);
-    path?.classList.remove("is-front-entering", "is-front-exiting");
-    path?.classList.add(coordinates ? "is-front-entering" : "is-front-exiting");
-    controller._hybridCrossfadeSelections.set(timerKey, selection);
-    if (!path) return;
-
-    const timer = scheduleTimeout(() => {
-      if (controller._frontTransitionTimers.get(timerKey) !== timer) return;
-      controller._frontTransitionTimers.delete(timerKey);
-      if (coordinates) {
-        path.classList.remove("is-front-entering");
-      } else {
-        path.remove();
-        if (frontlineEls.get(lineKey) === path) frontlineEls.delete(lineKey);
-      }
-    }, FRONT_CROSSFADE_MS);
-    controller._frontTransitionTimers.set(timerKey, timer);
-  }
-
-  function renderHybridCrossfade(transition, index, active, mode, activeTimerKeys) {
-    const derivedCoordinates = transition.derivedLine;
-    const sourceCoordinates = transition.front_line?.geometry?.coordinates;
-    if (!derivedCoordinates || !sourceCoordinates) {
-      renderOneSidedHybridTransition(transition, index, active, mode, activeTimerKeys);
-      return;
-    }
-    const useSource = controller._frontlineStatus.sourceWeight >= 0.5;
-    const timerKey = `hybrid:${index}`;
-    const selection = `pair:${useSource ? "source" : "derived"}`;
-    if (mode !== "playback" || reducedMotion) {
-      const coordinates = useSource ? sourceCoordinates : derivedCoordinates;
-      if (coordinates) renderHybridLine(`hybrid:line:${index}`, coordinates, active);
-      return;
-    }
-    activeTimerKeys.add(timerKey);
-    const prior = controller._frontTransitionTimers.get(timerKey);
-    const priorSelection = controller._hybridCrossfadeSelections.get(timerKey);
-    if (prior === undefined && priorSelection === selection) {
-      renderHybridLine(`hybrid:line:${index}`, useSource ? sourceCoordinates : derivedCoordinates, active);
-      return;
-    }
-    const sourceKey = `hybrid:line:${index}`;
-    const derivedKey = `hybrid:derived:${index}`;
-    const source = renderHybridLine(sourceKey, sourceCoordinates, active);
-    const derived = renderHybridLine(derivedKey, derivedCoordinates, active);
-    const entering = useSource ? source : derived;
-    const exiting = useSource ? derived : source;
-    entering.classList.add("is-front-entering");
-    exiting.classList.add("is-front-exiting");
-    if (prior !== undefined && priorSelection === selection) return;
-    if (prior !== undefined) cancelTimeout(prior);
-    controller._hybridCrossfadeSelections.set(timerKey, selection);
-    const timer = scheduleTimeout(() => {
-      if (controller._frontTransitionTimers.get(timerKey) !== timer) return;
-      controller._frontTransitionTimers.delete(timerKey);
-      const exitingKey = useSource ? derivedKey : sourceKey;
-      if (frontlineEls.get(exitingKey) === exiting) {
-        exiting.remove();
-        frontlineEls.delete(exitingKey);
-      }
-      const enteringKey = useSource ? sourceKey : derivedKey;
-      if (frontlineEls.get(enteringKey) === entering) entering.classList.remove("is-front-entering");
-    }, FRONT_CROSSFADE_MS);
-    controller._frontTransitionTimers.set(timerKey, timer);
-  }
-
   function renderHybridFrontlines(sampled, mode, previousSampled) {
-    const state = sampled.frontline;
-    const derived = currentDerivedFrontlines(sampled);
-    const active = new Set();
-    const activeTimerKeys = new Set();
-    if (!state) {
-      renderInfluences(derived, active);
-      renderDerivedLines(derived, active);
-      controller._frontlineStatus = derived.available
-        ? { kind: "derived" }
-        : { kind: "derived-unavailable" };
-      settleUnusedHybridCrossfades(activeTimerKeys);
-    } else {
-      const geometry = frontlineGeometry(state);
-      if (!derived.available) {
-        settleUnusedHybridCrossfades(activeTimerKeys);
-        renderSourceFrontlines(sampled, mode, previousSampled);
-        const sourceState = controller._frontlineStatus.state;
-        controller._frontlineStatus = { kind: "source-fallback", state: sourceState };
-        return;
-      } else {
-        renderSourceFrontlines(sampled, mode, previousSampled, { renderLines: false });
-        const displayedSourceState = controller._frontlineStatus.state;
-        geometry.interpolatedAreas.forEach((area) => active.add(`area:${area.id}`));
-        renderInfluences(derived, active);
-        const sourceWeight = state.before === state.after
-          ? 1
-          : (Math.abs(state.progress - 0.5) * 2) ** 2;
-        const converged = convergeDerivedFrontlines(
-          derived.contactLines,
-          { front_lines: geometry.interpolatedLines },
-          sourceWeight,
-        );
-        controller._frontlineStatus = {
-          kind: sourceWeight === 1 ? "source" : "hybrid",
-          state: displayedSourceState,
-          sourceWeight,
-        };
-        if (sourceWeight === 1) {
-          for (const line of converged.front_lines) {
-            renderHybridLine(
-              `line:${line.id}`,
-              line.geometry.coordinates,
-              active,
-              "front-line is-source-backed",
-            ).classList.toggle("is-inferred", line.precision === "inferred");
-          }
-        } else if (converged.lineTransitions?.length) {
-          converged.lineTransitions.forEach((transition, index) => {
-            if (transition.transition === "hybrid") {
-              renderHybridLine(`hybrid:line:${index}`, transition.front_line.geometry.coordinates, active);
-            } else {
-              renderHybridCrossfade(transition, index, active, mode, activeTimerKeys);
-            }
-          });
-        } else {
-          const count = Math.max(converged.derivedLines?.length || 0, converged.front_lines?.length || 0);
-          for (let index = 0; index < count; index += 1) {
-            renderHybridCrossfade({
-              derivedLine: converged.derivedLines?.[index],
-              front_line: converged.front_lines?.[index],
-            }, index, active, mode, activeTimerKeys);
-          }
-        }
-        settleUnusedHybridCrossfades(activeTimerKeys);
-      }
-    }
-    for (const [key, element] of frontlineEls) {
-      if (!active.has(key) && !element.classList.contains("is-front-exiting")) {
-        element.remove();
-        frontlineEls.delete(key);
-      }
-    }
+    if (sampled.frontline) renderSourceFrontlines(sampled, mode, previousSampled);
+    else renderDerivedFrontlines(sampled);
   }
 
   function renderDerivedFrontlines(sampled) {
@@ -1830,16 +1621,17 @@ export function renderBattle(battle, documentRef = document) {
       summary.textContent = "";
       return;
     }
-    if (status.kind === "derived") {
-      summary.textContent = "DERIVED FROM UNIT POSITIONS · LOW CONFIDENCE";
-      return;
+    const summaries = {
+      "source-snapshot": "SOURCE SNAPSHOT",
+      "source-interpolation": "SOURCE INTERPOLATION · animation between historical anchors",
+      derived: "DERIVED FROM UNIT POSITIONS · ≤35% confidence",
+      "derived-unavailable": "INSUFFICIENT EVIDENCE · frontline unavailable",
+      "source-unavailable": "INSUFFICIENT EVIDENCE · frontline unavailable",
+    };
+    if (summaries[status.kind]) {
+      summary.textContent = summaries[status.kind];
     }
-    if (status.kind === "derived-unavailable") {
-      summary.textContent = "Derived frontline unavailable: insufficient units.";
-      return;
-    }
-    if (status.kind === "source-unavailable") {
-      summary.textContent = "Source-backed frontline unavailable.";
+    if (!status.state) {
       return;
     }
 
@@ -1856,14 +1648,6 @@ export function renderBattle(battle, documentRef = document) {
     const transitionLabel = transition === "crossfade"
       ? "Crossfade"
       : transition === "enclosure" ? "Enclosure reveal" : "Interpolated";
-    if (status.kind === "hybrid") {
-      const sourcePercent = Math.round(status.sourceWeight * 100);
-      summary.textContent = `HYBRID · 推導 ${100 - sourcePercent}% / 史料校正 ${sourcePercent}%`;
-    } else if (status.kind === "source-fallback") {
-      summary.textContent = "單位資料不足，使用史料補間";
-    } else {
-      summary.textContent = "SOURCE-BACKED";
-    }
     if (details) {
       details.textContent = [
         time,
@@ -2390,7 +2174,6 @@ export function renderBattle(battle, documentRef = document) {
     _lastFollowCheck: -Infinity,
     _trailFadeTimers: new Map(),
     _frontTransitionTimers: new Map(),
-    _hybridCrossfadeSelections: new Map(),
     _beaconEls: beaconEls,
     _beaconExitTimers: beaconExitTimers,
     _lastTrailHistoricalMs: null,

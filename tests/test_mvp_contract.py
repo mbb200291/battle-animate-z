@@ -490,7 +490,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         script = """
             import fs from "node:fs";
             import { validateBattle } from "./app/animate.js";
-            import { convergeDerivedFrontlines, deriveFrontlineFallback } from "./app/frontlines.js";
+            import { deriveFrontlineFallback } from "./app/frontlines.js";
             import { compileTimeline, sampleTimeline } from "./app/timeline.js";
             const battle = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
             const diagnostics = validateBattle(battle);
@@ -523,12 +523,6 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             });
             const midpoint = deriveAt("1944-12-22T00:00:00Z");
             const crossTime = deriveAt("1944-12-23T12:00:00Z");
-            const anchor = deriveAt("1944-12-25T00:00:00Z");
-            const converged = convergeDerivedFrontlines(
-              anchor.derived.contactLines,
-              anchor.sampled.frontline.after,
-              1,
-            );
             console.log(JSON.stringify({
               diagnostics,
               keyframeCount: compiled.frontlineKeyframes.length,
@@ -542,8 +536,6 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
                 contactLineCount: midpoint.derived.contactLines.length,
               },
               crossTimeDerivedLines: crossTime.derived.contactLines,
-              sourceAtAnchor: anchor.sampled.frontline.after.front_lines,
-              convergedAtAnchor: converged.front_lines,
             }));
         """
         result = subprocess.run(
@@ -591,8 +583,6 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             6,
             "Renderer labels need distinct positions at 22 December.",
         )
-        self.assertEqual(browser["convergedAtAnchor"], browser["sourceAtAnchor"])
-
         out_of_region = deepcopy(battle)
         movement = out_of_region["movements"][0]
         movement["path"]["coordinates"] = [[0, 0], [1, 1], [2, 2]]

@@ -1193,7 +1193,7 @@ test("source and derived frontline modes never borrow from each other", () => {
   assert.equal(all().filter((element) => element.classList.contains("front-line")).length, 1);
   assert.equal(all().every((element) => !element.classList.contains("is-derived")), true);
   assert.equal(all().some((element) => element.classList.contains("front-influence")), false);
-  assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE-BACKED");
+  assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE SNAPSHOT");
 
   controller.setFrontlineMode("derived");
   const derivedLines = all().filter((element) => element.classList.contains("front-line"));
@@ -1202,8 +1202,92 @@ test("source and derived frontline modes never borrow from each other", () => {
   assert.equal(derivedLines.every((element, index) =>
     element.getAttribute("data-frontline-key") === `derived:line:${index}`), true);
   assert.equal(all().some((element) => element.classList.contains("is-source-backed")), false);
-  assert.match(document.getElementById("frontline-summary").textContent,
-    /^DERIVED FROM UNIT POSITIONS · LOW CONFIDENCE$/);
+  assert.equal(document.getElementById("frontline-summary").textContent,
+    "DERIVED FROM UNIT POSITIONS · ≤35% confidence");
+});
+
+test("source-covered hybrid ignores radical derived actor movement", () => {
+  const renderMidpoint = (battle) => {
+    const clock = new FrameClock();
+    const document = new FakeDocument(clock.window);
+    installLeaflet();
+    const controller = renderBattle(battle, document);
+    controller.seek(500);
+    const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
+    return {
+      kind: controller._frontlineStatus.kind,
+      paths: descendants(svg)
+        .filter((element) => element.classList.contains("front-line") ||
+          element.classList.contains("front-control-area"))
+        .map((element) => element.getAttribute("d")),
+    };
+  };
+  const original = hybridFrontlineBattleFixture();
+  const moved = hybridFrontlineBattleFixture();
+  for (const movement of moved.movements) {
+    movement.path.coordinates = movement.path.coordinates.map(([x, y]) => [x + 20, y + 20]);
+  }
+
+  const first = renderMidpoint(original);
+  const second = renderMidpoint(moved);
+  assert.equal(first.kind, "source-interpolation");
+  assert.equal(second.kind, "source-interpolation");
+  assert.deepEqual(second.paths, first.paths);
+});
+
+test("hybrid uses derived only before source coverage then interpolation and snapshots", () => {
+  const battle = hybridFrontlineBattleFixture();
+  battle.frontline_snapshots[0].time.start = "2020-01-01T00:00:00.500Z";
+  battle.frontline_snapshots[1].time.start = "2020-01-01T00:00:01.500Z";
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+
+  controller.seek(0);
+  assert.equal(controller._frontlineStatus.kind, "derived");
+  controller.seek(500);
+  assert.equal(controller._frontlineStatus.kind, "source-snapshot");
+  controller.seek(1000);
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
+  controller.seek(2000);
+  assert.equal(controller._frontlineStatus.kind, "source-snapshot");
+});
+
+test("frontline inspector uses exact source-first provenance summaries", () => {
+  const battle = hybridFrontlineBattleFixture();
+  battle.frontline_snapshots[0].time.start = "2020-01-01T00:00:00.500Z";
+  battle.frontline_snapshots[1].time.start = "2020-01-01T00:00:01.500Z";
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const summary = () => document.getElementById("frontline-summary").textContent;
+
+  controller.seek(0);
+  assert.equal(summary(), "DERIVED FROM UNIT POSITIONS · ≤35% confidence");
+  controller.seek(500);
+  assert.equal(summary(), "SOURCE SNAPSHOT");
+  controller.seek(1000);
+  assert.equal(summary(), "SOURCE INTERPOLATION · animation between historical anchors");
+  controller.setFrontlineMode("source");
+  controller.seek(500);
+  assert.equal(controller._frontlineStatus.kind, "source-snapshot");
+  controller.seek(1000);
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
+  controller.seek(0);
+  assert.equal(controller._frontlineStatus.kind, "source-unavailable");
+  assert.equal(summary(), "INSUFFICIENT EVIDENCE · frontline unavailable");
+
+  const unavailableBattle = frontlineFallbackBattleFixture();
+  unavailableBattle.actors = unavailableBattle.actors.filter(({ id }) => id === "alpha" || id === "bravo");
+  unavailableBattle.movements = unavailableBattle.movements.filter(({ actor_id: actorId }) =>
+    actorId === "alpha" || actorId === "bravo");
+  const unavailableDocument = new FakeDocument(clock.window);
+  installLeaflet();
+  renderBattle(unavailableBattle, unavailableDocument);
+  assert.equal(unavailableDocument.getElementById("frontline-summary").textContent,
+    "INSUFFICIENT EVIDENCE · frontline unavailable");
 });
 
 test("derived mode rejects disconnected contact lines", () => {
@@ -1232,7 +1316,7 @@ test("mixed hybrid falls back to source when derived topology is ambiguous", () 
   const lines = descendants(svg).filter((element) => element.classList.contains("front-line"));
   assert.equal(lines.length, 2);
   assert.equal(lines.every((line) => line.classList.contains("is-source-backed")), true);
-  assert.equal(controller._frontlineStatus.kind, "source-fallback");
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
 });
 
 test("hybrid renderer spatially matches source fronts supplied in reverse order", () => {
@@ -1255,7 +1339,7 @@ test("hybrid renderer spatially matches source fronts supplied in reverse order"
       return xs.reduce((total, x) => total + x, 0) / xs.length;
     })
     .sort((left, right) => left - right);
-  assert.equal(controller._frontlineStatus.kind, "source-fallback");
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
   assert.equal(centers.length, 2);
   assert.ok(centers[0] < 2, `west front collapsed to ${centers[0]}`);
   assert.ok(centers[1] > 8, `east front collapsed to ${centers[1]}`);
@@ -1294,7 +1378,7 @@ test("sparse derived grid stays unavailable through pan, zoom, and seek", () => 
   assert.deepEqual(paths(), []);
 });
 
-test("hybrid uses exact source anchors and a U-shaped source correction between them", () => {
+test("hybrid uses exact source anchors and source interpolation between them", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);
   installLeaflet();
@@ -1304,25 +1388,23 @@ test("hybrid uses exact source anchors and a U-shaped source correction between 
   const lines = () => descendants(svg).filter((element) => element.classList.contains("front-line"));
   const pathNumbers = () => lines()[0].getAttribute("d").match(/-?\d+(?:\.\d+)?/g).map(Number);
 
-  assert.equal(controller._frontlineStatus.sourceWeight, 1);
+  assert.equal(controller._frontlineStatus.kind, "source-snapshot");
   assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 300), true);
   assert.deepEqual([pathNumbers()[1], pathNumbers().at(-1)], [350, 250]);
   controller.seek(250);
-  assert.equal(controller._frontlineStatus.sourceWeight, 0.25);
-  assert.match(document.getElementById("frontline-summary").textContent,
-    /^HYBRID · 推導 75% \/ 史料校正 25%$/);
-  assert.equal(lines().every((line) => line.classList.contains("is-derived")), true);
-  controller.seek(500);
-  assert.equal(controller._frontlineStatus.sourceWeight, 0);
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
   assert.equal(document.getElementById("frontline-summary").textContent,
-    "HYBRID · 推導 100% / 史料校正 0%");
+    "SOURCE INTERPOLATION · animation between historical anchors");
+  assert.equal(lines().every((line) => line.classList.contains("is-source-backed")), true);
+  controller.seek(500);
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
   controller.seek(1000);
-  assert.equal(controller._frontlineStatus.sourceWeight, 1);
+  assert.equal(controller._frontlineStatus.kind, "source-snapshot");
   assert.equal(pathNumbers().filter((_, index) => index % 2 === 0).every((x) => x === 400), true);
   assert.deepEqual([pathNumbers()[1], pathNumbers().at(-1)], [350, 250]);
 });
 
-test("hybrid topology mismatch does not show source-only lines at zero source weight", () => {
+test("hybrid topology mismatch keeps source-only lines during source coverage", () => {
   const battle = hybridFrontlineBattleFixture();
   for (const snapshot of battle.frontline_snapshots) {
     snapshot.front_lines.push({
@@ -1339,9 +1421,9 @@ test("hybrid topology mismatch does not show source-only lines at zero source we
   controller.seek(500);
 
   const lines = descendants(svg).filter((element) => element.classList.contains("front-line"));
-  assert.equal(controller._frontlineStatus.sourceWeight, 0);
-  assert.equal(lines.length, 1);
-  assert.equal(lines.every((line) => line.classList.contains("is-derived")), true);
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
+  assert.equal(lines.length, 2);
+  assert.equal(lines.every((line) => line.classList.contains("is-source-backed")), true);
 });
 
 test("hybrid control areas reuse source topology crossfade timing", () => {
@@ -1367,7 +1449,7 @@ test("hybrid control areas reuse source topology crossfade timing", () => {
   assert.equal(newArea.classList.contains("is-front-entering"), false);
 });
 
-test("hybrid delays changed enclosure areas without fabricating a source line reveal", () => {
+test("hybrid uses the source enclosure reveal during source coverage", () => {
   const battle = hybridFrontlineBattleFixture();
   battle.frontline_snapshots[0].front_lines[0].geometry.coordinates = [[0, -1], [0, 1]];
   battle.frontline_snapshots[1].front_lines[0].geometry.coordinates = [[1, -1], [2, 0], [1, 1], [1, -1]];
@@ -1385,206 +1467,9 @@ test("hybrid delays changed enclosure areas without fabricating a source line re
   assert.equal(clock.timeoutDelays.get(controller._frontTransitionTimers.get("enclosure")), 900);
   assert.equal(descendants(svg).some((element) =>
     element.classList.contains("front-enclosure-mask-path") ||
-    element.classList.contains("is-enclosure-exiting")), false);
+    element.classList.contains("is-enclosure-exiting")), true);
   clock.flushTimeouts();
   assert.equal(area.classList.contains("is-enclosure-area-entering"), false);
-});
-
-test("hybrid source-only and derived-only lines animate their one-sided topology", () => {
-  const sourceOnly = hybridFrontlineBattleFixture();
-  for (const snapshot of sourceOnly.frontline_snapshots) {
-    snapshot.front_lines.push({
-      id: "source_only",
-      geometry: { type: "LineString", coordinates: [[3, -0.5], [3, 0.5]] },
-    });
-  }
-  const sourceClock = new FrameClock();
-  const sourceDocument = new FakeDocument(sourceClock.window);
-  installLeaflet();
-  const sourceController = renderBattle(sourceOnly, sourceDocument);
-  const sourceSvg = sourceDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  sourceController.renderAt(250, { mode: "playback" });
-  const departing = descendants(sourceSvg).find((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:line:1");
-  assert.equal(departing.classList.contains("is-front-exiting"), true);
-  assert.equal(sourceClock.timeoutDelays.get(sourceController._frontTransitionTimers.get("hybrid:1")), 500);
-  sourceClock.flushTimeouts();
-  assert.equal(departing.parentNode, null);
-  sourceController.renderAt(900, { mode: "playback" });
-  const returning = descendants(sourceSvg).find((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:line:1");
-  assert.equal(returning.classList.contains("is-front-entering"), true);
-  assert.equal(sourceClock.timeoutDelays.get(sourceController._frontTransitionTimers.get("hybrid:1")), 500);
-  sourceClock.flushTimeouts();
-
-  const derivedOnly = hybridFrontlineBattleFixture();
-  for (const snapshot of derivedOnly.frontline_snapshots) snapshot.front_lines = [];
-  const derivedClock = new FrameClock();
-  const derivedDocument = new FakeDocument(derivedClock.window);
-  installLeaflet();
-  const derivedController = renderBattle(derivedOnly, derivedDocument);
-  const derivedSvg = derivedDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  derivedController.renderAt(250, { mode: "playback" });
-  const arriving = descendants(derivedSvg).find((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:line:0");
-  assert.equal(arriving.classList.contains("is-front-entering"), true);
-  assert.equal(derivedClock.timeoutDelays.get(derivedController._frontTransitionTimers.get("hybrid:0")), 500);
-  derivedClock.flushTimeouts();
-  assert.equal(arriving.classList.contains("is-front-entering"), false);
-  derivedController.renderAt(900, { mode: "playback" });
-  assert.equal(arriving.classList.contains("is-front-exiting"), true);
-  assert.equal(derivedClock.timeoutDelays.get(derivedController._frontTransitionTimers.get("hybrid:0")), 500);
-  derivedClock.flushTimeouts();
-  assert.equal(arriving.parentNode, null);
-});
-
-test("hybrid one-sided and crossfade artifacts clear on seek, reduced motion, replacement, and destroy", () => {
-  const mismatch = () => {
-    const battle = hybridFrontlineBattleFixture();
-    for (const snapshot of battle.frontline_snapshots) {
-      snapshot.front_lines.push({
-        id: "source_only",
-        geometry: { type: "LineString", coordinates: [[3, -0.5], [3, 0.5]] },
-      });
-    }
-    return battle;
-  };
-  const clock = new FrameClock();
-  const document = new FakeDocument(clock.window);
-  installLeaflet();
-  const controller = renderBattle(mismatch(), document);
-  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  controller.renderAt(250, { mode: "playback" });
-  const timers = [...controller._frontTransitionTimers.values()];
-  controller.seek(300);
-  assert.equal(controller._frontTransitionTimers.size, 0);
-  assert.equal(timers.every((timer) => clock.clearedTimeouts.includes(timer)), true);
-  assert.equal(descendants(svg).some((element) =>
-    element.classList.contains("is-front-entering") || element.classList.contains("is-front-exiting")), false);
-
-  controller.renderAt(250, { mode: "playback" });
-  const replacementTimer = [...controller._frontTransitionTimers.values()][0];
-  const replacement = renderBattle(mismatch(), document);
-  assert.equal(controller._frontTransitionTimers.size, 0);
-  assert.equal(clock.clearedTimeouts.includes(replacementTimer), true);
-  replacement.renderAt(250, { mode: "playback" });
-  const destroyTimer = [...replacement._frontTransitionTimers.values()][0];
-  replacement.destroy();
-  assert.equal(replacement._frontTransitionTimers.size, 0);
-  assert.equal(clock.clearedTimeouts.includes(destroyTimer), true);
-
-  const reducedClock = new FrameClock(true);
-  const reducedDocument = new FakeDocument(reducedClock.window);
-  installLeaflet();
-  const reducedBattle = hybridFrontlineBattleFixture();
-  for (const snapshot of reducedBattle.frontline_snapshots) snapshot.front_lines = [];
-  const reduced = renderBattle(reducedBattle, reducedDocument);
-  const reducedSvg = reducedDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  reduced.renderAt(250, { mode: "playback" });
-  assert.equal(reduced._frontTransitionTimers.size, 0);
-  assert.equal(descendants(reducedSvg).some((element) =>
-    element.classList.contains("is-front-entering") || element.classList.contains("is-front-exiting")), false);
-});
-
-test("hybrid mismatch reuses its timer and settles derived artifacts at a source anchor", () => {
-  const battle = hybridFrontlineBattleFixture();
-  for (const snapshot of battle.frontline_snapshots) {
-    snapshot.front_lines.push({
-      id: "source_only",
-      geometry: { type: "LineString", coordinates: [[3, -0.5], [3, 0.5]] },
-    });
-  }
-  const clock = new FrameClock();
-  const document = new FakeDocument(clock.window);
-  installLeaflet();
-  const controller = renderBattle(battle, document);
-  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-
-  controller.renderAt(250, { mode: "playback" });
-  const timer = controller._frontTransitionTimers.get("hybrid:0");
-  controller.renderAt(300, { mode: "playback" });
-
-  assert.equal(controller._frontTransitionTimers.get("hybrid:0"), timer);
-  assert.equal(clock.clearedTimeouts.includes(timer), false);
-  controller.renderAt(1000, { mode: "playback" });
-  assert.equal(controller._frontTransitionTimers.size, 0);
-  assert.equal(descendants(svg).some((element) =>
-    element.classList.contains("is-front-entering") || element.classList.contains("is-front-exiting")), false);
-  assert.equal(descendants(svg).filter((element) => element.classList.contains("front-line")).length, 2);
-});
-
-test("hybrid retires a stale crossfade timer when its line becomes compatible", () => {
-  const battle = hybridFrontlineBattleFixture();
-  for (const snapshot of battle.frontline_snapshots) {
-    snapshot.front_lines.push({
-      id: "temporary_source_only",
-      geometry: { type: "LineString", coordinates: [[3, -0.5], [3, 0.5]] },
-    });
-  }
-  const clock = new FrameClock();
-  const document = new FakeDocument(clock.window);
-  installLeaflet();
-  const controller = renderBattle(battle, document);
-  const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-
-  controller.renderAt(250, { mode: "playback" });
-  const timer = controller._frontTransitionTimers.get("hybrid:0");
-  const staleCallback = clock.timeouts.get(timer);
-  for (const snapshot of battle.frontline_snapshots) snapshot.front_lines.pop();
-  controller.renderAt(300, { mode: "playback" });
-  const current = descendants(svg).find((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:line:0");
-
-  assert.ok(current?.parentNode);
-  assert.equal(controller._frontTransitionTimers.has("hybrid:0"), false);
-  assert.ok(clock.clearedTimeouts.includes(timer));
-  staleCallback();
-  assert.ok(current.parentNode);
-});
-
-test("hybrid replaces timer ownership when one-sided and paired transitions trade an index", () => {
-  const closedSource = {
-    id: "closed_source",
-    geometry: { type: "LineString", coordinates: [[0, 0], [1, 0], [0, 1], [0, 0]] },
-  };
-
-  const oneToPair = hybridFrontlineBattleFixture();
-  for (const snapshot of oneToPair.frontline_snapshots) snapshot.front_lines = [];
-  const firstClock = new FrameClock();
-  const firstDocument = new FakeDocument(firstClock.window);
-  installLeaflet();
-  const first = renderBattle(oneToPair, firstDocument);
-  const firstSvg = firstDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  first.renderAt(250, { mode: "playback" });
-  const oneSidedTimer = first._frontTransitionTimers.get("hybrid:0");
-  for (const snapshot of oneToPair.frontline_snapshots) snapshot.front_lines = [structuredClone(closedSource)];
-  first.renderAt(300, { mode: "playback" });
-  assert.notEqual(first._frontTransitionTimers.get("hybrid:0"), oneSidedTimer);
-  assert.equal(firstClock.clearedTimeouts.includes(oneSidedTimer), true);
-  firstClock.flushTimeouts();
-  assert.equal(descendants(firstSvg).some((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:line:0"), false);
-  assert.ok(descendants(firstSvg).find((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:derived:0")?.parentNode);
-
-  const pairToOne = hybridFrontlineBattleFixture();
-  for (const snapshot of pairToOne.frontline_snapshots) snapshot.front_lines = [structuredClone(closedSource)];
-  const secondClock = new FrameClock();
-  const secondDocument = new FakeDocument(secondClock.window);
-  installLeaflet();
-  const second = renderBattle(pairToOne, secondDocument);
-  const secondSvg = secondDocument.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
-  second.renderAt(250, { mode: "playback" });
-  const pairedTimer = second._frontTransitionTimers.get("hybrid:0");
-  for (const snapshot of pairToOne.frontline_snapshots) snapshot.front_lines = [];
-  second.renderAt(300, { mode: "playback" });
-  assert.notEqual(second._frontTransitionTimers.get("hybrid:0"), pairedTimer);
-  assert.equal(secondClock.clearedTimeouts.includes(pairedTimer), true);
-  secondClock.flushTimeouts();
-  assert.ok(descendants(secondSvg).find((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:line:0")?.parentNode);
-  assert.equal(descendants(secondSvg).some((element) =>
-    element.getAttribute("data-frontline-key") === "hybrid:derived:0"), false);
 });
 
 test("source fallback area topology settlement leaves no stale artifacts", () => {
@@ -1618,7 +1503,7 @@ test("source fallback area topology settlement leaves no stale artifacts", () =>
   assert.equal(hybridPaths.some((path) =>
     path.classList.contains("is-front-entering") || path.classList.contains("is-front-exiting")), false);
   assert.equal(controller._frontTransitionTimers.size, 0);
-  assert.equal(controller._frontlineStatus.kind, "source-fallback");
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
 });
 
 test("hybrid keeps source control areas and falls back to source interpolation without enough units", () => {
@@ -1634,12 +1519,14 @@ test("hybrid keeps source control areas and falls back to source interpolation w
   assert.ok(descendants(svg).some((element) =>
     element.getAttribute("data-frontline-key") === "area:blue_area"));
   assert.ok(descendants(svg).some((element) => element.classList.contains("is-source-backed")));
-  assert.equal(controller._frontlineStatus.kind, "source-fallback");
-  assert.equal(document.getElementById("frontline-summary").textContent, "單位資料不足，使用史料補間");
+  assert.equal(controller._frontlineStatus.kind, "source-interpolation");
+  assert.equal(document.getElementById("frontline-summary").textContent,
+    "SOURCE INTERPOLATION · animation between historical anchors");
 
   controller.setFrontlineMode("derived");
   assert.equal(descendants(svg).some((element) => element.classList.contains("front-line")), false);
-  assert.match(document.getElementById("frontline-summary").textContent, /insufficient units/i);
+  assert.equal(document.getElementById("frontline-summary").textContent,
+    "INSUFFICIENT EVIDENCE · frontline unavailable");
 });
 
 test("hybrid without source stays derived while source mode reports unavailable", () => {
@@ -1653,7 +1540,8 @@ test("hybrid without source stays derived while source mode reports unavailable"
     element.classList.contains("front-line") && element.classList.contains("is-derived")));
   controller.setFrontlineMode("source");
   assert.equal(descendants(svg).some((element) => element.classList.contains("front-line")), false);
-  assert.match(document.getElementById("frontline-summary").textContent, /source-backed frontline unavailable/i);
+  assert.equal(document.getElementById("frontline-summary").textContent,
+    "INSUFFICIENT EVIDENCE · frontline unavailable");
   assert.equal(document.getElementById("fronts-button").disabled, false);
 });
 
@@ -1750,7 +1638,7 @@ test("frontline inspector shows source-backed provenance and interpolation safel
   const battle = frontlineBattleFixture();
   const controller = renderBattle(battle, document);
   controller.setFrontlineMode("source");
-  assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE-BACKED");
+  assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE SNAPSHOT");
   assert.match(document.getElementById("frontline-details").textContent, /exact.*Interpolated/);
   controller.seek(500);
 
@@ -1759,7 +1647,7 @@ test("frontline inspector shows source-backed provenance and interpolation safel
   const details = document.getElementById("frontline-details");
   const sources = document.getElementById("frontline-sources");
   assert.equal(status.hidden, false);
-  assert.equal(summary.textContent, "SOURCE-BACKED");
+  assert.equal(summary.textContent, "SOURCE INTERPOLATION · animation between historical anchors");
   assert.match(details.textContent, /front_0 → front_1/);
   assert.match(details.textContent, /inferred/);
   assert.match(details.textContent, /60%/);
@@ -1780,7 +1668,8 @@ test("frontline inspector labels topology crossfade", () => {
   const controller = renderBattle(topologyChangeBattleFixture(), document);
   controller.setFrontlineMode("source");
   controller.seek(500);
-  assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE-BACKED");
+  assert.equal(document.getElementById("frontline-summary").textContent,
+    "SOURCE INTERPOLATION · animation between historical anchors");
   assert.match(document.getElementById("frontline-details").textContent, /Crossfade/);
 });
 
@@ -1806,7 +1695,7 @@ test("frontline inspector labels derived provenance without inventing a source",
   const status = document.getElementById("frontline-status");
   assert.equal(status.hidden, false);
   const summary = document.getElementById("frontline-summary").textContent;
-  assert.equal(summary, "DERIVED FROM UNIT POSITIONS · LOW CONFIDENCE");
+  assert.equal(summary, "DERIVED FROM UNIT POSITIONS · ≤35% confidence");
   assert.equal(document.getElementById("frontline-sources").children.length, 0);
 });
 
@@ -1934,7 +1823,7 @@ test("hybrid source fallback omits unavailable derived influence circles", () =>
   const controller = renderBattle(battle, document);
   const svg = document.getElementById("battle-map").children.find((child) => child.tagName === "SVG");
 
-  assert.equal(controller._frontlineStatus.kind, "source-fallback");
+  assert.equal(controller._frontlineStatus.kind, "source-snapshot");
   assert.equal(descendants(svg).some((element) => element.classList.contains("front-influence")), false);
   assert.ok(descendants(svg).find((element) => element.classList.contains("is-source-backed")));
 });
@@ -2105,7 +1994,7 @@ test("same battle time keeps hybrid derived geography stable across zoom", () =>
 
   const zoom8 = renderAtZoom(8);
   const zoom12 = renderAtZoom(12);
-  assert.equal(zoom8.kind, "hybrid");
+  assert.equal(zoom8.kind, "source-interpolation");
   assert.equal(zoom12.kind, zoom8.kind);
   assert.deepEqual(zoom12.contactLines.map((line) => line.length),
     zoom8.contactLines.map((line) => line.length));
@@ -2391,7 +2280,7 @@ test("high-speed enclosure inspector uses the crossed snapshots provenance", () 
   const summary = document.getElementById("frontline-summary").textContent;
   const details = document.getElementById("frontline-details").textContent;
   const sources = document.getElementById("frontline-sources");
-  assert.equal(summary, "SOURCE-BACKED");
+  assert.equal(summary, "SOURCE SNAPSHOT");
   assert.match(details, /front_0 → front_1/);
   assert.match(details, /55% confidence/);
   assert.match(details, /Opening/);
@@ -2501,7 +2390,7 @@ test("a jump past enclosure reveals the final sampled geometry and later topolog
   assert.equal(area.getAttribute("d"), expectedAreaD);
   assert.match(target.getAttribute("mask"), /^url\(#front-enclosure-/);
   assert.equal(later.classList.contains("is-front-entering"), true);
-  assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE-BACKED");
+  assert.equal(document.getElementById("frontline-summary").textContent, "SOURCE SNAPSHOT");
   assert.match(document.getElementById("frontline-details").textContent, /front_0 → front_1.*Enclosure reveal/);
 });
 
