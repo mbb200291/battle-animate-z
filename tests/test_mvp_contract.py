@@ -100,7 +100,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
     def _readme_prompt_sample(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         prompt_match = re.search(
-            r"## Generate JSON With AI — Battle JSON Prompt 1\.3\.1.*?"
+            r"## Generate JSON With AI — Battle JSON Prompt 1\.3\.2.*?"
             r"````text\n(?P<prompt>.*?)\n````",
             readme,
             re.DOTALL,
@@ -927,14 +927,15 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
-    def test_readme_prompt_v131_teaches_source_first_frontline_evidence(self):
+    def test_readme_prompt_v132_teaches_source_first_frontline_evidence(self):
         readme, prompt, sample = self._readme_prompt_sample()
 
         for required in (
-            "Battle JSON Prompt 1.3.1",
+            "Battle JSON Prompt 1.3.2",
             'schema_version 固定使用字串 "0.4.0"',
-            'metadata.source_system 固定使用字串 "battle_json_prompt_1.3.1"',
-            "只輸出「一個 JSON 物件」",
+            'metadata.source_system 固定使用字串 "battle_json_prompt_1.3.2"',
+            "只輸出一個標記為 json 的 Markdown 程式碼區塊",
+            "程式碼區塊內只能放最終 JSON 物件",
             "唯一例外",
             "不要新增 prompt_version",
             "無法實際讀取 URL",
@@ -998,7 +999,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertIn(required, prompt)
         self.assertEqual(sample["schema_version"], "0.4.0")
-        self.assertEqual(sample["metadata"]["source_system"], "battle_json_prompt_1.3.1")
+        self.assertEqual(sample["metadata"]["source_system"], "battle_json_prompt_1.3.2")
         for obsolete in (
             "battle-animation-schema v0.1.0／v0.2.0／v0.3.0",
             '基本資料使用 "0.1.0"',
@@ -1008,6 +1009,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             self.assertNotIn(obsolete, prompt)
         self.assertNotIn('"prompt_version"', prompt)
         self.assertNotIn("attacker、target、action", prompt)
+        self.assertNotIn("不要程式碼框", prompt)
         self.assertNotIn("attacker、target、type 與 result 任一缺少來源支持", prompt)
         self.assertNotIn("Battle JSON Prompt 1.1.0", prompt)
         self.assertNotIn("battle_json_prompt_1.1.0", prompt)

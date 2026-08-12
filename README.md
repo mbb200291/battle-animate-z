@@ -48,21 +48,21 @@ Geographic fields use a small GeoJSON subset:
 
 Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, disputed, or unknown through `precision` and `confidence`.
 
-## Generate JSON With AI — Battle JSON Prompt 1.3.1
+## Generate JSON With AI — Battle JSON Prompt 1.3.2
 
 Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
 
 ````text
 你是一個歷史資料標準化助理。請根據我提供且你實際可讀取的 Wikipedia、Wikidata 或其他 Wiki 頁面內容，產生一個完全符合 battle-animation-schema 0.4.0 的 JSON，供地圖動畫 app 使用。
 
-本提示詞版本是 Battle JSON Prompt 1.3.1。Prompt 版本與 schema 版本是兩件事：
+本提示詞版本是 Battle JSON Prompt 1.3.2。Prompt 版本與 schema 版本是兩件事：
 - schema_version 固定使用字串 "0.4.0"（不要加 v，也不要寫成數字）。
-- metadata.source_system 固定使用字串 "battle_json_prompt_1.3.1"，讓文件保留生成規則的版本。
+- metadata.source_system 固定使用字串 "battle_json_prompt_1.3.2"，讓文件保留生成規則的版本。
 - 不要新增 prompt_version；目前 schema 沒有這個欄位。
 - 0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件；本提示詞只輸出 0.4.0。
 
 ===== 最重要的輸出規則（違反任何一條都算失敗）=====
-1. 資料與來源資訊足以生成時，只輸出「一個 JSON 物件」，不要 Markdown、不要程式碼框、不要任何解說文字。
+1. 資料與來源資訊足以生成時，只輸出一個標記為 json 的 Markdown 程式碼區塊；程式碼區塊內只能放最終 JSON 物件，區塊前後不要加入任何解說文字。
    唯一例外：沒有可讀取的來源內容，或來源缺少 schema 必填的來源資訊時，先用一句話請使用者補充，不要輸出 JSON。
 2. 最外層物件必須包含這 12 個必備 key（名稱與順序如下）：
    schema_version, metadata, battle, sides, commanders, actors, places,
@@ -190,7 +190,7 @@ animation_hints: *map *style *timeline, camera
 不要壓掉其他證據充分的 engagement，也不得用低 confidence 包裝臆測內容。
 
 ===== 輸出前品質檢查（只在內部執行，不要輸出）=====
-- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.3.1"。
+- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.3.2"。
 - required 欄位、受控 enum、id 參照、GeoJSON 座標順序及 additionalProperties:false 是否全部符合。
 - historical_events[].source_ids、outcome.source_ids 與每筆 engagement.source_ids 是否都是非空陣列，且只引用直接支持該物件的來源。
 - 每筆 movement 是否由 event_id 所連結 historical_event 的非空 source_ids 支持，而未新增 schema 不允許的 movement.source_ids。
@@ -208,7 +208,7 @@ animation_hints: *map *style *timeline, camera
 ===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
 {
   "schema_version": "0.4.0",
-  "metadata": { "id": "battle_land_template", "title": "陸戰結構範本（內容須替換）", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "REPLACE WITH DOCUMENT LICENSE", "source_system": "battle_json_prompt_1.3.1" },
+  "metadata": { "id": "battle_land_template", "title": "陸戰結構範本（內容須替換）", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "REPLACE WITH DOCUMENT LICENSE", "source_system": "battle_json_prompt_1.3.2" },
   "battle": { "id": "battle_land_template", "name": "範例陸戰（非真實戰役資料）", "part_of": "來源內容占位", "date": { "label": "1900-01-01（範例時間，須替換）", "start": "1900-01-01", "precision": "day", "confidence": 0.5 }, "summary": "此物件只示範穩定單位 id、分階段移動與來源戰線快照的結構；所有內容都必須由實際來源替換。", "confidence": 0.5 },
   "sides": [
     { "id": "side_a", "name": "甲方", "color": "#2f6fb5", "belligerents": [{ "id": "bel_a", "name": "甲國" }] },
