@@ -100,7 +100,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
     def _readme_prompt_sample(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         prompt_match = re.search(
-            r"## Generate JSON With AI — Battle JSON Prompt 1\.3\.0.*?"
+            r"## Generate JSON With AI — Battle JSON Prompt 1\.3\.1.*?"
             r"````text\n(?P<prompt>.*?)\n````",
             readme,
             re.DOTALL,
@@ -927,13 +927,13 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
-    def test_readme_prompt_v13_teaches_source_first_frontline_evidence(self):
+    def test_readme_prompt_v131_teaches_source_first_frontline_evidence(self):
         readme, prompt, sample = self._readme_prompt_sample()
 
         for required in (
-            "Battle JSON Prompt 1.3.0",
+            "Battle JSON Prompt 1.3.1",
             'schema_version 固定使用字串 "0.4.0"',
-            'metadata.source_system 固定使用字串 "battle_json_prompt_1.3.0"',
+            'metadata.source_system 固定使用字串 "battle_json_prompt_1.3.1"',
             "只輸出「一個 JSON 物件」",
             "唯一例外",
             "不要新增 prompt_version",
@@ -985,6 +985,10 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             "只有直接支持特定日期／時刻戰線的來源地圖才可建立",
             "來源同時支持細緻單位／movements 與來源戰線快照時，兩者都要保留",
             "同一條戰線只有在來源支持連續性時，才跨 snapshot 沿用相同 id",
+            "無法確認連續性時必須使用不同 id",
+            "優先蒐集多個有明確日期的來源地圖作為時間錨點",
+            "不要把同一張地圖自行變形成多個快照",
+            "不要為了延長動畫虛構中間快照",
             "不得從單位位置推導突出部、包圍圈或控制區",
             "只有文字記載而沒有地圖輪廓時，只建立事件，不建立戰線幾何",
             "推導戰線不得寫入 frontline_snapshots",
@@ -994,7 +998,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertIn(required, prompt)
         self.assertEqual(sample["schema_version"], "0.4.0")
-        self.assertEqual(sample["metadata"]["source_system"], "battle_json_prompt_1.3.0")
+        self.assertEqual(sample["metadata"]["source_system"], "battle_json_prompt_1.3.1")
         for obsolete in (
             "battle-animation-schema v0.1.0／v0.2.0／v0.3.0",
             '基本資料使用 "0.1.0"',

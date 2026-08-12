@@ -48,16 +48,16 @@ Geographic fields use a small GeoJSON subset:
 
 Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, disputed, or unknown through `precision` and `confidence`.
 
-## Generate JSON With AI — Battle JSON Prompt 1.3.0
+## Generate JSON With AI — Battle JSON Prompt 1.3.1
 
 Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
 
 ````text
 你是一個歷史資料標準化助理。請根據我提供且你實際可讀取的 Wikipedia、Wikidata 或其他 Wiki 頁面內容，產生一個完全符合 battle-animation-schema 0.4.0 的 JSON，供地圖動畫 app 使用。
 
-本提示詞版本是 Battle JSON Prompt 1.3.0。Prompt 版本與 schema 版本是兩件事：
+本提示詞版本是 Battle JSON Prompt 1.3.1。Prompt 版本與 schema 版本是兩件事：
 - schema_version 固定使用字串 "0.4.0"（不要加 v，也不要寫成數字）。
-- metadata.source_system 固定使用字串 "battle_json_prompt_1.3.0"，讓文件保留生成規則的版本。
+- metadata.source_system 固定使用字串 "battle_json_prompt_1.3.1"，讓文件保留生成規則的版本。
 - 不要新增 prompt_version；目前 schema 沒有這個欄位。
 - 0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件；本提示詞只輸出 0.4.0。
 
@@ -89,7 +89,7 @@ Use this prompt to ask an AI model to generate a battle JSON from a wiki page. I
 6. frontline_snapshots 是選填；沒有直接支持該時刻戰線或控制區的來源時，省略 frontline_snapshots。只有直接支持特定日期／時刻戰線的來源地圖才可建立；沿該來源地圖描繪的幾何可標 precision:"inferred" 且 confidence <= 0.5，source_ids 必須指向該地圖。
 7. 不得從單位點位生成 frontline_snapshots。推導戰線只由 app 執行時計算；推導戰線不得寫入 frontline_snapshots，也不得序列化成任何歷史或來源 JSON。
 8. 來源同時支持細緻單位／movements 與來源戰線快照時，兩者都要保留；不可因 app 能推導戰線而省略任一種來源資料。
-9. 同一條戰線只有在來源支持連續性時，才跨 snapshot 沿用相同 id；來源沒有建立連續性時使用不同 id，不要只為了動畫 morph 而沿用。
+9. 同一條戰線只有在來源支持連續性時，才跨 snapshot 沿用相同 id；無法確認連續性時必須使用不同 id，不要只為了動畫 morph 而沿用。
 10. 不得從單位位置推導突出部、包圍圈或控制區。只有文字記載而沒有地圖輪廓時，只建立事件，不建立戰線幾何或控制區幾何。
 11. 每個來源錨點保留原始幾何；來源錨點之間只做來源幾何的時間插值，不把插值寫回 JSON。每筆 snapshot 都必須以 source_ids、precision 與 confidence 明確記錄引用與不確定性。
 
@@ -140,7 +140,8 @@ frontline_snapshots[]（選填）:
   - 不得從 casualties、strength 或 outcome 推算 control_areas 或其他控制區幾何。
   - 不得從單位點位生成 frontline_snapshots；推導戰線只由 app 執行時計算。推導戰線不得寫入 frontline_snapshots，也不得序列化成歷史或來源 JSON。
   - 不得從單位位置推導突出部、包圍圈或控制區；只有文字記載而沒有地圖輪廓時，只建立事件，不建立戰線幾何或控制區幾何。
-  - 同一條戰線只有在來源支持連續性時，才跨 snapshot 沿用相同 id；控制區也只在來源支持同一實體延續時沿用 id。
+  - 同一條戰線或控制區只有在來源支持其連續性時，才跨 snapshot 沿用相同 id；無法確認連續性時必須使用不同 id。
+  - 優先蒐集多個有明確日期的來源地圖作為時間錨點；不要把同一張地圖自行變形成多個快照，也不要為了延長動畫虛構中間快照。
   - 每個來源錨點保留原始幾何；來源錨點之間只做來源幾何的時間插值。插值是 renderer 顯示，不是新的歷史證據；snapshot 的 source_ids、precision 與 confidence 必須明確。
 outcome: *summary *winner_side_ids *confidence *source_ids, casualties
   - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
@@ -189,12 +190,12 @@ animation_hints: *map *style *timeline, camera
 不要壓掉其他證據充分的 engagement，也不得用低 confidence 包裝臆測內容。
 
 ===== 輸出前品質檢查（只在內部執行，不要輸出）=====
-- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.3.0"。
+- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.3.1"。
 - required 欄位、受控 enum、id 參照、GeoJSON 座標順序及 additionalProperties:false 是否全部符合。
 - historical_events[].source_ids、outcome.source_ids 與每筆 engagement.source_ids 是否都是非空陣列，且只引用直接支持該物件的來源。
 - 每筆 movement 是否由 event_id 所連結 historical_event 的非空 source_ids 支持，而未新增 schema 不允許的 movement.source_ids。
 - engagement 的 attacker_actor_id、target_actor_id 與 type 是否有來源；result 若存在是否有直接來源，若無是否只省略 result；推估是否只限代表性幾何與時間且 confidence <= 0.5。
-- 若輸出 frontline_snapshots，每筆是否有直接支持該時刻戰線或控制區的來源、至少一種合法幾何，且同一實體跨快照使用穩定 id。
+- 若輸出 frontline_snapshots，每筆是否有直接支持該時刻戰線或控制區的來源及至少一種合法幾何；只有來源支持連續性時才沿用 id，無法確認時是否改用不同 id；是否優先使用多張有明確日期的來源地圖，且未把單張地圖變形成多個快照或虛構中間快照。
 - 是否避免由結果敘述、勝負、包圍或突破等概括文字生成精確戰線或控制區。
 - 是否完全避免把 app 依單位點位推導的戰線寫進 frontline_snapshots。
 
@@ -207,7 +208,7 @@ animation_hints: *map *style *timeline, camera
 ===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
 {
   "schema_version": "0.4.0",
-  "metadata": { "id": "battle_land_template", "title": "陸戰結構範本（內容須替換）", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "REPLACE WITH DOCUMENT LICENSE", "source_system": "battle_json_prompt_1.3.0" },
+  "metadata": { "id": "battle_land_template", "title": "陸戰結構範本（內容須替換）", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "REPLACE WITH DOCUMENT LICENSE", "source_system": "battle_json_prompt_1.3.1" },
   "battle": { "id": "battle_land_template", "name": "範例陸戰（非真實戰役資料）", "part_of": "來源內容占位", "date": { "label": "1900-01-01（範例時間，須替換）", "start": "1900-01-01", "precision": "day", "confidence": 0.5 }, "summary": "此物件只示範穩定單位 id、分階段移動與來源戰線快照的結構；所有內容都必須由實際來源替換。", "confidence": 0.5 },
   "sides": [
     { "id": "side_a", "name": "甲方", "color": "#2f6fb5", "belligerents": [{ "id": "bel_a", "name": "甲國" }] },
