@@ -3182,6 +3182,17 @@ test("zoom 8 shows source confidence labels but rejects ambiguous Bulge derived 
   controller.destroy();
 });
 
+test("primary label staggering cannot loop forever when SVG bounds stay unchanged", () => {
+  const source = readFileSync(new URL("../app/animate.js", import.meta.url), "utf8");
+  const implementation = source.match(
+    /function staggerPrimaryAndFrontlineLabels\(\) \{(?<body>[\s\S]*?)\n  \}\n\n  function redrawEngagementEndpoints/,
+  )?.groups?.body || "";
+
+  assert.match(implementation, /step <= maxAttempts/);
+  assert.match(implementation, /sameBounds\(box, movedBox\)/);
+  assert.doesNotMatch(implementation, /for \(let step = 1; occupied\.some/);
+});
+
 test("rapid render replacement cancels stale invalidateSize timeouts", () => {
   const clock = new FrameClock();
   const document = new FakeDocument(clock.window);

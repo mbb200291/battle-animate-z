@@ -1609,13 +1609,22 @@ export function renderBattle(battle, documentRef = document) {
       && left.right + 4 > right.left
       && left.top < right.bottom + 4
       && left.bottom + 4 > right.top;
+    const sameBounds = (left, right) => left.left === right.left
+      && left.right === right.right
+      && left.top === right.top
+      && left.bottom === right.bottom;
+    const maxAttempts = labels.length * 2 + 2;
     for (const label of labels) {
       label.removeAttribute("transform");
       let box = label.getBoundingClientRect();
-      for (let step = 1; occupied.some((other) => overlaps(box, other)); step += 1) {
+      for (let step = 1;
+        step <= maxAttempts && occupied.some((other) => overlaps(box, other));
+        step += 1) {
         const offset = Math.ceil(step / 2) * 18 * (step % 2 ? -1 : 1);
         label.setAttribute("transform", `translate(0 ${offset})`);
-        box = label.getBoundingClientRect();
+        const movedBox = label.getBoundingClientRect();
+        if (sameBounds(box, movedBox)) break;
+        box = movedBox;
       }
       occupied.push(box);
     }
