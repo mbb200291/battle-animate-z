@@ -1,0 +1,1353 @@
+{
+    "schema_version": "0.4.0",
+    "metadata": {
+        "id": "battle_pusan_perimeter_1950",
+        "title": "Battle of the Pusan Perimeter（釜山環形防禦圈戰役）",
+        "created_at": "2026-08-12",
+        "updated_at": "2026-08-12",
+        "license": "CC BY-SA 4.0",
+        "source_system": "battle_json_prompt_1.3.1",
+        "wikidata_qid": "Q482979"
+    },
+    "battle": {
+        "id": "battle_pusan_perimeter_1950",
+        "name": "Battle of the Pusan Perimeter",
+        "part_of": "Korean War",
+        "date": {
+            "label": "1950-08-04–1950-09-18",
+            "start": "1950-08-04",
+            "end": "1950-09-18",
+            "precision": "range",
+            "confidence": 0.99
+        },
+        "summary": "1950年8月4日至9月18日，聯合國軍以釜山周邊防禦圈固守韓國東南部。北韓人民軍在8月與9月多次從馬山、洛東江突出部、大邱與浦項等方向進攻，但未能突破；9月15日仁川登陸後，北韓軍開始撤退，聯合國軍隨後自防禦圈發動突破。",
+        "confidence": 0.97,
+        "also_known_as": [
+            "Battle of the Naktong River Defense Line",
+            "Battle of Pusan Perimeter"
+        ]
+    },
+    "sides": [
+        {
+            "id": "side_un",
+            "name": "United Nations Command and Republic of Korea",
+            "color": "#2f6fb5",
+            "belligerents": [
+                {
+                    "id": "bel_south_korea",
+                    "name": "South Korea"
+                },
+                {
+                    "id": "bel_united_states",
+                    "name": "United States"
+                },
+                {
+                    "id": "bel_united_kingdom",
+                    "name": "United Kingdom"
+                }
+            ]
+        },
+        {
+            "id": "side_kpa",
+            "name": "North Korea",
+            "color": "#c0392b",
+            "belligerents": [
+                {
+                    "id": "bel_north_korea",
+                    "name": "North Korea"
+                }
+            ]
+        }
+    ],
+    "commanders": [
+        {
+            "id": "cmd_douglas_macarthur",
+            "name": "Douglas MacArthur",
+            "side_id": "side_un",
+            "confidence": 0.95
+        },
+        {
+            "id": "cmd_walton_walker",
+            "name": "Walton Walker",
+            "side_id": "side_un",
+            "confidence": 0.98
+        },
+        {
+            "id": "cmd_chung_il_kwon",
+            "name": "Chung Il-kwon",
+            "side_id": "side_un",
+            "confidence": 0.9
+        },
+        {
+            "id": "cmd_shin_sung_mo",
+            "name": "Shin Sung-mo",
+            "side_id": "side_un",
+            "confidence": 0.9
+        },
+        {
+            "id": "cmd_george_stratemeyer",
+            "name": "George E. Stratemeyer",
+            "side_id": "side_un",
+            "confidence": 0.9
+        },
+        {
+            "id": "cmd_arthur_struble",
+            "name": "Arthur D. Struble",
+            "side_id": "side_un",
+            "confidence": 0.9
+        },
+        {
+            "id": "cmd_choi_yong_kun",
+            "name": "Choi Yong-kun",
+            "side_id": "side_kpa",
+            "confidence": 0.95
+        },
+        {
+            "id": "cmd_kim_chaek",
+            "name": "Kim Chaek",
+            "side_id": "side_kpa",
+            "confidence": 0.95
+        },
+        {
+            "id": "cmd_kim_ung",
+            "name": "Kim Ung",
+            "side_id": "side_kpa",
+            "confidence": 0.9
+        },
+        {
+            "id": "cmd_kim_mu_chong",
+            "name": "Kim Mu-chong",
+            "side_id": "side_kpa",
+            "confidence": 0.9
+        },
+        {
+            "id": "cmd_lee_kwon_mu",
+            "name": "Lee Kwon-mu",
+            "side_id": "side_kpa",
+            "confidence": 0.95,
+            "rank_or_role": "Commander, KPA 4th Division"
+        }
+    ],
+    "actors": [
+        {
+            "id": "actor_eighth_army",
+            "name": "Eighth United States Army",
+            "side_id": "side_un",
+            "kind": "army",
+            "confidence": 0.98,
+            "commander_ids": [
+                "cmd_walton_walker"
+            ]
+        },
+        {
+            "id": "actor_us_24_div",
+            "name": "U.S. 24th Infantry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.97,
+            "parent_id": "actor_eighth_army"
+        },
+        {
+            "id": "actor_us_25_div",
+            "name": "U.S. 25th Infantry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.97,
+            "parent_id": "actor_eighth_army"
+        },
+        {
+            "id": "actor_us_1_cav_div",
+            "name": "U.S. 1st Cavalry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.97,
+            "parent_id": "actor_eighth_army"
+        },
+        {
+            "id": "actor_us_2_div",
+            "name": "U.S. 2nd Infantry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.96,
+            "parent_id": "actor_eighth_army"
+        },
+        {
+            "id": "actor_us_1_prov_marine_brig",
+            "name": "U.S. 1st Provisional Marine Brigade",
+            "side_id": "side_un",
+            "kind": "brigade",
+            "confidence": 0.96,
+            "parent_id": "actor_eighth_army"
+        },
+        {
+            "id": "actor_task_force_kean",
+            "name": "Task Force Kean",
+            "side_id": "side_un",
+            "kind": "unit",
+            "confidence": 0.95,
+            "parent_id": "actor_eighth_army",
+            "strength": {
+                "label": "about 20,000 personnel",
+                "confidence": 0.9
+            }
+        },
+        {
+            "id": "actor_rok_army",
+            "name": "Republic of Korea Army",
+            "side_id": "side_un",
+            "kind": "army",
+            "confidence": 0.98
+        },
+        {
+            "id": "actor_rok_i_corps",
+            "name": "ROK I Corps",
+            "side_id": "side_un",
+            "kind": "corps",
+            "confidence": 0.93,
+            "parent_id": "actor_rok_army"
+        },
+        {
+            "id": "actor_rok_ii_corps",
+            "name": "ROK II Corps",
+            "side_id": "side_un",
+            "kind": "corps",
+            "confidence": 0.93,
+            "parent_id": "actor_rok_army"
+        },
+        {
+            "id": "actor_rok_1_div",
+            "name": "ROK 1st Infantry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.94,
+            "parent_id": "actor_rok_ii_corps"
+        },
+        {
+            "id": "actor_rok_3_div",
+            "name": "ROK 3rd Infantry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_rok_army"
+        },
+        {
+            "id": "actor_rok_6_div",
+            "name": "ROK 6th Infantry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.94,
+            "parent_id": "actor_rok_ii_corps"
+        },
+        {
+            "id": "actor_rok_8_div",
+            "name": "ROK 8th Infantry Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.94,
+            "parent_id": "actor_rok_i_corps"
+        },
+        {
+            "id": "actor_rok_capital_div",
+            "name": "ROK Capital Division",
+            "side_id": "side_un",
+            "kind": "division",
+            "confidence": 0.94,
+            "parent_id": "actor_rok_i_corps"
+        },
+        {
+            "id": "actor_kpa",
+            "name": "Korean People's Army",
+            "side_id": "side_kpa",
+            "kind": "army",
+            "confidence": 0.98
+        },
+        {
+            "id": "actor_kpa_1_div",
+            "name": "KPA 1st Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_2_div",
+            "name": "KPA 2nd Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_3_div",
+            "name": "KPA 3rd Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_4_div",
+            "name": "KPA 4th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.98,
+            "parent_id": "actor_kpa",
+            "commander_ids": [
+                "cmd_lee_kwon_mu"
+            ],
+            "strength": {
+                "label": "about 7,000 personnel on 1950-08-04",
+                "confidence": 0.9
+            }
+        },
+        {
+            "id": "actor_kpa_5_div",
+            "name": "KPA 5th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_6_div",
+            "name": "KPA 6th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_7_div",
+            "name": "KPA 7th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.93,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_8_div",
+            "name": "KPA 8th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.94,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_9_div",
+            "name": "KPA 9th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.94,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_10_div",
+            "name": "KPA 10th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.94,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_12_div",
+            "name": "KPA 12th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_13_div",
+            "name": "KPA 13th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_15_div",
+            "name": "KPA 15th Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_105_armored_div",
+            "name": "KPA 105th Armored Division",
+            "side_id": "side_kpa",
+            "kind": "division",
+            "confidence": 0.93,
+            "parent_id": "actor_kpa"
+        },
+        {
+            "id": "actor_kpa_766_regiment",
+            "name": "KPA 766th Independent Infantry Regiment",
+            "side_id": "side_kpa",
+            "kind": "regiment",
+            "confidence": 0.95,
+            "parent_id": "actor_kpa"
+        }
+    ],
+    "places": [
+        {
+            "id": "place_pusan_perimeter",
+            "name": "Pusan Perimeter / Busan",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    129.0403,
+                    35.1
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.9
+        },
+        {
+            "id": "place_masan",
+            "name": "Masan sector",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    128.55,
+                    35.1833
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.85
+        },
+        {
+            "id": "place_first_naktong_bulge",
+            "name": "First Naktong Bulge sector",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    128.4994,
+                    35.5403
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.92
+        },
+        {
+            "id": "place_second_naktong_bulge",
+            "name": "Second Naktong Bulge sector",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    128.7489,
+                    35.4933
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.9
+        },
+        {
+            "id": "place_taegu_sector",
+            "name": "Taegu (Daegu) sector",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    128.43,
+                    35.96
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.9
+        },
+        {
+            "id": "place_pohang_sector",
+            "name": "P'ohang-dong (Pohang) sector",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    129.365,
+                    36.0322
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.92
+        },
+        {
+            "id": "place_yeongsan",
+            "name": "Yeongsan",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    128.5253,
+                    35.4542
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.9,
+            "wikidata_qid": "Q22055202"
+        },
+        {
+            "id": "place_yeongcheon",
+            "name": "Yeongcheon (Yongch'on)",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    128.9386,
+                    35.9733
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.9,
+            "wikidata_qid": "Q42128"
+        },
+        {
+            "id": "place_yeongil_bay",
+            "name": "Yeongil Bay",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    129.4347,
+                    36.0508
+                ]
+            },
+            "precision": "approximate",
+            "confidence": 0.9,
+            "wikidata_qid": "Q11260549"
+        }
+    ],
+    "historical_events": [
+        {
+            "id": "evt_perimeter_established",
+            "type": "defend",
+            "title": "釜山防禦圈形成",
+            "time": {
+                "label": "1950-08-01–1950-08-04",
+                "start": "1950-08-01",
+                "end": "1950-08-04",
+                "precision": "range",
+                "confidence": 0.93
+            },
+            "description": "第八軍團命令部隊撤至洛東江以東並建立新的防禦線；美軍第25步兵師負責馬山方向，第24步兵師撤向昌寧一帶，第1騎兵師撤向倭館一帶，形成以洛東江與東部山地為骨架的釜山防禦圈。",
+            "actor_ids": [
+                "actor_eighth_army",
+                "actor_us_25_div",
+                "actor_us_24_div",
+                "actor_us_1_cav_div",
+                "actor_rok_army"
+            ],
+            "place_ids": [
+                "place_pusan_perimeter",
+                "place_masan",
+                "place_taegu_sector"
+            ],
+            "precision": "approximate",
+            "confidence": 0.93,
+            "source_ids": [
+                "src_main"
+            ]
+        },
+        {
+            "id": "evt_first_naktong_bulge",
+            "type": "attack",
+            "title": "第一次洛東江突出部戰鬥",
+            "time": {
+                "label": "1950-08-05–1950-08-19",
+                "start": "1950-08-05",
+                "end": "1950-08-19",
+                "precision": "range",
+                "confidence": 0.98
+            },
+            "description": "北韓人民軍第4師在永山附近渡過洛東江，建立橋頭堡並向永山方向推進；美軍第24步兵師與第1臨時陸戰旅反擊。至8月19日，第4師殘部撤回洛東江以西。",
+            "actor_ids": [
+                "actor_kpa_4_div",
+                "actor_us_24_div",
+                "actor_us_1_prov_marine_brig"
+            ],
+            "target_actor_ids": [
+                "actor_us_24_div",
+                "actor_us_1_prov_marine_brig"
+            ],
+            "place_ids": [
+                "place_first_naktong_bulge",
+                "place_yeongsan"
+            ],
+            "precision": "approximate",
+            "confidence": 0.97,
+            "source_ids": [
+                "src_first_naktong"
+            ]
+        },
+        {
+            "id": "evt_task_force_kean",
+            "type": "attack",
+            "title": "Task Force Kean 西向反攻",
+            "time": {
+                "label": "1950-08-07–1950-08-14",
+                "start": "1950-08-07",
+                "end": "1950-08-14",
+                "precision": "range",
+                "confidence": 0.93
+            },
+            "description": "Task Force Kean 自馬山向西發動反攻，目標是奪取晉州隘口並破壞北韓第6師；作戰期間曾推進至靠近晉州方向，但在激烈戰鬥後撤回，8月14日前後大致回到起始區域。",
+            "actor_ids": [
+                "actor_task_force_kean",
+                "actor_kpa_6_div"
+            ],
+            "target_actor_ids": [
+                "actor_kpa_6_div"
+            ],
+            "place_ids": [
+                "place_masan"
+            ],
+            "precision": "approximate",
+            "confidence": 0.9,
+            "source_ids": [
+                "src_main"
+            ]
+        },
+        {
+            "id": "evt_taegu_august",
+            "type": "attack",
+            "title": "八月大邱方向攻勢",
+            "time": {
+                "label": "1950-08-05–1950-08-20",
+                "start": "1950-08-05",
+                "end": "1950-08-20",
+                "precision": "range",
+                "confidence": 0.97
+            },
+            "description": "北韓第1、第3、第10、第13與第15師在第105裝甲師部分兵力支援下，向大邱方向的美軍第1騎兵師及韓軍第1、第6師防區進攻，多次嘗試渡過洛東江並逼近大邱，但未能突破。",
+            "actor_ids": [
+                "actor_kpa_1_div",
+                "actor_kpa_3_div",
+                "actor_kpa_10_div",
+                "actor_kpa_13_div",
+                "actor_kpa_15_div",
+                "actor_kpa_105_armored_div",
+                "actor_us_1_cav_div",
+                "actor_rok_1_div",
+                "actor_rok_6_div"
+            ],
+            "target_actor_ids": [
+                "actor_us_1_cav_div",
+                "actor_rok_1_div",
+                "actor_rok_6_div"
+            ],
+            "place_ids": [
+                "place_taegu_sector"
+            ],
+            "precision": "approximate",
+            "confidence": 0.95,
+            "source_ids": [
+                "src_taegu"
+            ]
+        },
+        {
+            "id": "evt_pohang_august",
+            "type": "attack",
+            "title": "浦項方向戰鬥",
+            "time": {
+                "label": "1950-08-05–1950-08-20",
+                "start": "1950-08-05",
+                "end": "1950-08-20",
+                "precision": "range",
+                "confidence": 0.97
+            },
+            "description": "北韓第5、第12師與第766獨立步兵團沿東部山地與海岸方向向浦項推進，並一度在浦項周邊形成突破；聯合國軍以韓軍地面部隊、美軍增援以及海空火力阻止北韓軍鞏固成果。",
+            "actor_ids": [
+                "actor_kpa_5_div",
+                "actor_kpa_12_div",
+                "actor_kpa_766_regiment",
+                "actor_rok_3_div"
+            ],
+            "target_actor_ids": [
+                "actor_rok_3_div"
+            ],
+            "place_ids": [
+                "place_pohang_sector"
+            ],
+            "precision": "approximate",
+            "confidence": 0.94,
+            "source_ids": [
+                "src_pohang"
+            ]
+        },
+        {
+            "id": "evt_rok3_evacuation",
+            "type": "retreat",
+            "title": "韓軍第3師海上撤離",
+            "time": {
+                "label": "1950-08-16 夜間",
+                "start": "1950-08-16",
+                "precision": "day",
+                "confidence": 0.9
+            },
+            "description": "韓軍第3師在長沙洞一帶受到包圍壓力後由海路撤離，8月16日夜間開始撤運，部隊轉移至南方的迎日灣地區。",
+            "actor_ids": [
+                "actor_rok_3_div"
+            ],
+            "place_ids": [
+                "place_pohang_sector",
+                "place_yeongil_bay"
+            ],
+            "precision": "approximate",
+            "confidence": 0.9,
+            "source_ids": [
+                "src_pohang"
+            ]
+        },
+        {
+            "id": "evt_great_naktong_offensive",
+            "type": "attack",
+            "title": "大洛東江攻勢展開",
+            "time": {
+                "label": "1950-08-31 23:30–1950-09-15；其餘三個攻擊群於1950-09-02 18:00發動",
+                "start": "1950-08-31T23:30:00",
+                "end": "1950-09-15",
+                "precision": "range",
+                "confidence": 0.94
+            },
+            "description": "北韓人民軍發動五路總攻：第6與第7師攻擊馬山方向；第9、第4、第2與第10師攻擊洛東江突出部並企圖向密陽、永山突破；第3、第13與第1師攻擊大邱方向；第8與第15師攻向河陽、永川；第12與第5師攻向浦項、慶州方向。前兩個攻擊群於8月31日23:30開始，其餘三個攻擊群於9月2日18:00開始。",
+            "actor_ids": [
+                "actor_kpa_1_div",
+                "actor_kpa_2_div",
+                "actor_kpa_3_div",
+                "actor_kpa_4_div",
+                "actor_kpa_5_div",
+                "actor_kpa_6_div",
+                "actor_kpa_7_div",
+                "actor_kpa_8_div",
+                "actor_kpa_9_div",
+                "actor_kpa_10_div",
+                "actor_kpa_12_div",
+                "actor_kpa_13_div",
+                "actor_kpa_15_div",
+                "actor_us_25_div",
+                "actor_us_2_div",
+                "actor_us_1_cav_div",
+                "actor_rok_1_div",
+                "actor_rok_3_div",
+                "actor_rok_6_div",
+                "actor_rok_8_div",
+                "actor_rok_capital_div"
+            ],
+            "target_actor_ids": [
+                "actor_us_25_div",
+                "actor_us_2_div",
+                "actor_us_1_cav_div",
+                "actor_rok_1_div",
+                "actor_rok_3_div",
+                "actor_rok_6_div",
+                "actor_rok_8_div",
+                "actor_rok_capital_div"
+            ],
+            "place_ids": [
+                "place_masan",
+                "place_second_naktong_bulge",
+                "place_taegu_sector",
+                "place_yeongcheon",
+                "place_pohang_sector"
+            ],
+            "precision": "approximate",
+            "confidence": 0.94,
+            "source_ids": [
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_second_naktong_bulge",
+            "type": "attack",
+            "title": "第二次洛東江突出部戰鬥",
+            "time": {
+                "label": "1950-09-01–1950-09-15",
+                "start": "1950-09-01",
+                "end": "1950-09-15",
+                "precision": "range",
+                "confidence": 0.97
+            },
+            "description": "北韓第9、第4、第2與第10師在洛東江突出部方向攻擊美軍第2步兵師等部隊。北韓軍跨越洛東江並向永山、密陽方向推進，但在美軍與陸戰旅反擊後未能完成突破。",
+            "actor_ids": [
+                "actor_kpa_9_div",
+                "actor_kpa_4_div",
+                "actor_kpa_2_div",
+                "actor_kpa_10_div",
+                "actor_us_2_div",
+                "actor_us_1_prov_marine_brig"
+            ],
+            "target_actor_ids": [
+                "actor_us_2_div",
+                "actor_us_1_prov_marine_brig"
+            ],
+            "place_ids": [
+                "place_second_naktong_bulge",
+                "place_yeongsan"
+            ],
+            "precision": "approximate",
+            "confidence": 0.95,
+            "source_ids": [
+                "src_second_naktong",
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_yongchon_september",
+            "type": "attack",
+            "title": "永川突破與反擊",
+            "time": {
+                "label": "1950-09-02–1950-09-12",
+                "start": "1950-09-02",
+                "end": "1950-09-12",
+                "precision": "range",
+                "confidence": 0.94
+            },
+            "description": "北韓第15師攻擊韓軍第8師防區，並於9月6日前後突破至永川；隨後韓軍反擊，至9月9日至10日北韓第15師遭受重創，通往永川的道路重新打通，韓軍於9月12日前後轉為向北推進。",
+            "actor_ids": [
+                "actor_kpa_15_div",
+                "actor_rok_8_div"
+            ],
+            "target_actor_ids": [
+                "actor_rok_8_div"
+            ],
+            "place_ids": [
+                "place_yeongcheon"
+            ],
+            "precision": "approximate",
+            "confidence": 0.93,
+            "source_ids": [
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_kpa_retreat",
+            "type": "retreat",
+            "title": "仁川登陸後北韓軍撤退",
+            "time": {
+                "label": "1950-09-15–1950-09-18",
+                "start": "1950-09-15",
+                "end": "1950-09-18",
+                "precision": "range",
+                "confidence": 0.97
+            },
+            "description": "9月15日仁川登陸使北韓軍後方受到威脅，釜山防禦圈各正面的北韓部隊開始撤退；部分孤立抵抗持續至9月18日。",
+            "actor_ids": [
+                "actor_kpa"
+            ],
+            "place_ids": [
+                "place_pusan_perimeter"
+            ],
+            "precision": "approximate",
+            "confidence": 0.96,
+            "source_ids": [
+                "src_main",
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_un_breakout",
+            "type": "advance",
+            "title": "聯合國軍突破釜山防禦圈",
+            "time": {
+                "label": "1950-09-16–1950-09-18",
+                "start": "1950-09-16",
+                "end": "1950-09-18",
+                "precision": "range",
+                "confidence": 0.96
+            },
+            "description": "北韓軍開始撤退後，第八軍團與韓軍自釜山防禦圈發動全面突破與追擊；至9月18日，釜山防禦圈戰鬥告終。",
+            "actor_ids": [
+                "actor_eighth_army",
+                "actor_rok_army"
+            ],
+            "place_ids": [
+                "place_pusan_perimeter"
+            ],
+            "precision": "approximate",
+            "confidence": 0.95,
+            "source_ids": [
+                "src_main",
+                "src_great_naktong"
+            ]
+        }
+    ],
+    "movements": [
+        {
+            "id": "mov_kpa4_first_naktong",
+            "event_id": "evt_first_naktong_bulge",
+            "actor_id": "actor_kpa_4_div",
+            "path": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        128.46,
+                        35.54
+                    ],
+                    [
+                        128.4994,
+                        35.5403
+                    ],
+                    [
+                        128.515,
+                        35.49
+                    ],
+                    [
+                        128.4994,
+                        35.5403
+                    ],
+                    [
+                        128.46,
+                        35.54
+                    ]
+                ]
+            },
+            "precision": "inferred",
+            "confidence": 0.4,
+            "time": {
+                "label": "1950-08-05–1950-08-19",
+                "start": "1950-08-05",
+                "end": "1950-08-19",
+                "precision": "range",
+                "confidence": 0.4
+            }
+        },
+        {
+            "id": "mov_task_force_kean",
+            "event_id": "evt_task_force_kean",
+            "actor_id": "actor_task_force_kean",
+            "path": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        128.55,
+                        35.1833
+                    ],
+                    [
+                        128.4,
+                        35.19
+                    ],
+                    [
+                        128.27,
+                        35.19
+                    ],
+                    [
+                        128.4,
+                        35.19
+                    ],
+                    [
+                        128.55,
+                        35.1833
+                    ]
+                ]
+            },
+            "precision": "inferred",
+            "confidence": 0.35,
+            "time": {
+                "label": "1950-08-07–1950-08-14",
+                "start": "1950-08-07",
+                "end": "1950-08-14",
+                "precision": "range",
+                "confidence": 0.35
+            }
+        },
+        {
+            "id": "mov_kpa9_second_naktong",
+            "event_id": "evt_second_naktong_bulge",
+            "actor_id": "actor_kpa_9_div",
+            "path": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        128.44,
+                        35.5
+                    ],
+                    [
+                        128.49,
+                        35.49
+                    ],
+                    [
+                        128.5253,
+                        35.4542
+                    ]
+                ]
+            },
+            "precision": "inferred",
+            "confidence": 0.4,
+            "to_place_id": "place_yeongsan",
+            "time": {
+                "label": "1950-09-01–1950-09-06",
+                "start": "1950-09-01",
+                "end": "1950-09-06",
+                "precision": "range",
+                "confidence": 0.4
+            }
+        },
+        {
+            "id": "mov_kpa15_yongchon",
+            "event_id": "evt_yongchon_september",
+            "actor_id": "actor_kpa_15_div",
+            "path": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        128.88,
+                        36.08
+                    ],
+                    [
+                        128.92,
+                        36.03
+                    ],
+                    [
+                        128.9386,
+                        35.9733
+                    ]
+                ]
+            },
+            "precision": "inferred",
+            "confidence": 0.4,
+            "to_place_id": "place_yeongcheon",
+            "time": {
+                "label": "1950-09-02–1950-09-06",
+                "start": "1950-09-02",
+                "end": "1950-09-06",
+                "precision": "range",
+                "confidence": 0.4
+            }
+        }
+    ],
+    "engagements": [
+        {
+            "id": "eng_first_naktong_kpa4_us24",
+            "event_id": "evt_first_naktong_bulge",
+            "attacker_actor_id": "actor_kpa_4_div",
+            "target_actor_id": "actor_us_24_div",
+            "type": "other",
+            "confidence": 0.92,
+            "result": "repelled",
+            "at_place_id": "place_first_naktong_bulge",
+            "time": {
+                "label": "1950-08-05–1950-08-19",
+                "start": "1950-08-05",
+                "end": "1950-08-19",
+                "precision": "range",
+                "confidence": 0.9
+            },
+            "source_ids": [
+                "src_first_naktong"
+            ]
+        },
+        {
+            "id": "eng_second_naktong_kpa9_us2",
+            "event_id": "evt_second_naktong_bulge",
+            "attacker_actor_id": "actor_kpa_9_div",
+            "target_actor_id": "actor_us_2_div",
+            "type": "other",
+            "confidence": 0.9,
+            "result": "repelled",
+            "at_place_id": "place_second_naktong_bulge",
+            "time": {
+                "label": "1950-09-01–1950-09-15",
+                "start": "1950-09-01",
+                "end": "1950-09-15",
+                "precision": "range",
+                "confidence": 0.88
+            },
+            "source_ids": [
+                "src_second_naktong",
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "eng_yongchon_kpa15_rok8",
+            "event_id": "evt_yongchon_september",
+            "attacker_actor_id": "actor_kpa_15_div",
+            "target_actor_id": "actor_rok_8_div",
+            "type": "other",
+            "confidence": 0.9,
+            "result": "repelled",
+            "at_place_id": "place_yeongcheon",
+            "time": {
+                "label": "1950-09-02–1950-09-12",
+                "start": "1950-09-02",
+                "end": "1950-09-12",
+                "precision": "range",
+                "confidence": 0.88
+            },
+            "source_ids": [
+                "src_great_naktong"
+            ]
+        }
+    ],
+    "outcome": {
+        "summary": "聯合國軍守住釜山防禦圈，北韓人民軍的八月與九月攻勢均未能突破。仁川登陸後北韓軍撤退，聯合國軍於9月16日起突破並追擊，戰役以聯合國軍勝利告終。",
+        "winner_side_ids": [
+            "side_un"
+        ],
+        "confidence": 0.97,
+        "source_ids": [
+            "src_main",
+            "src_great_naktong"
+        ],
+        "casualties": [
+            {
+                "side_id": "side_un",
+                "label": "美軍3,642人陣亡、60輛坦克損失；英軍5人陣亡、17人受傷。",
+                "confidence": 0.88
+            },
+            {
+                "side_id": "side_kpa",
+                "label": "損失慘重；精確數字不明。主條目估計至戰役結束時北韓軍總傷亡很可能超過約50,000–60,000人。",
+                "confidence": 0.62
+            }
+        ]
+    },
+    "sources": [
+        {
+            "id": "src_main",
+            "title": "Battle of the Pusan Perimeter",
+            "url": "https://en.wikipedia.org/wiki/Battle_of_the_Pusan_Perimeter",
+            "retrieved_at": "2026-08-12",
+            "license": "Creative Commons Attribution-ShareAlike 4.0 License",
+            "note": "主要戰役條目；支持戰役日期、參戰方、指揮官、主要部隊、八月防禦圈形成、各主要戰區、仁川登陸後撤退、聯合國軍突破、結果與傷亡。生成規則來自使用者提供的 Battle JSON Prompt 1.3.1。 "
+        },
+        {
+            "id": "src_wd_battle",
+            "title": "Battle of Pusan Perimeter (Q482979)",
+            "url": "https://www.wikidata.org/wiki/Q482979",
+            "retrieved_at": "2026-08-12",
+            "license": "CC0 1.0",
+            "note": "支持戰役 Wikidata QID、起訖日期與座標等結構化資料。"
+        },
+        {
+            "id": "src_first_naktong",
+            "title": "First Battle of Naktong Bulge",
+            "url": "https://en.wikipedia.org/wiki/First_Battle_of_Naktong_Bulge",
+            "retrieved_at": "2026-08-12",
+            "license": "Creative Commons Attribution-ShareAlike 4.0 License",
+            "note": "支持北韓第4師渡河、向永山推進、美軍第24師與第1臨時陸戰旅反擊、8月19日前後北韓軍撤回，以及戰區座標與第4師兵力。"
+        },
+        {
+            "id": "src_second_naktong",
+            "title": "Second Battle of Naktong Bulge",
+            "url": "https://en.wikipedia.org/wiki/Second_Battle_of_Naktong_Bulge",
+            "retrieved_at": "2026-08-12",
+            "license": "Creative Commons Attribution-ShareAlike 4.0 License",
+            "note": "支持第二次洛東江突出部戰鬥日期、參戰部隊、北韓軍渡河與聯合國軍反擊。"
+        },
+        {
+            "id": "src_taegu",
+            "title": "Battle of Taegu",
+            "url": "https://en.wikipedia.org/wiki/Battle_of_Taegu",
+            "retrieved_at": "2026-08-12",
+            "license": "Creative Commons Attribution-ShareAlike 4.0 License",
+            "note": "支持大邱方向戰鬥日期、北韓第1、第3、第10、第13、第15師及第105裝甲師部分兵力與美軍第1騎兵師、韓軍第1與第6師的對抗，以及戰區座標。"
+        },
+        {
+            "id": "src_pohang",
+            "title": "Battle of P'ohang-dong",
+            "url": "https://en.wikipedia.org/wiki/Battle_of_P%27ohang-dong",
+            "retrieved_at": "2026-08-12",
+            "license": "Creative Commons Attribution-ShareAlike 4.0 License",
+            "note": "支持浦項方向戰鬥、北韓第5與第12師及第766團行動、韓軍第3師撤至長沙洞後由海路轉移至迎日灣，以及戰區座標。"
+        },
+        {
+            "id": "src_great_naktong",
+            "title": "Great Naktong Offensive",
+            "url": "https://en.wikipedia.org/wiki/Great_Naktong_Offensive",
+            "retrieved_at": "2026-08-12",
+            "license": "Creative Commons Attribution-ShareAlike 4.0 License",
+            "note": "支持九月五路總攻的單位配對與攻擊方向、前兩個攻擊群於8月31日23:30發動、其餘三個攻擊群於9月2日18:00發動、永川方向進展，以及北韓軍最終崩潰撤退。"
+        },
+        {
+            "id": "src_wd_masan",
+            "title": "Battle of Masan (Q4871689)",
+            "url": "https://www.wikidata.org/wiki/Q4871689",
+            "retrieved_at": "2026-08-12",
+            "license": "CC0 1.0",
+            "note": "用於馬山戰區的代表座標。"
+        },
+        {
+            "id": "src_wd_yeongsan",
+            "title": "Yeongsan (Q22055202)",
+            "url": "https://www.wikidata.org/wiki/Q22055202",
+            "retrieved_at": "2026-08-12",
+            "license": "CC0 1.0",
+            "note": "用於永山代表座標。"
+        },
+        {
+            "id": "src_wd_yongchon",
+            "title": "Yeongcheon (Q42128)",
+            "url": "https://www.wikidata.org/wiki/Q42128",
+            "retrieved_at": "2026-08-12",
+            "license": "CC0 1.0",
+            "note": "用於永川代表座標。"
+        },
+        {
+            "id": "src_wd_yeongil_bay",
+            "title": "Yeongilman Bay (Q11260549)",
+            "url": "https://www.wikidata.org/wiki/Q11260549",
+            "retrieved_at": "2026-08-12",
+            "license": "CC0 1.0",
+            "note": "用於迎日灣代表座標。"
+        }
+    ],
+    "animation_hints": {
+        "map": {
+            "initial_center": [
+                128.78,
+                35.75
+            ],
+            "initial_zoom": 7,
+            "bounds_padding": 0.08
+        },
+        "style": {
+            "side_colors": {
+                "side_un": "#2f6fb5",
+                "side_kpa": "#c0392b"
+            },
+            "actor_icons": {
+                "actor_eighth_army": "headquarters",
+                "actor_us_24_div": "infantry",
+                "actor_us_25_div": "infantry",
+                "actor_us_1_cav_div": "cavalry",
+                "actor_us_2_div": "infantry",
+                "actor_us_1_prov_marine_brig": "infantry",
+                "actor_task_force_kean": "unit_generic",
+                "actor_rok_army": "headquarters",
+                "actor_rok_i_corps": "headquarters",
+                "actor_rok_ii_corps": "headquarters",
+                "actor_rok_1_div": "infantry",
+                "actor_rok_3_div": "infantry",
+                "actor_rok_6_div": "infantry",
+                "actor_rok_8_div": "infantry",
+                "actor_rok_capital_div": "infantry",
+                "actor_kpa": "headquarters",
+                "actor_kpa_1_div": "infantry",
+                "actor_kpa_2_div": "infantry",
+                "actor_kpa_3_div": "infantry",
+                "actor_kpa_4_div": "infantry",
+                "actor_kpa_5_div": "infantry",
+                "actor_kpa_6_div": "infantry",
+                "actor_kpa_7_div": "infantry",
+                "actor_kpa_8_div": "infantry",
+                "actor_kpa_9_div": "infantry",
+                "actor_kpa_10_div": "infantry",
+                "actor_kpa_12_div": "infantry",
+                "actor_kpa_13_div": "infantry",
+                "actor_kpa_15_div": "infantry",
+                "actor_kpa_105_armored_div": "armor",
+                "actor_kpa_766_regiment": "infantry"
+            },
+            "event_icons": {
+                "defend": "shield",
+                "attack": "burst",
+                "retreat": "arrow-down-left",
+                "advance": "arrow-up-right"
+            },
+            "movement_line_width": 4
+        },
+        "timeline": {
+            "default_event_duration_ms": 1800,
+            "ordered_event_ids": [
+                "evt_perimeter_established",
+                "evt_first_naktong_bulge",
+                "evt_taegu_august",
+                "evt_pohang_august",
+                "evt_task_force_kean",
+                "evt_rok3_evacuation",
+                "evt_great_naktong_offensive",
+                "evt_second_naktong_bulge",
+                "evt_yongchon_september",
+                "evt_kpa_retreat",
+                "evt_un_breakout"
+            ],
+            "historical_seconds_per_playback_second": 43200,
+            "idle_compression_threshold_seconds": 86400,
+            "idle_compressed_duration_ms": 900
+        },
+        "camera": [
+            {
+                "event_id": "evt_perimeter_established",
+                "center": [
+                    128.78,
+                    35.75
+                ],
+                "zoom": 7
+            },
+            {
+                "event_id": "evt_first_naktong_bulge",
+                "center": [
+                    128.5,
+                    35.5
+                ],
+                "zoom": 9
+            },
+            {
+                "event_id": "evt_taegu_august",
+                "center": [
+                    128.5,
+                    35.96
+                ],
+                "zoom": 8
+            },
+            {
+                "event_id": "evt_pohang_august",
+                "center": [
+                    129.34,
+                    36.04
+                ],
+                "zoom": 8
+            },
+            {
+                "event_id": "evt_task_force_kean",
+                "center": [
+                    128.43,
+                    35.19
+                ],
+                "zoom": 8
+            },
+            {
+                "event_id": "evt_rok3_evacuation",
+                "center": [
+                    129.4,
+                    36.05
+                ],
+                "zoom": 8
+            },
+            {
+                "event_id": "evt_great_naktong_offensive",
+                "center": [
+                    128.76,
+                    35.74
+                ],
+                "zoom": 7
+            },
+            {
+                "event_id": "evt_second_naktong_bulge",
+                "center": [
+                    128.61,
+                    35.48
+                ],
+                "zoom": 9
+            },
+            {
+                "event_id": "evt_yongchon_september",
+                "center": [
+                    128.94,
+                    35.97
+                ],
+                "zoom": 9
+            },
+            {
+                "event_id": "evt_kpa_retreat",
+                "center": [
+                    128.78,
+                    35.75
+                ],
+                "zoom": 7
+            },
+            {
+                "event_id": "evt_un_breakout",
+                "center": [
+                    128.78,
+                    35.75
+                ],
+                "zoom": 7
+            }
+        ]
+    }
+}

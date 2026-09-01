@@ -1,0 +1,1757 @@
+{
+  "schema_version": "0.3.0",
+  "metadata": {
+    "id": "battle_stalingrad_1942_1943",
+    "title": "史達林格勒戰役",
+    "created_at": "2026-07-23",
+    "updated_at": "2026-07-23",
+    "license": "CC BY-SA 4.0",
+    "source_system": "battle_json_prompt_1.0.0",
+    "wikidata_qid": "Q38789"
+  },
+  "battle": {
+    "id": "battle_stalingrad_1942_1943",
+    "name": "史達林格勒戰役",
+    "also_known_as": [
+      "史達林格勒會戰",
+      "Battle of Stalingrad"
+    ],
+    "part_of": "第二次世界大戰蘇德戰爭東方戰線",
+    "date": {
+      "label": "1942-07-17—1943-02-02（起始日期有爭議；常見另一說為1942-08-23）",
+      "start": "1942-07-17",
+      "end": "1943-02-02",
+      "precision": "disputed",
+      "confidence": 0.82
+    },
+    "summary": "軸心國部隊企圖奪取伏爾加河畔的史達林格勒；經歷大規模轟炸、長期市街戰、蘇軍天王星行動合圍、德軍冬季風暴救援失敗與指環行動後，德國第6軍團及其被圍部隊投降，蘇聯取得決定性勝利。",
+    "confidence": 0.93
+  },
+  "sides": [
+    {
+      "id": "side_axis",
+      "name": "軸心國",
+      "color": "#c0392b",
+      "belligerents": [
+        {
+          "id": "bel_nazi_germany",
+          "name": "納粹德國"
+        },
+        {
+          "id": "bel_romania",
+          "name": "羅馬尼亞王國"
+        },
+        {
+          "id": "bel_italy",
+          "name": "義大利王國"
+        },
+        {
+          "id": "bel_hungary",
+          "name": "匈牙利王國"
+        },
+        {
+          "id": "bel_croatia",
+          "name": "克羅埃西亞獨立國"
+        }
+      ]
+    },
+    {
+      "id": "side_soviet",
+      "name": "蘇聯",
+      "color": "#2f6fb5",
+      "belligerents": [
+        {
+          "id": "bel_soviet_union",
+          "name": "蘇維埃社會主義共和國聯邦"
+        }
+      ]
+    }
+  ],
+  "commanders": [
+    {
+      "id": "cmd_paulus",
+      "name": "弗里德里希·包路斯",
+      "side_id": "side_axis",
+      "rank_or_role": "德國第6軍團司令",
+      "confidence": 0.98
+    },
+    {
+      "id": "cmd_hoth",
+      "name": "赫爾曼·霍特",
+      "side_id": "side_axis",
+      "rank_or_role": "德國第4裝甲軍團司令",
+      "confidence": 0.96
+    },
+    {
+      "id": "cmd_manstein",
+      "name": "埃里希·馮·曼斯坦",
+      "side_id": "side_axis",
+      "rank_or_role": "頓河集團軍司令",
+      "confidence": 0.97
+    },
+    {
+      "id": "cmd_richthofen",
+      "name": "沃爾弗拉姆·馮·里希特霍芬",
+      "side_id": "side_axis",
+      "rank_or_role": "德國第4航空隊司令",
+      "confidence": 0.96
+    },
+    {
+      "id": "cmd_dumitrescu",
+      "name": "彼得·杜米特雷斯庫",
+      "side_id": "side_axis",
+      "rank_or_role": "羅馬尼亞第3軍團司令",
+      "confidence": 0.94
+    },
+    {
+      "id": "cmd_constantinescu",
+      "name": "康斯坦丁·康斯坦丁內斯庫-克拉普斯",
+      "side_id": "side_axis",
+      "rank_or_role": "羅馬尼亞第4軍團司令",
+      "confidence": 0.92
+    },
+    {
+      "id": "cmd_strecker",
+      "name": "卡爾·史崔克",
+      "side_id": "side_axis",
+      "rank_or_role": "德國第11軍司令",
+      "confidence": 0.94
+    },
+    {
+      "id": "cmd_chuikov",
+      "name": "瓦西里·崔可夫",
+      "side_id": "side_soviet",
+      "rank_or_role": "蘇聯第62軍團司令",
+      "confidence": 0.98
+    },
+    {
+      "id": "cmd_yeremenko",
+      "name": "安德烈·葉廖緬科",
+      "side_id": "side_soviet",
+      "rank_or_role": "史達林格勒方面軍司令",
+      "confidence": 0.96
+    },
+    {
+      "id": "cmd_vatutin",
+      "name": "尼古拉·瓦圖京",
+      "side_id": "side_soviet",
+      "rank_or_role": "西南方面軍司令",
+      "confidence": 0.96
+    },
+    {
+      "id": "cmd_rokossovsky",
+      "name": "康斯坦丁·羅科索夫斯基",
+      "side_id": "side_soviet",
+      "rank_or_role": "頓河方面軍司令",
+      "confidence": 0.97
+    },
+    {
+      "id": "cmd_malinovsky",
+      "name": "羅季翁·馬利諾夫斯基",
+      "side_id": "side_soviet",
+      "rank_or_role": "蘇聯第2親衛軍團司令",
+      "confidence": 0.94
+    }
+  ],
+  "actors": [
+    {
+      "id": "actor_axis_6th_army",
+      "name": "德國第6軍團",
+      "side_id": "side_axis",
+      "kind": "army",
+      "commander_ids": [
+        "cmd_paulus"
+      ],
+      "strength": {
+        "label": "1942年11月19日包圍圈內約210,000名德軍",
+        "min": 210000,
+        "max": 210000,
+        "confidence": 0.78
+      },
+      "confidence": 0.97
+    },
+    {
+      "id": "actor_axis_4th_panzer_army",
+      "name": "德國第4裝甲軍團",
+      "side_id": "side_axis",
+      "kind": "army",
+      "commander_ids": [
+        "cmd_hoth"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_axis_luftflotte4",
+      "name": "德國第4航空隊",
+      "side_id": "side_axis",
+      "kind": "unit",
+      "commander_ids": [
+        "cmd_richthofen"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_axis_romanian_3rd_army",
+      "name": "羅馬尼亞第3軍團",
+      "side_id": "side_axis",
+      "kind": "army",
+      "commander_ids": [
+        "cmd_dumitrescu"
+      ],
+      "confidence": 0.94
+    },
+    {
+      "id": "actor_axis_romanian_4th_army",
+      "name": "羅馬尼亞第4軍團",
+      "side_id": "side_axis",
+      "kind": "army",
+      "commander_ids": [
+        "cmd_constantinescu"
+      ],
+      "confidence": 0.94
+    },
+    {
+      "id": "actor_axis_army_group_don",
+      "name": "頓河集團軍",
+      "side_id": "side_axis",
+      "kind": "other",
+      "commander_ids": [
+        "cmd_manstein"
+      ],
+      "confidence": 0.93
+    },
+    {
+      "id": "actor_axis_lvii_panzer_corps",
+      "name": "第57裝甲軍",
+      "side_id": "side_axis",
+      "kind": "corps",
+      "parent_id": "actor_axis_4th_panzer_army",
+      "confidence": 0.94
+    },
+    {
+      "id": "actor_axis_6th_panzer_division",
+      "name": "第6裝甲師",
+      "side_id": "side_axis",
+      "kind": "division",
+      "parent_id": "actor_axis_lvii_panzer_corps",
+      "confidence": 0.94
+    },
+    {
+      "id": "actor_axis_23rd_panzer_division",
+      "name": "第23裝甲師",
+      "side_id": "side_axis",
+      "kind": "division",
+      "parent_id": "actor_axis_lvii_panzer_corps",
+      "confidence": 0.94
+    },
+    {
+      "id": "actor_axis_xi_corps",
+      "name": "德國第11軍",
+      "side_id": "side_axis",
+      "kind": "corps",
+      "parent_id": "actor_axis_6th_army",
+      "commander_ids": [
+        "cmd_strecker"
+      ],
+      "confidence": 0.94
+    },
+    {
+      "id": "actor_soviet_stalingrad_front",
+      "name": "史達林格勒方面軍",
+      "side_id": "side_soviet",
+      "kind": "other",
+      "commander_ids": [
+        "cmd_yeremenko"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "id": "actor_soviet_southwestern_front",
+      "name": "西南方面軍",
+      "side_id": "side_soviet",
+      "kind": "other",
+      "commander_ids": [
+        "cmd_vatutin"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "id": "actor_soviet_don_front",
+      "name": "頓河方面軍",
+      "side_id": "side_soviet",
+      "kind": "other",
+      "commander_ids": [
+        "cmd_rokossovsky"
+      ],
+      "strength": {
+        "label": "指環行動投入約212,000人",
+        "min": 212000,
+        "max": 212000,
+        "confidence": 0.72
+      },
+      "confidence": 0.97
+    },
+    {
+      "id": "actor_soviet_62nd_army",
+      "name": "蘇聯第62軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "commander_ids": [
+        "cmd_chuikov"
+      ],
+      "confidence": 0.97
+    },
+    {
+      "id": "actor_soviet_64th_army",
+      "name": "蘇聯第64軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_soviet_5th_tank_army",
+      "name": "蘇聯第5戰車軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "parent_id": "actor_soviet_southwestern_front",
+      "confidence": 0.96
+    },
+    {
+      "id": "actor_soviet_21st_army",
+      "name": "蘇聯第21軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "parent_id": "actor_soviet_southwestern_front",
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_soviet_65th_army",
+      "name": "蘇聯第65軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "parent_id": "actor_soviet_don_front",
+      "confidence": 0.94
+    },
+    {
+      "id": "actor_soviet_51st_army",
+      "name": "蘇聯第51軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "parent_id": "actor_soviet_stalingrad_front",
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_soviet_57th_army",
+      "name": "蘇聯第57軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "parent_id": "actor_soviet_stalingrad_front",
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_soviet_2nd_guards_army",
+      "name": "蘇聯第2親衛軍團",
+      "side_id": "side_soviet",
+      "kind": "army",
+      "parent_id": "actor_soviet_stalingrad_front",
+      "commander_ids": [
+        "cmd_malinovsky"
+      ],
+      "strength": {
+        "label": "約90,000人",
+        "min": 90000,
+        "max": 90000,
+        "confidence": 0.75
+      },
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_soviet_4th_mechanized_corps",
+      "name": "蘇聯第4機械化軍",
+      "side_id": "side_soviet",
+      "kind": "corps",
+      "parent_id": "actor_soviet_stalingrad_front",
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_soviet_4th_tank_corps",
+      "name": "蘇聯第4戰車軍",
+      "side_id": "side_soviet",
+      "kind": "corps",
+      "parent_id": "actor_soviet_southwestern_front",
+      "confidence": 0.95
+    },
+    {
+      "id": "actor_soviet_13th_guards_division",
+      "name": "蘇聯第13親衛步兵師",
+      "side_id": "side_soviet",
+      "kind": "division",
+      "parent_id": "actor_soviet_62nd_army",
+      "confidence": 0.94
+    }
+  ],
+  "places": [
+    {
+      "id": "place_don_bend",
+      "name": "頓河彎曲部（史達林格勒西方）",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          43.8,
+          48.75
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "place_stalingrad_west_outskirts",
+      "name": "史達林格勒西郊",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.35,
+          48.72
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "place_stalingrad_center",
+      "name": "史達林格勒市中心",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.5325,
+          48.715
+        ]
+      },
+      "precision": "approximate",
+      "confidence": 0.88
+    },
+    {
+      "id": "place_volga_west_bank",
+      "name": "伏爾加河西岸市區",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.56,
+          48.72
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45
+    },
+    {
+      "id": "place_mamayev_kurgan",
+      "name": "馬馬耶夫崗",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.535278,
+          48.741389
+        ]
+      },
+      "precision": "exact",
+      "confidence": 0.95,
+      "wikidata_qid": "Q820002"
+    },
+    {
+      "id": "place_tractor_factory",
+      "name": "史達林格勒拖拉機廠",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.606111,
+          48.802222
+        ]
+      },
+      "precision": "exact",
+      "confidence": 0.9,
+      "wikidata_qid": "Q2562433"
+    },
+    {
+      "id": "place_serafimovich",
+      "name": "塞拉菲莫維奇橋頭堡地區",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          42.733333,
+          49.583333
+        ]
+      },
+      "precision": "approximate",
+      "confidence": 0.78,
+      "wikidata_qid": "Q194020"
+    },
+    {
+      "id": "place_southern_bridgehead",
+      "name": "史達林格勒南方蘇軍出發地區",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.55,
+          48.45
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.4
+    },
+    {
+      "id": "place_kalach",
+      "name": "頓河畔卡拉奇",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          43.533333,
+          48.683333
+        ]
+      },
+      "precision": "exact",
+      "confidence": 0.95,
+      "wikidata_qid": "Q102435"
+    },
+    {
+      "id": "place_kotelnikovo",
+      "name": "科捷利尼科沃",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          43.133333,
+          47.633333
+        ]
+      },
+      "precision": "exact",
+      "confidence": 0.95,
+      "wikidata_qid": "Q155426"
+    },
+    {
+      "id": "place_verkhnekumsky",
+      "name": "上庫姆斯基",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          43.433333,
+          48.15
+        ]
+      },
+      "precision": "exact",
+      "confidence": 0.9,
+      "wikidata_qid": "Q24483844"
+    },
+    {
+      "id": "place_myshkova_line",
+      "name": "梅什科瓦河防線",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          43.95,
+          48.25
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.4
+    },
+    {
+      "id": "place_pitomnik_airfield",
+      "name": "皮托尼克機場",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.25,
+          48.7425
+        ]
+      },
+      "precision": "exact",
+      "confidence": 0.9,
+      "wikidata_qid": "Q873482"
+    },
+    {
+      "id": "place_gumrak_airfield",
+      "name": "古姆拉克機場",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          44.346667,
+          48.781667
+        ]
+      },
+      "precision": "approximate",
+      "confidence": 0.85,
+      "wikidata_qid": "Q1433263"
+    }
+  ],
+  "historical_events": [
+    {
+      "id": "evt_battle_begins",
+      "type": "other",
+      "title": "戰役開始",
+      "time": {
+        "label": "1942-07-17",
+        "start": "1942-07-17",
+        "precision": "day",
+        "confidence": 0.72
+      },
+      "description": "依廣泛採用的戰役史分期，史達林格勒戰役自1942年7月17日開始；部分資料則以8月23日德軍抵達市郊與大轟炸作為起點。",
+      "actor_ids": [
+        "actor_axis_6th_army",
+        "actor_soviet_62nd_army",
+        "actor_soviet_64th_army"
+      ],
+      "place_ids": [
+        "place_don_bend"
+      ],
+      "precision": "disputed",
+      "confidence": 0.72,
+      "source_ids": [
+        "src_zh_stalingrad",
+        "src_en_stalingrad",
+        "src_wd_battle"
+      ]
+    },
+    {
+      "id": "evt_aug23_bombardment",
+      "type": "bombardment",
+      "title": "德國空軍大轟炸",
+      "time": {
+        "label": "1942-08-23",
+        "start": "1942-08-23",
+        "precision": "day",
+        "confidence": 0.97
+      },
+      "description": "德國第4航空隊對史達林格勒實施大規模轟炸，城市大面積化為廢墟，並嚴重破壞住宅與交通。",
+      "actor_ids": [
+        "actor_axis_luftflotte4"
+      ],
+      "target_actor_ids": [
+        "actor_soviet_62nd_army",
+        "actor_soviet_64th_army"
+      ],
+      "place_ids": [
+        "place_stalingrad_center",
+        "place_tractor_factory"
+      ],
+      "precision": "exact",
+      "confidence": 0.95,
+      "source_ids": [
+        "src_zh_stalingrad",
+        "src_en_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_aug23_axis_outskirts",
+      "type": "advance",
+      "title": "第6軍團抵達市郊",
+      "time": {
+        "label": "1942-08-23",
+        "start": "1942-08-23",
+        "precision": "day",
+        "confidence": 0.95
+      },
+      "description": "德國第6軍團追擊撤退中的蘇聯第62與第64軍團，抵達史達林格勒市郊。",
+      "actor_ids": [
+        "actor_axis_6th_army"
+      ],
+      "target_actor_ids": [
+        "actor_soviet_62nd_army",
+        "actor_soviet_64th_army"
+      ],
+      "place_ids": [
+        "place_don_bend",
+        "place_stalingrad_west_outskirts"
+      ],
+      "precision": "approximate",
+      "confidence": 0.91,
+      "source_ids": [
+        "src_en_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_sep13_city_assault",
+      "type": "attack",
+      "title": "市區攻防開始",
+      "time": {
+        "label": "1942-09-13",
+        "start": "1942-09-13",
+        "precision": "day",
+        "confidence": 0.97
+      },
+      "description": "德軍對史達林格勒市區發動主要攻勢，奪取鐵路車站並威脅伏爾加河登陸點；蘇聯第62軍團在市內持續抵抗。",
+      "actor_ids": [
+        "actor_axis_6th_army"
+      ],
+      "target_actor_ids": [
+        "actor_soviet_62nd_army"
+      ],
+      "place_ids": [
+        "place_stalingrad_center",
+        "place_mamayev_kurgan"
+      ],
+      "precision": "approximate",
+      "confidence": 0.93,
+      "source_ids": [
+        "src_en_stalingrad",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_axis_reaches_volga",
+      "type": "capture",
+      "title": "德軍逼近伏爾加河岸",
+      "time": {
+        "label": "1942年11月上旬至11月18日",
+        "start": "1942-11-01",
+        "end": "1942-11-18",
+        "precision": "range",
+        "confidence": 0.78
+      },
+      "description": "經過數月市街戰後，德軍一度控制約九成廢墟化市區，並在部分地段抵達伏爾加河岸；蘇軍仍保有狹窄據點。",
+      "actor_ids": [
+        "actor_axis_6th_army"
+      ],
+      "target_actor_ids": [
+        "actor_soviet_62nd_army"
+      ],
+      "place_ids": [
+        "place_stalingrad_center",
+        "place_volga_west_bank",
+        "place_tractor_factory"
+      ],
+      "precision": "approximate",
+      "confidence": 0.82,
+      "source_ids": [
+        "src_en_stalingrad",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_uranus_north",
+      "type": "attack",
+      "title": "天王星行動北翼突破",
+      "time": {
+        "label": "1942-11-19—1942-11-23",
+        "start": "1942-11-19",
+        "end": "1942-11-23",
+        "precision": "range",
+        "confidence": 0.95
+      },
+      "description": "西南方面軍的第5戰車軍團、第21軍團與第65軍團攻擊羅馬尼亞第3軍團，突破北翼後向南與東南推進。",
+      "actor_ids": [
+        "actor_soviet_southwestern_front",
+        "actor_soviet_5th_tank_army",
+        "actor_soviet_21st_army",
+        "actor_soviet_65th_army"
+      ],
+      "target_actor_ids": [
+        "actor_axis_romanian_3rd_army"
+      ],
+      "place_ids": [
+        "place_serafimovich",
+        "place_kalach"
+      ],
+      "precision": "approximate",
+      "confidence": 0.93,
+      "source_ids": [
+        "src_uranus",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_uranus_south",
+      "type": "attack",
+      "title": "天王星行動南翼突破",
+      "time": {
+        "label": "1942-11-20—1942-11-23",
+        "start": "1942-11-20",
+        "end": "1942-11-23",
+        "precision": "range",
+        "confidence": 0.95
+      },
+      "description": "史達林格勒方面軍第51與第57軍團及第4機械化軍攻擊羅馬尼亞第4軍團，突破南翼後向西北推進。",
+      "actor_ids": [
+        "actor_soviet_stalingrad_front",
+        "actor_soviet_51st_army",
+        "actor_soviet_57th_army",
+        "actor_soviet_4th_mechanized_corps"
+      ],
+      "target_actor_ids": [
+        "actor_axis_romanian_4th_army"
+      ],
+      "place_ids": [
+        "place_southern_bridgehead",
+        "place_kalach"
+      ],
+      "precision": "approximate",
+      "confidence": 0.93,
+      "source_ids": [
+        "src_uranus",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_encirclement_closed",
+      "type": "capture",
+      "title": "蘇軍合圍完成",
+      "time": {
+        "label": "1942-11-23 約16:00",
+        "start": "1942-11-23T16:00:00",
+        "precision": "hour",
+        "confidence": 0.9
+      },
+      "description": "史達林格勒方面軍第4機械化軍與西南方面軍第4戰車軍先頭部隊在卡拉奇附近會合，完成對德國第6軍團及其他軸心國部隊的包圍。",
+      "actor_ids": [
+        "actor_soviet_4th_mechanized_corps",
+        "actor_soviet_4th_tank_corps"
+      ],
+      "target_actor_ids": [
+        "actor_axis_6th_army"
+      ],
+      "place_ids": [
+        "place_kalach"
+      ],
+      "precision": "approximate",
+      "confidence": 0.92,
+      "source_ids": [
+        "src_uranus",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_axis_pocket_defense",
+      "type": "defend",
+      "title": "第6軍團固守包圍圈",
+      "time": {
+        "label": "1942-11-23—1943-01-09",
+        "start": "1942-11-23",
+        "end": "1943-01-09",
+        "precision": "range",
+        "confidence": 0.9
+      },
+      "description": "被圍軸心國部隊在史達林格勒及其西方草原建立環形防線，依賴不足的空運補給並等待外部救援。",
+      "actor_ids": [
+        "actor_axis_6th_army",
+        "actor_axis_xi_corps"
+      ],
+      "place_ids": [
+        "place_stalingrad_center",
+        "place_pitomnik_airfield",
+        "place_gumrak_airfield"
+      ],
+      "precision": "approximate",
+      "confidence": 0.88,
+      "source_ids": [
+        "src_en_stalingrad",
+        "src_winter_storm"
+      ]
+    },
+    {
+      "id": "evt_winter_storm_launch",
+      "type": "advance",
+      "title": "冬季風暴救援攻勢",
+      "time": {
+        "label": "1942-12-12—1942-12-19",
+        "start": "1942-12-12",
+        "end": "1942-12-19",
+        "precision": "range",
+        "confidence": 0.95
+      },
+      "description": "第4裝甲軍團第57裝甲軍由科捷利尼科沃向東北推進，先頭第6與第23裝甲師突破蘇軍防線並逼近梅什科瓦河。",
+      "actor_ids": [
+        "actor_axis_4th_panzer_army",
+        "actor_axis_lvii_panzer_corps",
+        "actor_axis_6th_panzer_division",
+        "actor_axis_23rd_panzer_division"
+      ],
+      "target_actor_ids": [
+        "actor_soviet_51st_army"
+      ],
+      "place_ids": [
+        "place_kotelnikovo",
+        "place_verkhnekumsky",
+        "place_myshkova_line"
+      ],
+      "precision": "approximate",
+      "confidence": 0.93,
+      "source_ids": [
+        "src_winter_storm",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_soviet_blocks_relief",
+      "type": "defend",
+      "title": "第2親衛軍團阻止救援",
+      "time": {
+        "label": "1942-12-15—1942-12-23",
+        "start": "1942-12-15",
+        "end": "1942-12-23",
+        "precision": "range",
+        "confidence": 0.86
+      },
+      "description": "蘇軍將第2親衛軍團轉隸史達林格勒方面軍並投入梅什科瓦河方向，與其他部隊共同阻止德軍救援縱隊。",
+      "actor_ids": [
+        "actor_soviet_2nd_guards_army",
+        "actor_soviet_stalingrad_front"
+      ],
+      "target_actor_ids": [
+        "actor_axis_lvii_panzer_corps"
+      ],
+      "place_ids": [
+        "place_verkhnekumsky",
+        "place_myshkova_line"
+      ],
+      "precision": "approximate",
+      "confidence": 0.84,
+      "source_ids": [
+        "src_winter_storm"
+      ]
+    },
+    {
+      "id": "evt_winter_storm_halted",
+      "type": "retreat",
+      "title": "冬季風暴行動失敗",
+      "time": {
+        "label": "1942-12-23—1942-12-24",
+        "start": "1942-12-23",
+        "end": "1942-12-24",
+        "precision": "range",
+        "confidence": 0.95
+      },
+      "description": "曼斯坦因於12月23日停止救援攻勢，第4裝甲軍團自次日起向出發地域撤退；包圍圈內第6軍團失去獲救希望。",
+      "actor_ids": [
+        "actor_axis_army_group_don",
+        "actor_axis_4th_panzer_army",
+        "actor_axis_lvii_panzer_corps"
+      ],
+      "place_ids": [
+        "place_myshkova_line",
+        "place_kotelnikovo"
+      ],
+      "precision": "approximate",
+      "confidence": 0.94,
+      "source_ids": [
+        "src_winter_storm",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_koltso_begins",
+      "type": "attack",
+      "title": "指環行動開始",
+      "time": {
+        "label": "1943-01-10",
+        "start": "1943-01-10",
+        "precision": "day",
+        "confidence": 0.98
+      },
+      "description": "頓河方面軍以大規模砲擊揭開指環行動，七個包圍軍團向德軍西側防線發動總攻，迫使軸心國部隊向市區收縮。",
+      "actor_ids": [
+        "actor_soviet_don_front"
+      ],
+      "target_actor_ids": [
+        "actor_axis_6th_army",
+        "actor_axis_xi_corps"
+      ],
+      "place_ids": [
+        "place_pitomnik_airfield",
+        "place_stalingrad_center"
+      ],
+      "precision": "approximate",
+      "confidence": 0.96,
+      "source_ids": [
+        "src_koltso",
+        "src_en_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_pitomnik_captured",
+      "type": "capture",
+      "title": "皮托尼克機場失陷",
+      "time": {
+        "label": "1943-01-16",
+        "start": "1943-01-16",
+        "precision": "day",
+        "confidence": 0.98
+      },
+      "description": "蘇軍攻占皮托尼克機場，德軍空運補給與傷員撤運能力大幅惡化。",
+      "actor_ids": [
+        "actor_soviet_don_front"
+      ],
+      "target_actor_ids": [
+        "actor_axis_6th_army"
+      ],
+      "place_ids": [
+        "place_pitomnik_airfield"
+      ],
+      "precision": "exact",
+      "confidence": 0.96,
+      "source_ids": [
+        "src_koltso",
+        "src_en_stalingrad",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_gumrak_captured",
+      "type": "capture",
+      "title": "古姆拉克機場失陷",
+      "time": {
+        "label": "1943-01-22",
+        "start": "1943-01-22",
+        "precision": "day",
+        "confidence": 0.88
+      },
+      "description": "蘇軍攻占古姆拉克機場；此後被圍部隊幾乎只能依賴零星空投。來源對機場確切失陷時刻記載略有差異。",
+      "actor_ids": [
+        "actor_soviet_don_front"
+      ],
+      "target_actor_ids": [
+        "actor_axis_6th_army"
+      ],
+      "place_ids": [
+        "place_gumrak_airfield"
+      ],
+      "precision": "disputed",
+      "confidence": 0.85,
+      "source_ids": [
+        "src_koltso",
+        "src_en_stalingrad",
+        "src_zh_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_pocket_split",
+      "type": "attack",
+      "title": "包圍圈被分割",
+      "time": {
+        "label": "1943-01-26",
+        "start": "1943-01-26",
+        "precision": "day",
+        "confidence": 0.97
+      },
+      "description": "蘇聯第21軍團部隊在馬馬耶夫崗北方與第13親衛步兵師會合，把史達林格勒包圍圈切分為南北兩部。",
+      "actor_ids": [
+        "actor_soviet_21st_army",
+        "actor_soviet_13th_guards_division"
+      ],
+      "target_actor_ids": [
+        "actor_axis_6th_army",
+        "actor_axis_xi_corps"
+      ],
+      "place_ids": [
+        "place_mamayev_kurgan"
+      ],
+      "precision": "approximate",
+      "confidence": 0.94,
+      "source_ids": [
+        "src_koltso"
+      ]
+    },
+    {
+      "id": "evt_southern_pocket_surrenders",
+      "type": "surrender",
+      "title": "南部包圍圈投降",
+      "time": {
+        "label": "1943-01-31",
+        "start": "1943-01-31",
+        "precision": "day",
+        "confidence": 0.98
+      },
+      "description": "蘇軍抵達包路斯位於市中心的司令部，南部包圍圈停止有組織抵抗，包路斯及其司令部被俘。",
+      "actor_ids": [
+        "actor_axis_6th_army"
+      ],
+      "place_ids": [
+        "place_stalingrad_center"
+      ],
+      "precision": "approximate",
+      "confidence": 0.96,
+      "source_ids": [
+        "src_koltso",
+        "src_en_stalingrad"
+      ]
+    },
+    {
+      "id": "evt_final_surrender",
+      "type": "surrender",
+      "title": "北部包圍圈停止抵抗",
+      "time": {
+        "label": "1943-02-02 07:00—09:20",
+        "start": "1943-02-02T07:00:00",
+        "end": "1943-02-02T09:20:00",
+        "precision": "range",
+        "confidence": 0.95
+      },
+      "description": "史崔克指揮的德國第11軍在拖拉機廠地區停止抵抗，史達林格勒戰役的有組織戰鬥結束。",
+      "actor_ids": [
+        "actor_axis_xi_corps"
+      ],
+      "place_ids": [
+        "place_tractor_factory"
+      ],
+      "precision": "approximate",
+      "confidence": 0.95,
+      "source_ids": [
+        "src_koltso",
+        "src_en_stalingrad",
+        "src_zh_stalingrad"
+      ]
+    }
+  ],
+  "movements": [
+    {
+      "id": "mov_axis_to_stalingrad",
+      "event_id": "evt_aug23_axis_outskirts",
+      "actor_id": "actor_axis_6th_army",
+      "from_place_id": "place_don_bend",
+      "to_place_id": "place_stalingrad_west_outskirts",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            43.8,
+            48.75
+          ],
+          [
+            44.08,
+            48.73
+          ],
+          [
+            44.35,
+            48.72
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1942-08-01—1942-08-23",
+        "start": "1942-08-01",
+        "end": "1942-08-23",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_axis_city_assault",
+      "event_id": "evt_sep13_city_assault",
+      "actor_id": "actor_axis_6th_army",
+      "from_place_id": "place_stalingrad_west_outskirts",
+      "to_place_id": "place_stalingrad_center",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            44.35,
+            48.72
+          ],
+          [
+            44.44,
+            48.725
+          ],
+          [
+            44.5325,
+            48.715
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1942-09-13—1942-10-31",
+        "start": "1942-09-13",
+        "end": "1942-10-31",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_axis_to_volga",
+      "event_id": "evt_axis_reaches_volga",
+      "actor_id": "actor_axis_6th_army",
+      "from_place_id": "place_stalingrad_center",
+      "to_place_id": "place_volga_west_bank",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            44.5325,
+            48.715
+          ],
+          [
+            44.545,
+            48.718
+          ],
+          [
+            44.56,
+            48.72
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1942-11-01—1942-11-18",
+        "start": "1942-11-01",
+        "end": "1942-11-18",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_uranus_north",
+      "event_id": "evt_uranus_north",
+      "actor_id": "actor_soviet_5th_tank_army",
+      "from_place_id": "place_serafimovich",
+      "to_place_id": "place_kalach",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            42.733333,
+            49.583333
+          ],
+          [
+            43.0,
+            49.3
+          ],
+          [
+            43.25,
+            49.0
+          ],
+          [
+            43.533333,
+            48.683333
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1942-11-19—1942-11-23",
+        "start": "1942-11-19",
+        "end": "1942-11-23",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_uranus_south",
+      "event_id": "evt_uranus_south",
+      "actor_id": "actor_soviet_4th_mechanized_corps",
+      "from_place_id": "place_southern_bridgehead",
+      "to_place_id": "place_kalach",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            44.55,
+            48.45
+          ],
+          [
+            44.1,
+            48.45
+          ],
+          [
+            43.75,
+            48.55
+          ],
+          [
+            43.533333,
+            48.683333
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1942-11-20—1942-11-23",
+        "start": "1942-11-20",
+        "end": "1942-11-23",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_winter_storm_advance",
+      "event_id": "evt_winter_storm_launch",
+      "actor_id": "actor_axis_lvii_panzer_corps",
+      "from_place_id": "place_kotelnikovo",
+      "to_place_id": "place_myshkova_line",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            43.133333,
+            47.633333
+          ],
+          [
+            43.3,
+            47.9
+          ],
+          [
+            43.433333,
+            48.15
+          ],
+          [
+            43.95,
+            48.25
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1942-12-12—1942-12-19",
+        "start": "1942-12-12",
+        "end": "1942-12-19",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_2nd_guards_block",
+      "event_id": "evt_soviet_blocks_relief",
+      "actor_id": "actor_soviet_2nd_guards_army",
+      "to_place_id": "place_myshkova_line",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            44.4,
+            48.5
+          ],
+          [
+            44.2,
+            48.38
+          ],
+          [
+            43.95,
+            48.25
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.4,
+      "time": {
+        "label": "1942-12-13—1942-12-18",
+        "start": "1942-12-13",
+        "end": "1942-12-18",
+        "precision": "range",
+        "confidence": 0.4
+      }
+    },
+    {
+      "id": "mov_winter_storm_retreat",
+      "event_id": "evt_winter_storm_halted",
+      "actor_id": "actor_axis_lvii_panzer_corps",
+      "from_place_id": "place_myshkova_line",
+      "to_place_id": "place_kotelnikovo",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            43.95,
+            48.25
+          ],
+          [
+            43.433333,
+            48.15
+          ],
+          [
+            43.25,
+            47.9
+          ],
+          [
+            43.133333,
+            47.633333
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1942-12-23—1942-12-24",
+        "start": "1942-12-23",
+        "end": "1942-12-24",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_koltso_to_pitomnik",
+      "event_id": "evt_koltso_begins",
+      "actor_id": "actor_soviet_don_front",
+      "to_place_id": "place_pitomnik_airfield",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            43.9,
+            48.82
+          ],
+          [
+            44.05,
+            48.78
+          ],
+          [
+            44.25,
+            48.7425
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1943-01-10—1943-01-16",
+        "start": "1943-01-10",
+        "end": "1943-01-16",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_koltso_to_gumrak",
+      "event_id": "evt_gumrak_captured",
+      "actor_id": "actor_soviet_don_front",
+      "from_place_id": "place_pitomnik_airfield",
+      "to_place_id": "place_gumrak_airfield",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            44.25,
+            48.7425
+          ],
+          [
+            44.3,
+            48.76
+          ],
+          [
+            44.346667,
+            48.781667
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1943-01-17—1943-01-22",
+        "start": "1943-01-17",
+        "end": "1943-01-22",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    },
+    {
+      "id": "mov_split_pocket",
+      "event_id": "evt_pocket_split",
+      "actor_id": "actor_soviet_21st_army",
+      "to_place_id": "place_mamayev_kurgan",
+      "path": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            44.25,
+            48.74
+          ],
+          [
+            44.4,
+            48.74
+          ],
+          [
+            44.535278,
+            48.741389
+          ]
+        ]
+      },
+      "precision": "inferred",
+      "confidence": 0.45,
+      "time": {
+        "label": "1943-01-23—1943-01-26",
+        "start": "1943-01-23",
+        "end": "1943-01-26",
+        "precision": "range",
+        "confidence": 0.45
+      }
+    }
+  ],
+  "outcome": {
+    "summary": "蘇聯取得決定性勝利；德國第6軍團及史達林格勒包圍圈內的軸心國部隊遭摧毀或投降，東方戰線戰略主動權開始明顯轉向蘇聯。",
+    "winner_side_ids": [
+      "side_soviet"
+    ],
+    "casualties": [
+      {
+        "side_id": "side_axis",
+        "label": "約841,000人傷亡；其中約91,000人被俘，統計口徑與涵蓋範圍存在差異",
+        "confidence": 0.62
+      },
+      {
+        "side_id": "side_soviet",
+        "label": "約1,129,619人死亡、失蹤、受傷或染病",
+        "min": 1129619,
+        "max": 1129619,
+        "confidence": 0.72
+      }
+    ],
+    "confidence": 0.92,
+    "source_ids": [
+      "src_zh_stalingrad",
+      "src_en_stalingrad",
+      "src_koltso"
+    ]
+  },
+  "sources": [
+    {
+      "id": "src_zh_stalingrad",
+      "title": "史達林格勒戰役 — 維基百科，自由的百科全書",
+      "url": "https://zh.wikipedia.org/zh-tw/%E6%96%AF%E5%A4%A7%E6%9E%97%E6%A0%BC%E5%8B%92%E6%88%98%E5%BD%B9",
+      "retrieved_at": "2026-07-23",
+      "license": "CC BY-SA 4.0",
+      "note": "提供繁體中文主條目中的日期、參戰方、兵力、傷亡與戰役階段。"
+    },
+    {
+      "id": "src_en_stalingrad",
+      "title": "Battle of Stalingrad — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Battle_of_Stalingrad",
+      "retrieved_at": "2026-07-23",
+      "license": "CC BY-SA 4.0",
+      "note": "補充8月23日抵達市郊、9月13日市區攻防、11月形勢、投降與英文條目授權資訊。"
+    },
+    {
+      "id": "src_uranus",
+      "title": "Operation Uranus — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Operation_Uranus",
+      "retrieved_at": "2026-07-23",
+      "license": "CC BY-SA 4.0",
+      "note": "提供天王星行動的日期、參戰軍團、北南兩翼突破與11月23日合圍資訊。"
+    },
+    {
+      "id": "src_winter_storm",
+      "title": "Operation Winter Storm — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Operation_Winter_Storm",
+      "retrieved_at": "2026-07-23",
+      "license": "CC BY-SA 4.0",
+      "note": "提供冬季風暴行動日期、德軍第57裝甲軍推進、第2親衛軍團調動與12月23至24日撤退資訊。"
+    },
+    {
+      "id": "src_koltso",
+      "title": "Operation Koltso — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Operation_Koltso",
+      "retrieved_at": "2026-07-23",
+      "license": "CC BY-SA 4.0",
+      "note": "提供指環行動、皮托尼克與古姆拉克機場失陷、包圍圈分割及最終投降的時間與單位。"
+    },
+    {
+      "id": "src_wd_battle",
+      "title": "Battle of Stalingrad (Q38789) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q38789",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供戰役Wikidata識別碼、座標及起訖日期陳述；結構化資料採CC0。"
+    },
+    {
+      "id": "src_wd_mamayev",
+      "title": "Mamayev Kurgan (Q820002) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q820002",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供馬馬耶夫崗座標。"
+    },
+    {
+      "id": "src_wd_pitomnik",
+      "title": "Pitomnik Airfield (Q873482) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q873482",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供皮托尼克機場座標。"
+    },
+    {
+      "id": "src_wd_kalach",
+      "title": "Kalach-na-Donu (Q102435) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q102435",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供頓河畔卡拉奇座標。"
+    },
+    {
+      "id": "src_wd_kotelnikovo",
+      "title": "Kotelnikovo (Q155426) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q155426",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供科捷利尼科沃座標。"
+    },
+    {
+      "id": "src_wd_verkhnekumsky",
+      "title": "Verkhnekumsky (Q24483844) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q24483844",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供上庫姆斯基座標。"
+    },
+    {
+      "id": "src_wd_tractor_factory",
+      "title": "Volgograd Tractor Factory (Q2562433) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q2562433",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供史達林格勒拖拉機廠座標。"
+    },
+    {
+      "id": "src_wd_gumrak",
+      "title": "Volgograd International Airport (Q1433263) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q1433263",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "以今日古姆拉克機場位置作為歷史古姆拉克機場的近似座標。"
+    },
+    {
+      "id": "src_wd_serafimovich",
+      "title": "Serafimovich (Q194020) — Wikidata",
+      "url": "https://www.wikidata.org/wiki/Q194020",
+      "retrieved_at": "2026-07-23",
+      "license": "CC0 1.0",
+      "note": "提供塞拉菲莫維奇座標，作為天王星行動北翼出發區域的代表位置。"
+    }
+  ],
+  "animation_hints": {
+    "map": {
+      "initial_center": [
+        43.9,
+        48.65
+      ],
+      "initial_zoom": 7,
+      "bounds_padding": 0.08
+    },
+    "style": {
+      "side_colors": {
+        "side_axis": "#c0392b",
+        "side_soviet": "#2f6fb5"
+      },
+      "actor_icons": {
+        "actor_axis_6th_army": "infantry",
+        "actor_axis_4th_panzer_army": "armor",
+        "actor_axis_luftflotte4": "aircraft_bomber",
+        "actor_axis_romanian_3rd_army": "infantry",
+        "actor_axis_romanian_4th_army": "infantry",
+        "actor_axis_army_group_don": "headquarters",
+        "actor_axis_lvii_panzer_corps": "armor",
+        "actor_axis_6th_panzer_division": "armor",
+        "actor_axis_23rd_panzer_division": "armor",
+        "actor_axis_xi_corps": "infantry",
+        "actor_soviet_stalingrad_front": "headquarters",
+        "actor_soviet_southwestern_front": "headquarters",
+        "actor_soviet_don_front": "headquarters",
+        "actor_soviet_62nd_army": "infantry",
+        "actor_soviet_64th_army": "infantry",
+        "actor_soviet_5th_tank_army": "armor",
+        "actor_soviet_21st_army": "infantry",
+        "actor_soviet_65th_army": "infantry",
+        "actor_soviet_51st_army": "infantry",
+        "actor_soviet_57th_army": "infantry",
+        "actor_soviet_2nd_guards_army": "infantry",
+        "actor_soviet_4th_mechanized_corps": "armor",
+        "actor_soviet_4th_tank_corps": "armor",
+        "actor_soviet_13th_guards_division": "infantry"
+      },
+      "event_icons": {
+        "other": "circle",
+        "bombardment": "burst",
+        "advance": "arrow-up-right",
+        "attack": "crossed-swords",
+        "defend": "shield",
+        "capture": "flag",
+        "retreat": "arrow-down-left",
+        "surrender": "flag-white"
+      },
+      "movement_line_width": 4
+    },
+    "timeline": {
+      "default_event_duration_ms": 1800,
+      "ordered_event_ids": [
+        "evt_battle_begins",
+        "evt_aug23_bombardment",
+        "evt_aug23_axis_outskirts",
+        "evt_sep13_city_assault",
+        "evt_axis_reaches_volga",
+        "evt_uranus_north",
+        "evt_uranus_south",
+        "evt_encirclement_closed",
+        "evt_axis_pocket_defense",
+        "evt_winter_storm_launch",
+        "evt_soviet_blocks_relief",
+        "evt_winter_storm_halted",
+        "evt_koltso_begins",
+        "evt_pitomnik_captured",
+        "evt_gumrak_captured",
+        "evt_pocket_split",
+        "evt_southern_pocket_surrenders",
+        "evt_final_surrender"
+      ],
+      "historical_seconds_per_playback_second": 86400,
+      "idle_compression_threshold_seconds": 172800,
+      "idle_compressed_duration_ms": 900
+    },
+    "camera": [
+      {
+        "event_id": "evt_aug23_bombardment",
+        "center": [
+          44.5325,
+          48.715
+        ],
+        "zoom": 10
+      },
+      {
+        "event_id": "evt_sep13_city_assault",
+        "center": [
+          44.535278,
+          48.741389
+        ],
+        "zoom": 11
+      },
+      {
+        "event_id": "evt_uranus_north",
+        "center": [
+          43.35,
+          49.05
+        ],
+        "zoom": 8
+      },
+      {
+        "event_id": "evt_encirclement_closed",
+        "center": [
+          43.533333,
+          48.683333
+        ],
+        "zoom": 9
+      },
+      {
+        "event_id": "evt_winter_storm_launch",
+        "center": [
+          43.5,
+          48.0
+        ],
+        "zoom": 8
+      },
+      {
+        "event_id": "evt_koltso_begins",
+        "center": [
+          44.2,
+          48.75
+        ],
+        "zoom": 9
+      },
+      {
+        "event_id": "evt_final_surrender",
+        "center": [
+          44.606111,
+          48.802222
+        ],
+        "zoom": 11
+      }
+    ]
+  }
+}

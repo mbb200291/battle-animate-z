@@ -1,0 +1,119 @@
+{
+  "schema_version": "0.3.0",
+  "metadata": { "id": "battle_of_stalingrad", "title": "斯大林格勒戰役", "created_at": "2026-07-23", "updated_at": "2026-07-23", "license": "CC BY-SA 4.0", "source_system": "battle_json_prompt_1.0.0", "wikidata_qid": "Q47160" },
+  "battle": {
+    "id": "battle_of_stalingrad",
+    "name": "斯大林格勒戰役",
+    "also_known_as": ["斯大林格勒保衛戰", "斯大林格勒會戰"],
+    "part_of": "蘇德戰爭（第二次世界大戰東線）",
+    "date": { "label": "1942年7月17日至1943年2月2日", "start": "1942-07-17", "end": "1943-02-02", "precision": "day", "confidence": 0.85 },
+    "summary": "蘇聯軍隊為保衛斯大林格勒與德國及其僕從國軍隊展開的戰略性攻防戰役，最終以蘇軍合圍並殲滅德軍第6集團軍告終，是第二次世界大戰的重要轉捩點。",
+    "confidence": 0.9
+  },
+  "sides": [
+    { "id": "side_axis", "name": "軸心國", "color": "#3d5a3d", "belligerents": [
+      { "id": "bel_germany", "name": "納粹德國" },
+      { "id": "bel_romania", "name": "羅馬尼亞王國" },
+      { "id": "bel_italy", "name": "意大利王國" },
+      { "id": "bel_hungary", "name": "匈牙利王國" }
+    ] },
+    { "id": "side_soviet", "name": "蘇聯", "color": "#c0392b", "belligerents": [
+      { "id": "bel_ussr", "name": "蘇維埃社會主義共和國聯盟" }
+    ] }
+  ],
+  "commanders": [
+    { "id": "cmd_paulus", "name": "弗里德里希·保盧斯", "side_id": "side_axis", "rank_or_role": "第6集團軍司令", "confidence": 0.9 },
+    { "id": "cmd_hoth", "name": "赫爾曼·霍特", "side_id": "side_axis", "rank_or_role": "第4裝甲集團軍司令", "confidence": 0.75 },
+    { "id": "cmd_manstein", "name": "埃里希·馮·曼施坦因", "side_id": "side_axis", "rank_or_role": "頓河集團軍群司令", "confidence": 0.8 },
+    { "id": "cmd_chuikov", "name": "瓦西里·崔可夫", "side_id": "side_soviet", "rank_or_role": "第62集團軍司令", "confidence": 0.85 },
+    { "id": "cmd_zhukov", "name": "格奧爾基·朱可夫", "side_id": "side_soviet", "rank_or_role": "大本營代表，天王星行動策劃者之一", "confidence": 0.75 },
+    { "id": "cmd_vatutin", "name": "尼古拉·瓦圖京", "side_id": "side_soviet", "rank_or_role": "西南方面軍司令", "confidence": 0.75 },
+    { "id": "cmd_rokossovsky", "name": "康斯坦丁·羅科索夫斯基", "side_id": "side_soviet", "rank_or_role": "頓河方面軍司令", "confidence": 0.75 },
+    { "id": "cmd_yeremenko", "name": "安德烈·葉廖緬科", "side_id": "side_soviet", "rank_or_role": "斯大林格勒方面軍司令", "confidence": 0.75 }
+  ],
+  "actors": [
+    { "id": "actor_army6", "name": "德國第6集團軍", "side_id": "side_axis", "kind": "army", "commander_ids": ["cmd_paulus"], "strength": { "label": "約22萬至27萬人（含友軍部隊）", "min": 220000, "max": 270000, "confidence": 0.55 }, "confidence": 0.85 },
+    { "id": "actor_panzer4", "name": "德國第4裝甲集團軍", "side_id": "side_axis", "kind": "army", "commander_ids": ["cmd_hoth"], "confidence": 0.7 },
+    { "id": "actor_romania3", "name": "羅馬尼亞第3集團軍", "side_id": "side_axis", "kind": "army", "confidence": 0.75 },
+    { "id": "actor_romania4", "name": "羅馬尼亞第4集團軍", "side_id": "side_axis", "kind": "army", "confidence": 0.75 },
+    { "id": "actor_army_group_don", "name": "頓河集團軍群（解圍部隊）", "side_id": "side_axis", "kind": "army", "commander_ids": ["cmd_manstein"], "confidence": 0.7 },
+    { "id": "actor_army62", "name": "蘇聯第62集團軍", "side_id": "side_soviet", "kind": "army", "commander_ids": ["cmd_chuikov"], "confidence": 0.85 },
+    { "id": "actor_sw_front", "name": "西南方面軍", "side_id": "side_soviet", "kind": "army", "commander_ids": ["cmd_vatutin"], "confidence": 0.75 },
+    { "id": "actor_don_front", "name": "頓河方面軍", "side_id": "side_soviet", "kind": "army", "commander_ids": ["cmd_rokossovsky"], "confidence": 0.75 },
+    { "id": "actor_stalingrad_front", "name": "斯大林格勒方面軍", "side_id": "side_soviet", "kind": "army", "commander_ids": ["cmd_yeremenko"], "confidence": 0.75 }
+  ],
+  "places": [
+    { "id": "place_stalingrad", "name": "斯大林格勒", "geometry": { "type": "Point", "coordinates": [44.5133, 48.7080] }, "precision": "approximate", "confidence": 0.9 },
+    { "id": "place_kalach", "name": "卡拉奇（頓河畔）", "geometry": { "type": "Point", "coordinates": [43.5333, 48.7167] }, "precision": "approximate", "confidence": 0.8 }
+  ],
+  "historical_events": [
+    { "id": "evt_start", "type": "advance", "title": "戰役爆發，德軍逼近斯大林格勒", "time": { "label": "1942年7月17日", "start": "1942-07-17", "precision": "day", "confidence": 0.7 }, "description": "德國與蘇聯軍隊在斯大林格勒接近地展開激烈交戰，戰役正式開始。", "actor_ids": ["actor_army6"], "place_ids": ["place_stalingrad"], "precision": "approximate", "confidence": 0.7, "source_ids": ["src_sogou"] },
+    { "id": "evt_city_entry", "type": "attack", "title": "德軍攻入斯大林格勒市區", "time": { "label": "1942年9月13日", "start": "1942-09-13", "precision": "day", "confidence": 0.85 }, "description": "德軍在猛烈空襲後迅速突破蘇軍防禦，攻入斯大林格勒。", "actor_ids": ["actor_army6"], "target_actor_ids": ["actor_army62"], "place_ids": ["place_stalingrad"], "precision": "approximate", "confidence": 0.85, "source_ids": ["src_wiki"] },
+    { "id": "evt_street_fighting", "type": "attack", "title": "城內巷戰", "time": { "label": "1942年9月至11月", "start": "1942-09-13", "end": "1942-11-18", "precision": "range", "confidence": 0.6 }, "description": "雙方在城中爆發激烈巷戰，德軍一度佔領城內約九成地區，但始終無法拿下蘇軍最後防禦地區。", "actor_ids": ["actor_army6", "actor_army62"], "place_ids": ["place_stalingrad"], "precision": "approximate", "confidence": 0.7, "source_ids": ["src_wiki"] },
+    { "id": "evt_uranus", "type": "attack", "title": "蘇軍發動天王星行動", "time": { "label": "1942年11月19日", "start": "1942-11-19", "precision": "day", "confidence": 0.9 }, "description": "蘇軍集結重兵，西南方面軍與頓河方面軍於11月19日對德軍脆弱的北翼發起猛烈炮擊與進攻，迅速突破羅馬尼亞第3集團軍防線。", "actor_ids": ["actor_sw_front", "actor_don_front"], "target_actor_ids": ["actor_romania3"], "place_ids": ["place_stalingrad"], "precision": "approximate", "confidence": 0.85, "source_ids": ["src_zhihu_uranus", "src_djnb"] },
+    { "id": "evt_romania4_collapse", "type": "attack", "title": "斯大林格勒方面軍南線突破", "time": { "label": "1942年11月20日", "start": "1942-11-20", "precision": "day", "confidence": 0.85 }, "description": "斯大林格勒方面軍於南線發起攻勢，防守該地的羅馬尼亞第4集團軍幾乎立即潰散。", "actor_ids": ["actor_stalingrad_front"], "target_actor_ids": ["actor_romania4"], "place_ids": ["place_stalingrad"], "precision": "approximate", "confidence": 0.8, "source_ids": ["src_djnb"] },
+    { "id": "evt_encirclement", "type": "capture", "title": "卡拉奇會師，完成合圍", "time": { "label": "1942年11月23日", "start": "1942-11-23", "precision": "day", "confidence": 0.85 }, "description": "蘇軍多路方面軍在卡拉奇附近會師，完成對德軍第6集團軍及其友軍的合圍，將約22萬至27萬軸心國士兵困於包圍圈內。", "actor_ids": ["actor_sw_front", "actor_stalingrad_front", "actor_don_front"], "target_actor_ids": ["actor_army6"], "place_ids": ["place_kalach"], "precision": "approximate", "confidence": 0.85, "source_ids": ["src_djnb", "src_wiki"] },
+    { "id": "evt_winterstorm", "type": "attack", "title": "冬季風暴行動", "time": { "label": "1942年12月12日", "start": "1942-12-12", "precision": "day", "confidence": 0.75 }, "description": "曼施坦因指揮頓河集團軍群發動冬季風暴行動，試圖打通包圍圈解救第6集團軍，最終被蘇軍擊退。", "actor_ids": ["actor_army_group_don"], "target_actor_ids": ["actor_sw_front", "actor_don_front"], "place_ids": ["place_stalingrad"], "precision": "approximate", "confidence": 0.75, "source_ids": ["src_wiki"] },
+    { "id": "evt_surrender", "type": "surrender", "title": "德軍投降，戰役結束", "time": { "label": "1943年1月31日至2月2日", "start": "1943-01-31", "end": "1943-02-02", "precision": "range", "confidence": 0.85 }, "description": "德軍指揮官保盧斯被俘，城內約90,100名軸心國士兵因彈盡糧絕、酷寒及疾病向蘇軍投降，戰役結束。", "actor_ids": ["actor_army6"], "place_ids": ["place_stalingrad"], "precision": "approximate", "confidence": 0.85, "source_ids": ["src_wiki", "src_sogou"] }
+  ],
+  "movements": [
+    { "id": "mov_sw_front_advance", "event_id": "evt_uranus", "actor_id": "actor_sw_front", "to_place_id": "place_kalach", "path": { "type": "LineString", "coordinates": [[42.0, 49.6], [43.5333, 48.7167]] }, "precision": "inferred", "confidence": 0.4, "time": { "label": "1942年11月19日至23日（北路）", "start": "1942-11-19T06:00:00", "end": "1942-11-23T00:00:00", "precision": "range", "confidence": 0.4 }, "waypoint_times": ["1942-11-19T06:00:00", "1942-11-23T00:00:00"] },
+    { "id": "mov_stalingrad_front_advance", "event_id": "evt_romania4_collapse", "actor_id": "actor_stalingrad_front", "to_place_id": "place_kalach", "path": { "type": "LineString", "coordinates": [[44.3, 47.5], [43.5333, 48.7167]] }, "precision": "inferred", "confidence": 0.4, "time": { "label": "1942年11月20日至23日（南路）", "start": "1942-11-20T06:00:00", "end": "1942-11-23T00:00:00", "precision": "range", "confidence": 0.4 }, "waypoint_times": ["1942-11-20T06:00:00", "1942-11-23T00:00:00"] }
+  ],
+  "outcome": {
+    "summary": "蘇聯獲勝，德軍第6集團軍全軍覆沒並向蘇軍投降，此役被視為第二次世界大戰東線的重要轉捩點。",
+    "winner_side_ids": ["side_soviet"],
+    "casualties": [
+      { "side_id": "side_axis", "label": "約150萬人（含陣亡、受傷、被俘等），另損失3,500輛坦克、1.2萬門大炮、3,000架飛機", "min": 1500000, "max": 1500000, "confidence": 0.6 }
+    ],
+    "confidence": 0.85,
+    "source_ids": ["src_wiki", "src_sogou"]
+  },
+  "sources": [
+    { "id": "src_wiki", "title": "斯大林格勒战役 - 维基百科，自由的百科全书", "url": "https://zh.wikipedia.org/wiki/%E6%96%AF%E5%A4%A7%E6%9E%97%E6%A0%BC%E5%8B%92%E6%88%98%E5%BD%B9", "retrieved_at": "2026-07-23", "license": "CC BY-SA 4.0" },
+    { "id": "src_sogou", "title": "斯大林格勒战役 - 搜狗百科", "url": "https://baike.sogou.com/v632356.htm", "retrieved_at": "2026-07-23", "license": "版權所有，來源網站保留權利" },
+    { "id": "src_zhihu_uranus", "title": "天王星行动：20万精锐德军投降，二战苏军大纵深战术到底怎么打？ - 知乎", "url": "https://zhuanlan.zhihu.com/p/389816584", "retrieved_at": "2026-07-23", "license": "版權所有，來源網站保留權利" },
+    { "id": "src_djnb", "title": "斯大林格勒战役：世界反法西斯战争的伟大转折点 - 大江南北杂志", "url": "http://www.djnb.cn/journal_articles/view/3917", "retrieved_at": "2026-07-23", "license": "版權所有，來源網站保留權利" }
+  ],
+  "animation_hints": {
+    "map": { "initial_center": [44.0, 48.9], "initial_zoom": 6, "bounds_padding": 0.3 },
+    "style": {
+      "side_colors": { "side_axis": "#3d5a3d", "side_soviet": "#c0392b" },
+      "actor_icons": {
+        "actor_army6": "infantry",
+        "actor_panzer4": "armor",
+        "actor_romania3": "infantry",
+        "actor_romania4": "infantry",
+        "actor_army_group_don": "armor",
+        "actor_army62": "infantry",
+        "actor_sw_front": "infantry",
+        "actor_don_front": "infantry",
+        "actor_stalingrad_front": "infantry"
+      },
+      "event_icons": {
+        "advance": "arrow-up-right",
+        "attack": "burst",
+        "capture": "flag",
+        "surrender": "flag-white"
+      },
+      "movement_line_width": 4
+    },
+    "timeline": {
+      "default_event_duration_ms": 1600,
+      "ordered_event_ids": ["evt_start", "evt_city_entry", "evt_street_fighting", "evt_uranus", "evt_romania4_collapse", "evt_encirclement", "evt_winterstorm", "evt_surrender"],
+      "historical_seconds_per_playback_second": 259200,
+      "idle_compression_threshold_seconds": 604800,
+      "idle_compressed_duration_ms": 1500
+    },
+    "camera": [
+      { "event_id": "evt_start", "center": [44.5133, 48.7080], "zoom": 7 },
+      { "event_id": "evt_city_entry", "center": [44.5133, 48.7080], "zoom": 9 },
+      { "event_id": "evt_street_fighting", "center": [44.5133, 48.7080], "zoom": 10 },
+      { "event_id": "evt_uranus", "center": [43.0, 49.2], "zoom": 7 },
+      { "event_id": "evt_romania4_collapse", "center": [44.3, 47.5], "zoom": 7 },
+      { "event_id": "evt_encirclement", "center": [43.5333, 48.7167], "zoom": 8 },
+      { "event_id": "evt_winterstorm", "center": [44.0, 48.9], "zoom": 6 },
+      { "event_id": "evt_surrender", "center": [44.5133, 48.7080], "zoom": 9 }
+    ]
+  }
+}
