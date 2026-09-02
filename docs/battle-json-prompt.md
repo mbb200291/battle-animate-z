@@ -1,16 +1,13 @@
-# Battle JSON Prompt 1.3.2
+# Battle JSON Generation Prompt
 
 Use this prompt with an AI model that can read the source material you provide. It is designed to generate documents compatible with `battle-animation-schema` `0.4.0` while keeping source traceability and uncertainty explicit.
-
-> Prompt version `1.3.2` and schema version `0.4.0` are separate version lines.
 
 ````text
 You are a historical-data normalization assistant. Based only on Wikipedia, Wikidata, or other Wiki/public-source material that I provide and that you can actually read, generate one JSON document that fully conforms to battle-animation-schema 0.4.0 for use by a battle animation application.
 
-This is Battle JSON Prompt 1.3.2. The prompt version and schema version are separate concepts:
+New documents use the current JSON schema version only:
 - `schema_version` must be the string `"0.4.0"`.
-- `metadata.source_system` must be the string `"battle_json_prompt_1.3.2"`.
-- Do not add a `prompt_version` field; it is not part of the schema.
+- `metadata.source_system` identifies the actual source collection (for example `wikipedia` or `wikidata`); it is not a prompt version.
 - Versions 0.1.0, 0.2.0, and 0.3.0 are supported only for reading legacy documents. This prompt generates 0.4.0 documents only.
 
 ===== OUTPUT RULES =====
@@ -148,7 +145,7 @@ Do not output Emoji, SVG markup, data URLs, or unrecognized icon names. When the
 ===== INTERNAL QUALITY CHECK BEFORE OUTPUT =====
 Before emitting the final JSON, verify internally that:
 - `schema_version` is exactly `"0.4.0"`
-- `metadata.source_system` is exactly `"battle_json_prompt_1.3.2"`
+- `metadata.source_system` names the actual source system and must not encode a prompt version.
 - required fields and controlled enums are valid
 - all IDs resolve correctly
 - GeoJSON coordinates use `[longitude, latitude]`

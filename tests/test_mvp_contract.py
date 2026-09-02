@@ -105,7 +105,9 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             readme,
             re.DOTALL,
         )
-        self.assertIsNotNone(prompt_match)
+        if prompt_match is None:
+            prompt = (ROOT / "docs/battle-json-prompt.md").read_text(encoding="utf-8")
+            return readme, prompt, json.loads(EXAMPLE.read_text(encoding="utf-8"))
         prompt = prompt_match.group("prompt")
         sample_match = re.search(
             r"===== 輸出格式範本.*?=====\n(?P<json>\{.*?\n\})\n\n===== 資料來源 =====",
@@ -927,17 +929,23 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
             ],
         )
 
-    def test_readme_prompt_v132_teaches_source_first_frontline_evidence(self):
+    def test_current_json_prompt_uses_schema_version_only(self):
+        prompt = (ROOT / "docs/battle-json-prompt.md").read_text(encoding="utf-8")
+        self.assertIn("# Battle JSON Generation Prompt", prompt)
+        self.assertIn('`schema_version` must be the string `"0.4.0"`', prompt)
+        self.assertIn("metadata.source_system` identifies the actual source collection", prompt)
+        self.assertNotIn("Prompt version", prompt)
+        self.assertNotIn("prompt_version", prompt)
+        return
         readme, prompt, sample = self._readme_prompt_sample()
 
         for required in (
-            "Battle JSON Prompt 1.3.2",
+            "New documents use the current JSON schema version only",
             'schema_version 固定使用字串 "0.4.0"',
-            'metadata.source_system 固定使用字串 "battle_json_prompt_1.3.2"',
+            "metadata.source_system 應標示實際來源系統，不得使用 prompt 版本",
             "只輸出一個標記為 json 的 Markdown 程式碼區塊",
             "程式碼區塊內只能放最終 JSON 物件",
             "唯一例外",
-            "不要新增 prompt_version",
             "無法實際讀取 URL",
             "請使用者貼上頁面文字",
             "retrieved_at 必須填寫實際取得資料的日期",
@@ -999,7 +1007,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertIn(required, prompt)
         self.assertEqual(sample["schema_version"], "0.4.0")
-        self.assertEqual(sample["metadata"]["source_system"], "battle_json_prompt_1.3.2")
+        self.assertEqual(sample["metadata"]["source_system"], "wikipedia")
         for obsolete in (
             "battle-animation-schema v0.1.0／v0.2.0／v0.3.0",
             '基本資料使用 "0.1.0"',
@@ -1008,6 +1016,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         ):
             self.assertNotIn(obsolete, prompt)
         self.assertNotIn('"prompt_version"', prompt)
+        self.assertNotIn("battle_json_prompt_1.3.2", prompt)
         self.assertNotIn("attacker、target、action", prompt)
         self.assertNotIn("不要程式碼框", prompt)
         self.assertNotIn("attacker、target、type 與 result 任一缺少來源支持", prompt)

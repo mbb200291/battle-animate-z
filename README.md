@@ -9,16 +9,15 @@ The project focuses on **structured historical facts with explicit uncertainty**
 | Component | Current version | Notes |
 | --- | --- | --- |
 | Battle JSON Schema | `0.4.0` | Current format generated for new battle documents |
-| AI Generation Prompt | `1.3.2` | Prompt rules for producing schema `0.4.0` JSON |
 | Legacy schema support | `0.1.0`–`0.3.0` | Supported for reading older documents |
 
-The schema version and prompt version are separate version lines. A newly generated document should use:
+A newly generated document uses the current JSON schema version only:
 
 ```json
 {
   "schema_version": "0.4.0",
   "metadata": {
-    "source_system": "battle_json_prompt_1.3.2"
+    "source_system": "wikipedia"
   }
 }
 ```
@@ -41,6 +40,19 @@ The schema version and prompt version are separate version lines. A newly genera
 4. Open `http://localhost:8000/app/` and load the JSON document.
 
 The browser application validates documents before rendering them, so schema and reference errors can be corrected before animation.
+
+## Map controls and overlays
+
+Use **Focus event** to center the map. When a single event has usable geography, a `camera` hint with both `center` and `zoom` takes priority. **Modern borders** are off by default, are not historical borders, and use the road-free World Hillshade / Natural Earth reference layer.
+
+When a single event has usable geography, a camera hint with both `center` and `zoom` takes priority.
+
+航跡預設關閉；關閉時不顯示 movement 路徑。開啟後只顯示當前 movement（只顯示當前 movement），完成後淡出。事件使用 active-only 脈衝信標，相近事件會合併顯示數量。
+
+來源圖上的戰線幾何可在來源錨點之間沿目標輪廓延伸，但中間形狀不表示來源提供了中間合圍路徑，只在後一個錨點完全閉合；拖曳、反向跳轉與減少動態效果時不播放額外揭示效果。
+
+The Natural Earth administrative-border asset is pinned to commit `ca96624a56bd078437bca8184e78163e5039ad19`:
+`https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_admin_0_countries.geojson`
 
 ## What this repository contains
 
@@ -124,7 +136,7 @@ The following excerpt shows the relationship between the main data sections. It 
   "metadata": {
     "id": "battle_waterloo",
     "title": "Battle of Waterloo",
-    "source_system": "battle_json_prompt_1.3.2"
+    "source_system": "wikipedia"
   },
   "battle": {
     "id": "battle_waterloo",
@@ -171,7 +183,7 @@ See [`examples/`](examples/) for complete documents that can be validated and re
 
 ## Generate battle JSON with AI
 
-Use [**Battle JSON Prompt 1.3.2**](docs/battle-json-prompt.md) to ask an AI model to generate a new battle document.
+Use the [Battle JSON generation prompt](docs/battle-json-prompt.md) to ask an AI model to generate a new battle document.
 
 The prompt is maintained separately from this README so the repository landing page can stay focused on the project itself. It emphasizes schema correctness, source traceability, conservative inference, and the distinction between source-backed frontline snapshots and runtime-derived visualization.
 
