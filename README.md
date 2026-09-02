@@ -1,31 +1,97 @@
 # Battle Animation Schema
 
-This project defines a small, stable JSON format for battle data that can be extracted from Wikipedia, Wikidata, and similar public sources, then used by downstream apps to generate map animations.
+A small, source-oriented JSON format for turning historical battle data into timeline-based map animations.
 
-The format intentionally avoids military simulation standards such as MSDL or C-BML. It records source-backed historical facts and lightweight rendering hints without modeling command logic, firepower, supply, or tactical rules.
+The project focuses on **structured historical facts with explicit uncertainty**. It records what sources say about actors, places, events, movements, engagements, outcomes, and dated frontline snapshots without modeling command logic, firepower, logistics, or tactical rules.
 
-## Files
+## Versions
 
-- `schemas/battle-animation-schema.json` defines `battle-animation-schema` versions `0.1.0` through `0.4.0`; `0.4.0` adds optional source-backed frontline snapshots.
-- `battle_animation/types.py` provides Python `TypedDict` definitions matching the schema.
-- `examples/battle-of-waterloo.json` and `examples/battle-of-甲午.json` exercise legacy fallback; `examples/battle-of-甲午海戰.json` is the timed, ship-level `0.3.0` demonstration; `examples/battle-of-stalingrad-frontlines.json` demonstrates source-backed `0.4.0` frontline interpolation and topology crossfade.
-- `battle_animation/validator.py` validates schema fields, internal references, movement timing, controlled icon tokens, and recoverable warnings.
-- `app/timeline.js` compiles historical timestamps, idle compression, and legacy synthetic timing into a deterministic presentation timeline.
-- `app/symbols.js` owns the controlled SVG unit-symbol catalog and kind-based legacy fallback.
-- `app/index.html` and `app/animate.js` provide continuous playback, scrubbing, speed controls, camera follow, one-click active-event focus, optional modern borders, and inline validation diagnostics.
+| Component | Current version | Notes |
+| --- | --- | --- |
+| Battle JSON Schema | `0.4.0` | Current format generated for new battle documents |
+| AI Generation Prompt | `1.3.2` | Prompt rules for producing schema `0.4.0` JSON |
+| Legacy schema support | `0.1.0`–`0.3.0` | Supported for reading older documents |
 
-## Schema Principles
+The schema version and prompt version are separate version lines. A newly generated document should use:
 
-The schema has two separate layers:
+```json
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "source_system": "battle_json_prompt_1.3.2"
+  }
+}
+```
 
-- `historical_events`: source-backed historical facts. Events include `type`, `time`, `actor_ids`, `place_ids`, `precision`, `confidence`, and `source_ids`.
-- `animation_hints`: rendering guidance for an animation app. This includes map center, colors, event ordering, camera hints, and line width. These fields do not assert historical facts.
+## Quick start
 
-This split keeps extraction simple. Wikipedia often gives approximate times, disputed strengths, and inferred movement paths. The schema stores those uncertainties directly with `precision` and `confidence` instead of pretending the data is exact.
+1. Prepare or generate a battle JSON document.
+2. Validate it:
 
-## Event Types
+   ```bash
+   python3 -m battle_animation.validator path/to/your-battle.json
+   ```
 
-Timeline events use a fixed enum:
+3. Start a local static server from the repository root:
+
+   ```bash
+   python3 -m http.server 8000
+   ```
+
+4. Open `http://localhost:8000/app/` and load the JSON document.
+
+The browser application validates documents before rendering them, so schema and reference errors can be corrected before animation.
+
+## What this repository contains
+
+- `schemas/battle-animation-schema.json` — schema definitions for versions `0.1.0` through `0.4.0`.
+- `battle_animation/types.py` — Python `TypedDict` definitions matching the schema.
+- `battle_animation/validator.py` — schema and reference validation.
+- `examples/` — example battle documents, including timed ship-level and frontline-snapshot examples.
+- `docs/battle-json-prompt.md` — the maintained AI generation prompt.
+- `app/` — a browser-based renderer for inspecting and animating battle JSON documents.
+- `tests/` — contract tests for schema and application behavior.
+
+## Design principles
+
+The format separates historical claims from presentation hints:
+
+- `historical_events`, `movements`, `engagements`, `frontline_snapshots`, and `outcome` represent source-backed historical data.
+- `animation_hints` contains renderer guidance such as colors, icon tokens, timeline ordering, and camera suggestions.
+
+Uncertainty is represented explicitly with fields such as `precision` and `confidence`. Approximate or inferred information should remain visibly approximate instead of being converted into false precision.
+
+The format is designed for **extraction and visualization, not simulation**.
+
+## Schema 0.4.0 at a glance
+
+A document contains these required top-level keys:
+
+```text
+schema_version
+metadata
+battle
+sides
+commanders
+actors
+places
+historical_events
+movements
+outcome
+sources
+animation_hints
+```
+
+Optional top-level keys:
+
+```text
+engagements
+frontline_snapshots
+```
+
+### Event types
+
+`historical_events[].type` uses a controlled enum:
 
 - `advance`
 - `retreat`
@@ -38,7 +104,7 @@ Timeline events use a fixed enum:
 - `landing`
 - `other`
 
-## GeoJSON Subset
+### Geographic data
 
 Geographic fields use a small GeoJSON subset:
 
@@ -46,241 +112,78 @@ Geographic fields use a small GeoJSON subset:
 - `LineString`
 - `Polygon`
 
-Coordinates are `[longitude, latitude]`. Places can be approximate, inferred, disputed, or unknown through `precision` and `confidence`.
+Coordinates always use `[longitude, latitude]` order. Representative coordinates do not imply exact formation footprints or historical borders.
 
-## Generate JSON With AI — Battle JSON Prompt 1.3.2
+## Simplified JSON example
 
-Use this prompt to ask an AI model to generate a battle JSON from a wiki page. It is written to avoid the most common mistakes (wrong field names, extra fields, missing side colors, movements with no `event_id`, and wrapping the output in a quality-check object).
+The following excerpt shows the relationship between the main data sections. It is intentionally abbreviated and is **not** a complete schema-valid document.
 
-````text
-你是一個歷史資料標準化助理。請根據我提供且你實際可讀取的 Wikipedia、Wikidata 或其他 Wiki 頁面內容，產生一個完全符合 battle-animation-schema 0.4.0 的 JSON，供地圖動畫 app 使用。
-
-本提示詞版本是 Battle JSON Prompt 1.3.2。Prompt 版本與 schema 版本是兩件事：
-- schema_version 固定使用字串 "0.4.0"（不要加 v，也不要寫成數字）。
-- metadata.source_system 固定使用字串 "battle_json_prompt_1.3.2"，讓文件保留生成規則的版本。
-- 不要新增 prompt_version；目前 schema 沒有這個欄位。
-- 0.1.0、0.2.0 與 0.3.0 只供 app 讀取舊文件；本提示詞只輸出 0.4.0。
-
-===== 最重要的輸出規則（違反任何一條都算失敗）=====
-1. 資料與來源資訊足以生成時，只輸出一個標記為 json 的 Markdown 程式碼區塊；程式碼區塊內只能放最終 JSON 物件，區塊前後不要加入任何解說文字。
-   唯一例外：沒有可讀取的來源內容，或來源缺少 schema 必填的來源資訊時，先用一句話請使用者補充，不要輸出 JSON。
-2. 最外層物件必須包含這 12 個必備 key（名稱與順序如下）：
-   schema_version, metadata, battle, sides, commanders, actors, places,
-   historical_events, movements, outcome, sources, animation_hints
-   若有資料，可再加選填 key：engagements、frontline_snapshots。除上述以外不要有其他 key。
-3. 絕對不要輸出 problems / suggested_fixes / corrected_json 這種檢查用包裝物件。
-   要直接輸出最終 JSON 本體。
-4. schema_version 與 metadata.source_system 必須使用上方指定的固定字串。
-5. 整份 schema 的每個物件都是 additionalProperties:false：
-   「只能使用下方列出的欄位名稱，多出任何一個欄位都會驗證失敗。」
-   不要自行新增 type / role / source_ids / precision / notes / language 等未列出的欄位。
-
-===== 生成原則：資料充分時做深，資料不足時不要猜 =====
-1. AI 只整理有來源支持的事實與明確由證據支持的推估。先在內部核對來源涵蓋的單位、事件、時間、位置、交戰與結果，再產生 JSON；不要輸出這份內部核對。
-2. 來源若支持個別軍艦或師／旅等單位、分段時間、代表位置、交戰結果與戰線快照，應使用 schema 0.4.0 的 actors、movements、waypoint_times、engagements、frontline_snapshots 完整表達，不要無故降回粗略層級。
-3. 精細度以來源為上限。來源明載的事實直接記錄；低 confidence 不是虛構資料的許可，也不能把臆測變成合法資料。required 欄位不能省略：
-   - battle.date 或 historical_events[].time 若只有粗略時間，就以來源支持的 year／month／day／hour／range 粒度填寫；若來源確實未提供時間，使用 label:"時間不詳"、precision:"unknown" 與低 confidence，不要虛構日期。
-   - movement.path 既沒有直接來源支持、也不符合下方 inferred 代表性路徑規則時，省略整筆 movement；只有 path 有依據而精確時間不足時，省略選填的 movement.time 與 waypoint_times。
-   - engagement 只有 attacker_actor_id、target_actor_id 與 type 都有來源直接支持時才建立；result 只有在來源直接支持結果時才填寫。來源未記載結果時省略 result，仍可保留有來源支持的 engagement。
-   - historical_events[].source_ids 必須是非空陣列，outcome.source_ids 必須是非空陣列；每筆 engagement.source_ids 必須是非空陣列，即使 schema 將 engagement.source_ids 列為選填。
-   - movements 沒有 source_ids；每筆 movement 必須由其 event_id 所連結 historical_event 的 source_ids 支持。
-4. inferred movement 只限來源確認單位由 A 到 B 的行動或階段先後順序時使用；標 precision:"inferred"、confidence <= 0.5，座標只是代表位置，不是精確 footprint。
-5. 不得為了動畫平滑而編造單位、事件、時間、轉折點或路徑；降低 confidence 也不能為這些內容創造來源依據。
-6. frontline_snapshots 是選填；沒有直接支持該時刻戰線或控制區的來源時，省略 frontline_snapshots。只有直接支持特定日期／時刻戰線的來源地圖才可建立；沿該來源地圖描繪的幾何可標 precision:"inferred" 且 confidence <= 0.5，source_ids 必須指向該地圖。
-7. 不得從單位點位生成 frontline_snapshots。推導戰線只由 app 執行時計算；推導戰線不得寫入 frontline_snapshots，也不得序列化成任何歷史或來源 JSON。
-8. 來源同時支持細緻單位／movements 與來源戰線快照時，兩者都要保留；不可因 app 能推導戰線而省略任一種來源資料。
-9. 同一條戰線只有在來源支持連續性時，才跨 snapshot 沿用相同 id；無法確認連續性時必須使用不同 id，不要只為了動畫 morph 而沿用。
-10. 不得從單位位置推導突出部、包圍圈或控制區。只有文字記載而沒有地圖輪廓時，只建立事件，不建立戰線幾何或控制區幾何。
-11. 每個來源錨點保留原始幾何；來源錨點之間只做來源幾何的時間插值，不把插值寫回 JSON。每筆 snapshot 都必須以 source_ids、precision 與 confidence 明確記錄引用與不確定性。
-
-===== 各物件的「合法欄位」（required 標 *，其餘為選填）=====
-metadata: *id *title *created_at *updated_at *license *source_system, wikidata_qid
-  - created_at / updated_at 使用實際建立與更新日期（YYYY-MM-DD），不要照抄範例值。
-battle: *id *name *part_of *date *summary *confidence, also_known_as
-  - date 是物件：*label *precision *confidence, start, end
-  - 不要用 start_date / end_date；改用 date.start / date.end（字串），或只放 date.label。
-sides[]: *id *name *color *belligerents
-  - color 必填，且雙方要用「對比明顯」的十六進位顏色（例如 "#2f6fb5" 藍 與 "#c0392b" 紅）。
-  - belligerents[] 每項：*id *name, wikidata_qid
-commanders[]: *id *name *side_id *confidence, rank_or_role, wikidata_qid
-  - 職稱請放 rank_or_role（不要用 role）。
-actors[]: *id *name *side_id *kind *confidence, parent_id, commander_ids, strength
-  - kind 只能是：army, corps, division, brigade, regiment, fleet, ship, unit, person, other（不要用 type）。
-  - 來源明確記載到個別軍艦/單位時 kind 才用 "ship" 等，並可用 parent_id 指向來源支持的所屬上級 actor（例如某艦隊）。
-  - strength 是物件：label, min, max, confidence（數字放 min/max，文字放 label；不要用 value/unit）。
-places[]: *id *name *geometry *precision *confidence, wikidata_qid
-  - geometry 用 GeoJSON 子集：Point / LineString / Polygon，coordinates 一律 [longitude, latitude]。
-historical_events[]: *id *type *title *time *description *actor_ids *place_ids *precision *confidence *source_ids, target_actor_ids
-  - type 只能是：advance, retreat, attack, defend, capture, surrender, reinforcement, bombardment, landing, other
-  - title 是短標題；description 放完整敘述；time 是物件：*label *precision *confidence, start, end
-  - 每筆 source_ids 必須是非空陣列，且只引用直接支持該事件的來源。
-movements[]: *id *event_id *actor_id *path *precision *confidence, from_place_id, to_place_id, time, waypoint_times
-  - 每個 movement 都「必須」有 event_id，對應到某個 historical_events.id（否則動畫不會顯示這段移動）。
-  - movements 沒有 source_ids；每筆 movement 必須由其 event_id 所連結 historical_event 的 source_ids 支持。
-  - path 是 LineString：{"type":"LineString","coordinates":[[lon,lat],...]}（至少 2 個點）。
-  - time 使用與 historical_events.time 相同結構。
-  - waypoint_times 的數量必須與 path.coordinates 完全相同，且時間嚴格遞增；每個時間必須落在 movement.time 範圍內。
-  - 只有在來源已確認事件確實發生及先後順序時，才能推估代表性路徑或時間；movement 必須標 precision:"inferred"，time.precision 使用 hour／range 等時間粒度，且 time.confidence <= 0.5。
-engagements[]（選填；只有來源明確支持「誰以何種方式攻擊誰」時才提供）:
-  *id *event_id *attacker_actor_id *target_actor_id *type *confidence, result, result_actor_id, at_place_id, time, source_ids
-  - type 只能是：fire, bombardment, ram, torpedo, charge, melee, other
-  - result 只能是：hit, miss, damaged, disabled, sunk, repelled, captured, none；只有來源直接支持結果時才填寫。
-  - event_id 對應某個 historical_events.id（交火會在該事件顯示）。
-  - attacker_actor_id、target_actor_id 與 type 都有來源直接支持時才建立 engagement；來源未記載結果時只省略 result，不要刪除其他證據充分的 engagement。
-  - schema 雖將 source_ids 列為選填，本提示詞仍要求每筆 engagement.source_ids 是非空陣列，且只引用直接支持該交戰的來源。
-  - 當 result 為 sunk / disabled / captured，用 result_actor_id 指出「被擊沉／失能的是哪個 actor」（不填則預設為 target）。
-frontline_snapshots[]（選填）:
-  *id *time *precision *confidence *source_ids, event_id, front_lines, control_areas
-  front_lines[]: *id *geometry
-  control_areas[]: *id *side_id *geometry
-  - 每筆至少提供 front_lines 或 control_areas 其中一項；geometry 分別只能是 LineString 與 Polygon。
-  - source_ids 必須指向直接支持該時刻戰線或控制區的來源；一般戰役敘事、結果或單位曾出現於某地，不足以支持精確戰線。
-  - 直接支持特定日期／時刻戰線的來源地圖是建立 snapshot 的唯一方式；沿來源地圖描繪的線可標 precision:"inferred" 且 confidence <= 0.5，這和 app 依單位點位執行時推導的戰線不同。
-  - 不得從戰果敘述推導出精確包圍圈、突破口、控制區邊界或戰線形狀。
-  - 不得從 casualties、strength 或 outcome 推算 control_areas 或其他控制區幾何。
-  - 不得從單位點位生成 frontline_snapshots；推導戰線只由 app 執行時計算。推導戰線不得寫入 frontline_snapshots，也不得序列化成歷史或來源 JSON。
-  - 不得從單位位置推導突出部、包圍圈或控制區；只有文字記載而沒有地圖輪廓時，只建立事件，不建立戰線幾何或控制區幾何。
-  - 同一條戰線或控制區只有在來源支持其連續性時，才跨 snapshot 沿用相同 id；無法確認連續性時必須使用不同 id。
-  - 優先蒐集多個有明確日期的來源地圖作為時間錨點；不要把同一張地圖自行變形成多個快照，也不要為了延長動畫虛構中間快照。
-  - 每個來源錨點保留原始幾何；來源錨點之間只做來源幾何的時間插值。插值是 renderer 顯示，不是新的歷史證據；snapshot 的 source_ids、precision 與 confidence 必須明確。
-outcome: *summary *winner_side_ids *confidence *source_ids, casualties
-  - winner_side_ids 是陣列（不要用 winner_side_id 單數）。
-  - casualties[] 每項：*side_id *label *confidence, min, max
-  - source_ids 必須是非空陣列，且只引用直接支持結果摘要、勝方與傷亡欄位的來源。
-sources[]: *id *title *url *retrieved_at *license, note
-  - 用 retrieved_at（不要用 accessed_at）；不要放 type。
-  - retrieved_at 必須填寫實際取得資料的日期（YYYY-MM-DD），不得照抄範例日期。
-  - title、url 與 license 都必須來自實際來源。不要假設所有來源都是 CC BY-SA 4.0，也不要照抄範例 license。
-animation_hints: *map *style *timeline, camera
-  - map: *initial_center *initial_zoom, bounds_padding（initial_center 為 [lon,lat]）
-  - style: side_colors, actor_icons, event_icons, movement_line_width
-  - timeline: default_event_duration_ms, ordered_event_ids, historical_seconds_per_playback_second, idle_compression_threshold_seconds, idle_compressed_duration_ms（請依時間順序列出所有事件 id）
-    0.4.0 使用連續歷史時間播放；長時間無事件時用 idle 欄位做閒置時間壓縮，不得改寫歷史時間。
-  - camera[] 每項：*event_id *center, zoom（center 為 [lon,lat]）
-  - animation_hints 只放渲染提示，不要在裡面放任何史實斷言或 source。
-
-===== 顏色與圖示（讓動畫更清楚）=====
-- 為每個 side 指定對比明顯的 color，並在 animation_hints.style.side_colors 重複一份（key 用 side id）。
-- 為每個 actor 在 animation_hints.style.actor_icons 指定一個適當的受控名稱（key 用 actor id）。
-- actor_icons 只能使用以下 21 個受控名稱：
-  warship_generic, warship_ironclad, warship_battleship,
-  warship_armored_cruiser, warship_protected_cruiser, warship_destroyer,
-  warship_torpedo_boat, naval_transport, fleet_generic, infantry, cavalry,
-  artillery, armor, engineer, logistics, headquarters, fortress, aircraft,
-  aircraft_fighter, aircraft_bomber, unit_generic。
-- 不要輸出 Emoji、SVG、data URL 或詞彙表以外的名稱；不確定時使用同類 generic token（船艦用 warship_generic、艦隊用 fleet_generic、其他用 unit_generic）。
-- 依來源記載為每個單位選擇受控名稱。例如來源明載 protected cruiser 時可用 warship_protected_cruiser；來源未支持細分類時使用同類 generic token，不要只因外形相近就套用。
-
-===== 精細度（以來源支持為上限）=====
-動畫細緻度取決於來源可支持的粒度，而不是欄位數量。請做到：
-1. 只把來源明確記載的關鍵單位拆細：海戰可採船艦級，陸戰在來源允許時採師／旅級（必要時到團級），各自當一個 actor
-   （kind 用 ship / division / brigade…），需要時用 parent_id 歸到上級單位。
-2. 針對來源明確記載的戰役階段，讓師／旅級單位以代表位置建立 movements；每個已記載階段為有移動的單位
-   補一條 movement（帶對應的 event_id）。同一單位跨階段保持相同 actor id。不要為了讓動畫連續而新增來源未記載的階段或行動。
-3. 來源明確記載 attacker_actor_id、target_actor_id 與 type 時，才用 engagements 記錄哪個單位以何種方式攻擊哪個單位；
-   result 僅在來源直接支持時填寫。app 會在對應事件畫出交火線，並在有 sunk／disabled／captured 結果時讓相關單位淡出。
-4. 對來源已確認發生及先後順序的事件，可為不同階段建立代表性近似 Point 以避免標記重疊，
-   但必須標 inferred + 低 confidence；不得為了畫面效果新增事件。
-5. 陸上師／旅的 Point 或 movement 座標是該時刻的代表位置，不是該單位的精確空間範圍；
-   不要把單一座標解讀成整個陣地、正面寬度或精確 footprint。
-
-資料來源不限於單一 wiki 條目，可彙整其他百科、條目章節與戰役專文。推估僅限於代表性幾何與時間，
-而且來源已確認事件確實發生及先後順序；凡屬推估，務必標 precision:"inferred" 且 confidence 偏低
-（例如 <= 0.5）。沒有來源支持的 actor、engagement 或艦種／兵種分類必須省略；只有 result 缺少來源支持時只省略 result，
-不要壓掉其他證據充分的 engagement，也不得用低 confidence 包裝臆測內容。
-
-===== 輸出前品質檢查（只在內部執行，不要輸出）=====
-- schema_version 與 metadata.source_system 是否分別為 "0.4.0" 與 "battle_json_prompt_1.3.2"。
-- required 欄位、受控 enum、id 參照、GeoJSON 座標順序及 additionalProperties:false 是否全部符合。
-- historical_events[].source_ids、outcome.source_ids 與每筆 engagement.source_ids 是否都是非空陣列，且只引用直接支持該物件的來源。
-- 每筆 movement 是否由 event_id 所連結 historical_event 的非空 source_ids 支持，而未新增 schema 不允許的 movement.source_ids。
-- engagement 的 attacker_actor_id、target_actor_id 與 type 是否有來源；result 若存在是否有直接來源，若無是否只省略 result；推估是否只限代表性幾何與時間且 confidence <= 0.5。
-- 若輸出 frontline_snapshots，每筆是否有直接支持該時刻戰線或控制區的來源及至少一種合法幾何；只有來源支持連續性時才沿用 id，無法確認時是否改用不同 id；是否優先使用多張有明確日期的來源地圖，且未把單張地圖變形成多個快照或虛構中間快照。
-- 是否避免由結果敘述、勝負、包圍或突破等概括文字生成精確戰線或控制區。
-- 是否完全避免把 app 依單位點位推導的戰線寫進 frontline_snapshots。
-
-===== 資料正確性 =====
-- 不要編造來源中沒有的細節。資料不精確時用 precision（approximate/inferred/disputed/unknown）與 confidence（0~1）標記。
-- `inferred` 只表達來源支持事件之代表性位置、路徑或時間，不代表可以推造未記載的單位、交戰、結果或分類。
-- 所有 *_id / *_ids 必須對應到實際存在的 id。
-- 地點若只能大概定位，就用 approximate 的 Point。
-
-===== 輸出格式範本（請完全比照這個結構與欄位輸出，只替換內容）=====
+```json
 {
   "schema_version": "0.4.0",
-  "metadata": { "id": "battle_land_template", "title": "陸戰結構範本（內容須替換）", "created_at": "YYYY-MM-DD", "updated_at": "YYYY-MM-DD", "license": "REPLACE WITH DOCUMENT LICENSE", "source_system": "battle_json_prompt_1.3.2" },
-  "battle": { "id": "battle_land_template", "name": "範例陸戰（非真實戰役資料）", "part_of": "來源內容占位", "date": { "label": "1900-01-01（範例時間，須替換）", "start": "1900-01-01", "precision": "day", "confidence": 0.5 }, "summary": "此物件只示範穩定單位 id、分階段移動與來源戰線快照的結構；所有內容都必須由實際來源替換。", "confidence": 0.5 },
-  "sides": [
-    { "id": "side_a", "name": "甲方", "color": "#2f6fb5", "belligerents": [{ "id": "bel_a", "name": "甲國" }] },
-    { "id": "side_b", "name": "乙方", "color": "#c0392b", "belligerents": [{ "id": "bel_b", "name": "乙國" }] }
-  ],
-  "commanders": [],
+  "metadata": {
+    "id": "battle_waterloo",
+    "title": "Battle of Waterloo",
+    "source_system": "battle_json_prompt_1.3.2"
+  },
+  "battle": {
+    "id": "battle_waterloo",
+    "name": "Battle of Waterloo"
+  },
   "actors": [
-    { "id": "actor_a_1div", "name": "甲方第一師", "side_id": "side_a", "kind": "division", "confidence": 0.5 },
-    { "id": "actor_a_2brig", "name": "甲方第二旅", "side_id": "side_a", "kind": "brigade", "confidence": 0.5 },
-    { "id": "actor_b_1div", "name": "乙方第一師", "side_id": "side_b", "kind": "division", "confidence": 0.5 },
-    { "id": "actor_b_2brig", "name": "乙方第二旅", "side_id": "side_b", "kind": "brigade", "confidence": 0.5 }
-  ],
-  "places": [
-    { "id": "place_sector_west", "name": "西側戰區（占位）", "geometry": { "type": "Point", "coordinates": [10.0, 50.0] }, "precision": "inferred", "confidence": 0.5 },
-    { "id": "place_sector_east", "name": "東側戰區（占位）", "geometry": { "type": "Point", "coordinates": [10.8, 50.0] }, "precision": "inferred", "confidence": 0.5 }
+    {
+      "id": "actor_example_unit",
+      "name": "Example Unit",
+      "side_id": "side_a",
+      "kind": "division"
+    }
   ],
   "historical_events": [
-    { "id": "evt_stage_1", "type": "advance", "title": "第一階段推進（占位）", "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "description": "範本假設來源確認四個單位在第一階段的行動與先後順序；代表位置不表示精確部署範圍。", "actor_ids": ["actor_a_1div", "actor_a_2brig", "actor_b_1div", "actor_b_2brig"], "place_ids": ["place_sector_west", "place_sector_east"], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_template"] },
-    { "id": "evt_stage_2", "type": "attack", "title": "第二階段交戰（占位）", "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "description": "範本假設來源確認相同四個單位進入第二階段；actor id 沿用第一階段。", "actor_ids": ["actor_a_1div", "actor_a_2brig", "actor_b_1div", "actor_b_2brig"], "place_ids": ["place_sector_west", "place_sector_east"], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_template"] }
+    {
+      "id": "evt_advance",
+      "type": "advance",
+      "actor_ids": ["actor_example_unit"],
+      "source_ids": ["src_1"]
+    }
   ],
   "movements": [
-    { "id": "mov_a1_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_a_1div", "path": { "type": "LineString", "coordinates": [[10.00, 50.12], [10.12, 50.12], [10.24, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
-    { "id": "mov_a2_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_a_2brig", "path": { "type": "LineString", "coordinates": [[10.00, 49.88], [10.12, 49.88], [10.24, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
-    { "id": "mov_b1_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_b_1div", "path": { "type": "LineString", "coordinates": [[10.80, 50.12], [10.68, 50.12], [10.56, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
-    { "id": "mov_b2_stage_1", "event_id": "evt_stage_1", "actor_id": "actor_b_2brig", "path": { "type": "LineString", "coordinates": [[10.80, 49.88], [10.68, 49.88], [10.56, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 08:00–09:00（須替換）", "start": "1900-01-01T08:00:00", "end": "1900-01-01T09:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T08:00:00", "1900-01-01T08:30:00", "1900-01-01T09:00:00"] },
-    { "id": "mov_a1_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_a_1div", "path": { "type": "LineString", "coordinates": [[10.24, 50.12], [10.32, 50.12], [10.38, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] },
-    { "id": "mov_a2_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_a_2brig", "path": { "type": "LineString", "coordinates": [[10.24, 49.88], [10.32, 49.88], [10.38, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] },
-    { "id": "mov_b1_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_b_1div", "path": { "type": "LineString", "coordinates": [[10.56, 50.12], [10.48, 50.12], [10.42, 50.12]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] },
-    { "id": "mov_b2_stage_2", "event_id": "evt_stage_2", "actor_id": "actor_b_2brig", "path": { "type": "LineString", "coordinates": [[10.56, 49.88], [10.48, 49.88], [10.42, 49.88]] }, "precision": "inferred", "confidence": 0.5, "time": { "label": "1900-01-01 10:00–11:00（須替換）", "start": "1900-01-01T10:00:00", "end": "1900-01-01T11:00:00", "precision": "range", "confidence": 0.5 }, "waypoint_times": ["1900-01-01T10:00:00", "1900-01-01T10:30:00", "1900-01-01T11:00:00"] }
+    {
+      "id": "mov_advance",
+      "event_id": "evt_advance",
+      "actor_id": "actor_example_unit",
+      "path": {
+        "type": "LineString",
+        "coordinates": [[4.3, 50.7], [4.4, 50.7]]
+      }
+    }
   ],
-  "frontline_snapshots": [
-    { "id": "front_stage_1", "time": { "label": "1900-01-01 09:00（來源地圖日期占位）", "start": "1900-01-01T09:00:00", "precision": "hour", "confidence": 0.5 }, "event_id": "evt_stage_1", "front_lines": [{ "id": "front_main", "geometry": { "type": "LineString", "coordinates": [[10.40, 49.75], [10.40, 50.25]] } }], "precision": "inferred", "confidence": 0.5, "source_ids": ["src_template"] }
-  ],
-  "outcome": { "summary": "結果占位；必須依實際來源替換。", "winner_side_ids": [], "confidence": 0.5, "source_ids": ["src_template"] },
-  "sources": [ { "id": "src_template", "title": "來源占位範本（不是實際來源）", "url": "https://example.invalid/replace-with-real-source", "retrieved_at": "YYYY-MM-DD", "license": "REPLACE WITH ACTUAL SOURCE LICENSE", "note": "這是占位範本，不聲稱 example.invalid 是真實來源。替換後的來源必須直接支持兩個階段、單位行動、結果與 09:00 戰線圖；此 snapshot 是沿該來源圖描繪，不是由單位點位推導。" } ],
-  "animation_hints": {
-    "map": { "initial_center": [10.4, 50.0], "initial_zoom": 9, "bounds_padding": 0.05 },
-    "style": {
-      "side_colors": { "side_a": "#2f6fb5", "side_b": "#c0392b" },
-      "actor_icons": { "actor_a_1div": "infantry", "actor_a_2brig": "infantry", "actor_b_1div": "infantry", "actor_b_2brig": "infantry" },
-      "event_icons": { "attack": "burst", "advance": "arrow-up-right" },
-      "movement_line_width": 4
-    },
-    "timeline": { "default_event_duration_ms": 1600, "ordered_event_ids": ["evt_stage_1", "evt_stage_2"], "historical_seconds_per_playback_second": 120, "idle_compression_threshold_seconds": 900, "idle_compressed_duration_ms": 1200 },
-    "camera": [{ "event_id": "evt_stage_1", "center": [10.4, 50.0], "zoom": 9 }, { "event_id": "evt_stage_2", "center": [10.4, 50.0], "zoom": 10 }]
-  }
+  "sources": [
+    {
+      "id": "src_1",
+      "title": "Source title",
+      "url": "https://example.com/source"
+    }
+  ]
 }
+```
 
-===== 資料來源 =====
-[貼上 Wikipedia / Wikidata / Wiki 頁面文字、表格、URL 或摘要]
+See [`examples/`](examples/) for complete documents that can be validated and rendered.
 
-若已提供可用的頁面文字、表格或摘要，可以只依那些內容生成。若沒有其他可用內容且你無法實際讀取 URL，請停止生成並請使用者貼上頁面文字、表格或摘要；不得假裝已讀取 URL，也不得依 URL 標題補寫內容。
-每筆來源都必須附有實際 title、url 與 license。缺少必要的 title、url 或 license 時，請使用者補充；資料補齊前不得生成 JSON。
-created_at、updated_at 與 retrieved_at 必須替換成實際日期，不得原樣保留 "YYYY-MM-DD"。
+## Generate battle JSON with AI
 
-===== 指定戰役 =====
-[例如：Battle of Waterloo]
+Use [**Battle JSON Prompt 1.3.2**](docs/battle-json-prompt.md) to ask an AI model to generate a new battle document.
 
-請依照上面的「輸出格式範本」結構，只替換成這場戰役的真實內容，直接輸出最終 JSON 物件。
-````
+The prompt is maintained separately from this README so the repository landing page can stay focused on the project itself. It emphasizes schema correctness, source traceability, conservative inference, and the distinction between source-backed frontline snapshots and runtime-derived visualization.
 
-After generating, validate the document before loading it into the app:
+After generation, validate the result:
 
 ```bash
 python3 -m battle_animation.validator path/to/your-battle.json
 ```
 
-Fix any reported field-name or reference errors until it prints `valid:`.
+Fix schema, field-name, or reference errors until the validator prints `valid:`.
 
-## Validate Data
-
-Run the validator against all bundled examples:
+## Validate bundled examples
 
 ```bash
 python3 -m battle_animation.validator examples/battle-of-waterloo.json
@@ -289,62 +192,24 @@ python3 -m battle_animation.validator examples/battle-of-甲午海戰.json
 python3 -m battle_animation.validator examples/battle-of-stalingrad-frontlines.json
 ```
 
-Each command should print `valid:`. The canonical timed Yalu example should produce no warnings.
-
-Run the tests:
+Run the contract tests:
 
 ```bash
 python3 -m unittest tests/test_mvp_contract.py -v
 ```
 
-## Run the Animation App
+## Format boundaries and unit granularity
 
-Serve the repository root with any static file server:
+Across schema versions `0.1.0` through `0.4.0`:
 
-```bash
-python3 -m http.server 8000
-```
-
-Open:
-
-```text
-http://localhost:8000/app/
-```
-
-Versions `0.3.0` and `0.4.0` use continuous historical-time playback（連續歷史時間播放）to interpolate each actor along timed waypoints instead of jumping between events. Long inactive gaps use idle compression（閒置時間壓縮）without changing the historical clock. The transport provides play/pause, a continuous scrubber, `0.5×`/`1×`/`2×`/`4×` speed controls, follow-camera control, and keyboard controls (arrow keys / space).
-
-地圖疊加效果保持短暫且可控：航跡預設關閉，關閉時不顯示 movement 路徑；開啟後只顯示當前 movement，逐步揭示路徑，完成後淡出。事件使用 active-only 脈衝信標，相近事件會合併顯示數量。系統偏好減少動態效果時，完成的航跡與結束的信標會立即移除。
-
-### Map controls
-
-**Focus event** frames every currently active event and its related units in one click. If no event is active it falls back to the selected event. When a single event has usable geography, a matching camera hint with both `center` and `zoom` takes priority. Focus is not Follow: it does not enable camera tracking or change playback, Trails, or the historical time. With reduced motion enabled, Focus moves the map without a fly animation.
-
-**Modern borders** are off by default and reset to off whenever a document is loaded. They are optional modern de facto reference boundaries, not historical borders, and contain no country names, roads, or labels.
-
-**Fronts** cycles `hybrid→source→derived→off`; `hybrid` is the default. During source coverage, Hybrid renders exact source geometry at each dated anchor and source-only interpolation between anchors; unit positions never alter those intervals. Before the first source snapshot, or when the document has no source snapshots, Hybrid may use the conservative derived fallback. After the final source snapshot it holds the final known source geometry. `source` follows the same source timeline without derived fallback, while `derived` independently shows only the runtime estimate from unit positions. Source-backed fronts use solid lines and list their cited sources in the inspector. Derived fronts are dashed and explicitly low-confidence; they exist only in the renderer and are never written back to the battle JSON. `off` hides fronts without changing playback or unit positions.
-
-An inferred line traced from a dated source map remains source-backed evidence: its `frontline_snapshots[].source_ids` cite that map and its precision/confidence describe the tracing. An app-derived line is different—it is calculated at runtime from representative unit positions, has no historical source claim, and must never be copied into `frontline_snapshots`.
-
-只有前後快照各有一條相同穩定 ID 的戰線時，開放戰線才會在兩個來源錨點之間沿目標輪廓延伸，並且只在後一個錨點完全閉合。中間形狀只是來源錨點之間的顯示插值，不表示來源提供了中間合圍路徑。其他戰線分裂、合併或不安全的對應仍以 crossfade 顯示；拖曳、反向跳轉與系統偏好減少動態效果時，都會直接顯示相同的取樣幾何，不播放額外揭示效果。
-
-### Map background
-
-The basemap is Esri World Hillshade. The app deliberately does not load a road or reference layer; tiles require network access, and the app displays the provider attribution.
-
-The optional borders use the public-domain Natural Earth 1:50m Admin 0 Countries data, credited in the app as “Made with Natural Earth.” The asset was downloaded from the [official raw source at commit `ca96624a56bd078437bca8184e78163e5039ad19`](https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_admin_0_countries.geojson), then transformed to retain only each feature's `type` and `geometry` with empty `properties`.
-
-Actor icons are controlled SVG tokens rendered as clear, top-down naval silhouettes or standard land/air symbols. A `0.3.0` or `0.4.0` document should provide only catalog tokens. Legacy `0.1.0` and `0.2.0` documents remain supported: missing historical timing receives a deterministic synthetic animation timeline, while missing or legacy icon values fall back by actor kind to a controlled SVG symbol.
-
-To animate your own data, load a different document with the **Load JSON file** button, the **Paste JSON…** dialog, or by dragging a `.json` file onto the map. The document is validated in the browser first; reference or schema errors are listed inline instead of rendering.
-
-## Format Boundaries and Unit Granularity
-
-This format is designed for extraction and animation, not simulation. Across versions `0.1.0` through `0.4.0`:
-
-- naval battles should use ship-level actors（船艦級）for important vessels where sources permit;
-- land battles should use division- or brigade-level actors（師／旅級）and representative positions where sources permit, rather than being restricted to coarse army-level markers;
-- a land coordinate is a representative position, not the formation's exact footprint, frontage, or occupied polygon;
-- movement paths may be inferred and should carry low confidence where appropriate;
+- naval battles can use ship-level actors when sources support individual vessels;
+- land battles can use division- or brigade-level actors and representative positions when sources support that granularity;
+- coordinates represent locations, not exact formation footprints or frontage;
+- movement paths may be inferred only from source-supported movement and should carry appropriately low confidence;
 - strengths and casualties may use ranges and text labels;
-- source records point back to Wikipedia, Wikidata, or other public references;
-- animation hints are optional guidance for renderers and should never replace source-backed historical data.
+- sources should point back to the public references that support historical claims;
+- rendering hints should remain separate from historical evidence.
+
+## License
+
+MIT License. See [`LICENSE`](LICENSE).
