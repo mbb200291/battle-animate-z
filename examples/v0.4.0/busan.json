@@ -703,39 +703,15 @@
                 "precision": "range",
                 "confidence": 0.94
             },
-            "description": "北韓人民軍發動五路總攻：第6與第7師攻擊馬山方向；第9、第4、第2與第10師攻擊洛東江突出部並企圖向密陽、永山突破；第3、第13與第1師攻擊大邱方向；第8與第15師攻向河陽、永川；第12與第5師攻向浦項、慶州方向。前兩個攻擊群於8月31日23:30開始，其餘三個攻擊群於9月2日18:00開始。",
+            "description": "北韓軍沿馬山、洛東江突出部、大邱、永川及浦項／慶州五個方向展開攻勢。以下依戰區逐段介紹；這些事件在歷史時間上重疊，並非依導覽順序先後發生。各方向執行時間不完全相同。",
             "actor_ids": [
-                "actor_kpa_1_div",
-                "actor_kpa_2_div",
-                "actor_kpa_3_div",
-                "actor_kpa_4_div",
-                "actor_kpa_5_div",
-                "actor_kpa_6_div",
-                "actor_kpa_7_div",
-                "actor_kpa_8_div",
-                "actor_kpa_9_div",
-                "actor_kpa_10_div",
-                "actor_kpa_12_div",
-                "actor_kpa_13_div",
-                "actor_kpa_15_div",
-                "actor_us_25_div",
-                "actor_us_2_div",
-                "actor_us_1_cav_div",
-                "actor_rok_1_div",
-                "actor_rok_3_div",
-                "actor_rok_6_div",
-                "actor_rok_8_div",
-                "actor_rok_capital_div"
+                "actor_kpa",
+                "actor_eighth_army",
+                "actor_rok_army"
             ],
             "target_actor_ids": [
-                "actor_us_25_div",
-                "actor_us_2_div",
-                "actor_us_1_cav_div",
-                "actor_rok_1_div",
-                "actor_rok_3_div",
-                "actor_rok_6_div",
-                "actor_rok_8_div",
-                "actor_rok_capital_div"
+                "actor_eighth_army",
+                "actor_rok_army"
             ],
             "place_ids": [
                 "place_masan",
@@ -861,6 +837,120 @@
             "confidence": 0.95,
             "source_ids": [
                 "src_main",
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_september_masan",
+            "type": "attack",
+            "title": "九月攻勢：馬山方向",
+            "time": {
+                "label": "1950-08-31–1950-09-15（戰區概括時段）",
+                "start": "1950-08-31",
+                "end": "1950-09-15",
+                "precision": "range",
+                "confidence": 0.75
+            },
+            "description": "北韓第6、第7師進攻美軍第25師防區，企圖打開馬山方向。 此段為戰區概述，不表示各部隊全程同時位於同一點；缺少逐日部署及可核實路徑。",
+            "actor_ids": [
+                "actor_kpa_6_div",
+                "actor_kpa_7_div"
+            ],
+            "target_actor_ids": [
+                "actor_us_25_div"
+            ],
+            "place_ids": [
+                "place_masan"
+            ],
+            "precision": "approximate",
+            "confidence": 0.8,
+            "source_ids": [
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_september_taegu",
+            "type": "attack",
+            "title": "九月攻勢：大邱方向",
+            "time": {
+                "label": "1950-09-01–1950-09-15（戰區概括時段）",
+                "start": "1950-09-01",
+                "end": "1950-09-15",
+                "precision": "range",
+                "confidence": 0.75
+            },
+            "description": "北韓軍由北及西北向大邱施壓；美軍第1騎兵師與韓軍第1師防守。 此段為戰區概述，不表示各部隊全程同時位於同一點；缺少逐日部署及可核實路徑。",
+            "actor_ids": [
+                "actor_kpa_3_div",
+                "actor_kpa_13_div",
+                "actor_kpa_1_div"
+            ],
+            "target_actor_ids": [
+                "actor_us_1_cav_div",
+                "actor_rok_1_div"
+            ],
+            "place_ids": [
+                "place_taegu_sector"
+            ],
+            "precision": "approximate",
+            "confidence": 0.8,
+            "source_ids": [
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_september_pohang",
+            "type": "attack",
+            "title": "九月攻勢：浦項與慶州走廊",
+            "time": {
+                "label": "1950-08-27–1950-09-15（戰區概括時段）",
+                "start": "1950-08-27",
+                "end": "1950-09-15",
+                "precision": "range",
+                "confidence": 0.75
+            },
+            "description": "東部攻勢較整體計畫提早開始，威脅通往慶州的走廊。 此段為戰區概述，不表示各部隊全程同時位於同一點；缺少逐日部署及可核實路徑。",
+            "actor_ids": [
+                "actor_kpa_12_div",
+                "actor_kpa_5_div"
+            ],
+            "target_actor_ids": [
+                "actor_rok_capital_div",
+                "actor_rok_3_div"
+            ],
+            "place_ids": [
+                "place_pohang_sector"
+            ],
+            "precision": "approximate",
+            "confidence": 0.8,
+            "source_ids": [
+                "src_great_naktong"
+            ]
+        },
+        {
+            "id": "evt_rok8_pursuit",
+            "type": "advance",
+            "title": "永川反擊後：韓軍第8師向北追擊",
+            "time": {
+                "label": "1950-09-10–1950-09-12",
+                "start": "1950-09-10",
+                "end": "1950-09-12",
+                "precision": "range",
+                "confidence": 0.8
+            },
+            "description": "韓軍第8師清除永川至慶州道路上的北韓部隊後向北追擊；9月12日，該師與韓軍第7師第5團的部分部隊到達永川以北約13公里。圖示代表第8師部分部隊，不是全師精確位置；直線為依方向與距離推估，非史料行軍路線。",
+            "actor_ids": [
+                "actor_rok_8_div"
+            ],
+            "target_actor_ids": [
+                "actor_kpa_15_div"
+            ],
+            "place_ids": [
+                "place_yeongcheon"
+            ],
+            "precision": "approximate",
+            "confidence": 0.8,
+            "source_ids": [
                 "src_great_naktong"
             ]
         }
@@ -1007,6 +1097,34 @@
                 "precision": "range",
                 "confidence": 0.4
             }
+        },
+        {
+            "id": "mov_rok8_pursuit",
+            "event_id": "evt_rok8_pursuit",
+            "actor_id": "actor_rok_8_div",
+            "from_place_id": "place_yeongcheon",
+            "path": {
+                "type": "LineString",
+                "coordinates": [
+                    [
+                        128.9386,
+                        35.9733
+                    ],
+                    [
+                        128.9386,
+                        36.09
+                    ]
+                ]
+            },
+            "precision": "inferred",
+            "confidence": 0.4,
+            "time": {
+                "label": "1950-09-10–1950-09-12",
+                "start": "1950-09-10",
+                "end": "1950-09-12",
+                "precision": "range",
+                "confidence": 0.4
+            }
         }
     ],
     "engagements": [
@@ -1148,9 +1266,9 @@
             "id": "src_great_naktong",
             "title": "Great Naktong Offensive",
             "url": "https://en.wikipedia.org/wiki/Great_Naktong_Offensive",
-            "retrieved_at": "2026-08-12",
+            "retrieved_at": "2026-09-05",
             "license": "Creative Commons Attribution-ShareAlike 4.0 License",
-            "note": "支持九月五路總攻的單位配對與攻擊方向、前兩個攻擊群於8月31日23:30發動、其餘三個攻擊群於9月2日18:00發動、永川方向進展，以及北韓軍最終崩潰撤退。"
+            "note": "支持九月五路總攻的單位配對與攻擊方向、前兩個攻擊群於8月31日23:30發動、其餘三個攻擊群於9月2日18:00發動、永川方向進展，以及北韓軍最終崩潰撤退。 本次補充依 Prelude、Kyongju corridor、Taegu、Masan、Yongchon 各節：戰區事件採概括日期；永川追擊終點僅依以北約13公里推估，信心0.4。未補無法核實的全軍撤退路線或戰線快照。"
         },
         {
             "id": "src_wd_masan",
@@ -1250,8 +1368,12 @@
                 "evt_task_force_kean",
                 "evt_rok3_evacuation",
                 "evt_great_naktong_offensive",
+                "evt_september_masan",
                 "evt_second_naktong_bulge",
+                "evt_september_taegu",
+                "evt_september_pohang",
                 "evt_yongchon_september",
+                "evt_rok8_pursuit",
                 "evt_kpa_retreat",
                 "evt_un_breakout"
             ],
@@ -1347,6 +1469,38 @@
                     35.75
                 ],
                 "zoom": 7
+            },
+            {
+                "event_id": "evt_september_masan",
+                "center": [
+                    128.55,
+                    35.1833
+                ],
+                "zoom": 9
+            },
+            {
+                "event_id": "evt_september_taegu",
+                "center": [
+                    128.43,
+                    35.96
+                ],
+                "zoom": 9
+            },
+            {
+                "event_id": "evt_september_pohang",
+                "center": [
+                    129.365,
+                    36.0322
+                ],
+                "zoom": 9
+            },
+            {
+                "event_id": "evt_rok8_pursuit",
+                "center": [
+                    128.9386,
+                    36.03
+                ],
+                "zoom": 10
             }
         ]
     }

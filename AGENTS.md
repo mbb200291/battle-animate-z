@@ -14,8 +14,8 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 # Validate a document against the schema (also checks internal id references)
-python3 -m battle_animation.validator examples/battle-of-waterloo.json
-battle-animation-validate examples/battle-of-waterloo.json   # console script (after pip install -e .)
+python3 -m battle_animation.validator examples/v0.1.0/battle-of-waterloo.json
+battle-animation-validate examples/v0.1.0/battle-of-waterloo.json   # console script (after pip install -e .)
 
 # Run all tests
 python3 -m unittest tests/test_mvp_contract.py -v
