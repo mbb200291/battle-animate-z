@@ -23,7 +23,7 @@
 
           <div class="map-caption">
             <span id="battle-name">Battle Animator</span>
-            <span id="battle-date">Loading examples/battle-of-waterloo.json</span>
+            <span id="battle-date">Loading examples/v0.1.0/battle-of-waterloo.json</span>
           </div>
 
           <div class="drop-hint">Drop battle JSON here</div>
@@ -64,6 +64,7 @@
                 <button type="button" class="ghost" data-speed="4" aria-pressed="false">4×</button>
               </div>
               <button id="follow-button" type="button" class="ghost" aria-pressed="true">Follow: on</button>
+              <button id="guide-button" type="button" class="ghost" aria-pressed="true">Guided tour: on</button>
               <button id="trails-button" type="button" class="ghost" aria-pressed="false">Trails: off</button>
               <button id="focus-event-button" type="button" class="ghost" disabled>Focus event</button>
               <button id="modern-borders-button" type="button" class="ghost" aria-pressed="false">Modern borders: off</button>
@@ -85,6 +86,10 @@
             <p id="frontline-details"></p>
             <ul id="frontline-sources"></ul>
           </section>
+
+          <section id="event-guide" lang="en" aria-label="Current event guide"></section>
+          <p>Numbered markers group nearby units, not battles. Select a marker to inspect its units.</p>
+          <section id="unit-details" aria-label="Selected units" hidden></section>
 
           <ol id="timeline" class="timeline" aria-label="Timeline events"></ol>
         </aside>
@@ -176,7 +181,7 @@
       });
 
       try {
-        const battle = await loadBattle("../examples/battle-of-waterloo.json");
+        const battle = await loadBattle("../examples/v0.1.0/battle-of-waterloo.json");
         setBattle(battle);
       } catch (error) {
         destroyController();

@@ -43,6 +43,12 @@ The browser application validates documents before rendering them, so schema and
 
 ## Map controls and overlays
 
+「逐段導覽」預設開啟：每段以 1× 速度停留 3 秒交代情境、10 秒播放事件期間、3 秒閱讀結果，再切至下一段。各段使用固定事件視角；並行事件逐一介紹，歷史日期可能回跳。關閉即可回到連續時間播放。
+
+導覽只在地圖呈現目前事件中有有效 movement 的非上級單位；其他參戰單位保留於清單，標示「當期位置資料不足」。這是保守的顯示規則，不代表沒有路徑的部隊不存在或沒有參戰。推估路徑仍不是精確部署。
+
+Demo：載入 `examples/v0.4.0/busan.json` 後按 Play。九月攻勢分戰區介紹，另有永川反擊後向北追擊的低信心代表路徑。此例仍沒有可靠戰線快照，也沒有可核實的全軍撤退路線；介面明示缺口，不自動補造。新增資料依 [Great Naktong Offensive](https://en.wikipedia.org/wiki/Great_Naktong_Offensive) 的戰區敘述與 Yongch'on 節；永川追擊終點按「以北約 13 公里」推估，不是史料座標。
+
 Use **Focus event** to center the map. When a single event has usable geography, a `camera` hint with both `center` and `zoom` takes priority. **Modern borders** are off by default, are not historical borders, and use the road-free World Hillshade / Natural Earth reference layer.
 
 When a single event has usable geography, a camera hint with both `center` and `zoom` takes priority.
@@ -198,10 +204,10 @@ Fix schema, field-name, or reference errors until the validator prints `valid:`.
 ## Validate bundled examples
 
 ```bash
-python3 -m battle_animation.validator examples/battle-of-waterloo.json
-python3 -m battle_animation.validator examples/battle-of-甲午.json
-python3 -m battle_animation.validator examples/battle-of-甲午海戰.json
-python3 -m battle_animation.validator examples/battle-of-stalingrad-frontlines.json
+python3 -m battle_animation.validator examples/v0.1.0/battle-of-waterloo.json
+python3 -m battle_animation.validator examples/v0.1.0/battle-of-甲午.json
+python3 -m battle_animation.validator examples/v0.3.0/battle-of-甲午海戰.json
+python3 -m battle_animation.validator examples/v0.4.0/battle-of-stalingrad-frontlines.json
 ```
 
 Run the contract tests:
