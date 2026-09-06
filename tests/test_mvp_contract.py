@@ -29,10 +29,10 @@ from battle_animation.validator import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = ROOT / "examples" / "battle-of-waterloo.json"
-YALU_EXAMPLE = ROOT / "examples" / "battle-of-甲午海戰.json"
-STALINGRAD_EXAMPLE = ROOT / "examples" / "battle-of-stalingrad-frontlines.json"
-BULGE_EXAMPLE = ROOT / "examples" / "battle-of-the-bulge-frontlines.json"
+EXAMPLE = ROOT / "examples" / "v0.1.0" / "battle-of-waterloo.json"
+YALU_EXAMPLE = ROOT / "examples" / "v0.3.0" / "battle-of-甲午海戰.json"
+STALINGRAD_EXAMPLE = ROOT / "examples" / "v0.4.0" / "battle-of-stalingrad-frontlines.json"
+BULGE_EXAMPLE = ROOT / "examples" / "v0.4.0" / "battle-of-the-bulge-frontlines.json"
 SCHEMA = ROOT / "schemas" / "battle-animation-schema.json"
 MAX_INFERRED_WITHDRAWAL_SPEED_KMH = 18
 
@@ -1993,7 +1993,7 @@ class BattleAnimationMvpContractTest(unittest.TestCase):
         animate = (ROOT / "app" / "animate.js").read_text(encoding="utf-8")
 
         self.assertIn("Battle Animator", index)
-        self.assertIn("examples/battle-of-waterloo.json", index)
+        self.assertIn("examples/v0.1.0/battle-of-waterloo.json", index)
         self.assertIn("renderBattle", animate)
         self.assertIn("playTimeline", animate)
 

@@ -571,6 +571,19 @@ button.ghost,
   display: none;
 }
 
+.battle-overlay .is-collision-hidden,
+.battle-overlay .is-cluster-hidden,
+.battle-overlay .unit-sub-label,
+.battle-overlay .unit-echelon,
+.unit-count,
+.is-cluster .unit-heading { display: none; }
+.is-cluster .unit-count { display: block; }
+.unit-count circle { fill: var(--panel); stroke: var(--ink); stroke-width: 2; }
+.unit-count text { fill: var(--ink); font-size: 12px; font-weight: 700; }
+.battle-overlay .unit { pointer-events: auto; cursor: pointer; }
+.battle-overlay .unit:focus-visible { outline: 3px solid #2468ac; outline-offset: 4px; }
+#unit-details { border-top: 1px solid var(--ink); margin-top: 1rem; }
+
 /* Leaflet zoom hierarchy: near >= 11, middle 8–10, far < 8. */
 .battle-overlay.labels-middle .unit-sub-label,
 .battle-overlay.labels-far .unit-label,
@@ -780,3 +793,7 @@ button.ghost,
     transition: none !important;
   }
 }
+/* Guided chapters keep unrelated overlays out of the reading path. */
+.is-guide-hidden { display: none !important; }
+#event-guide { line-height: 1.6; overflow-wrap: anywhere; }
+#event-guide ul { padding-inline-start: 1.25rem; }

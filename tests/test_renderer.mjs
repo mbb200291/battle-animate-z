@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { guideFrame, eventRoster } from '../app/event-guide.js';
 
 import {
   FRONTLINE_MODES,
@@ -671,6 +672,55 @@ function setup() {
   const byClass = (className) => all().filter((element) => element.classList.contains(className));
   return { clock, document, maps, controller, svg, all, unit, byClass };
 }
+
+test('guide holds context, animates, holds result and advances chapters', () => {
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  document.elements.set('guide-button', new FakeElement('button'));
+  document.elements.set('event-guide', new FakeElement('section'));
+  installLeaflet();
+  const controller = renderBattle(battleFixture(), document);
+  assert.equal(controller.guideEnabled, true);
+  assert.equal(controller.frontlineMode, 'source');
+  controller.play();
+  clock.frame(0);
+  clock.frame(2000);
+  assert.equal(controller.currentPresentationMs, 0);
+  clock.frame(8000);
+  assert.equal(controller.currentIndex, 0);
+  assert.ok(controller.currentPresentationMs > 0);
+  const middle = controller.currentPresentationMs;
+  controller.seek(middle);
+  assert.equal(controller._guideElapsed, 8000);
+  clock.frame(14000);
+  const end = controller.currentPresentationMs;
+  clock.frame(15000);
+  assert.equal(controller.currentPresentationMs, end);
+  clock.frame(16000);
+  assert.equal(controller.currentIndex, 1);
+  controller.showEvent(4);
+  clock.frame(17000);
+  clock.frame(33000);
+  assert.equal(controller.isPlaying, false);
+  controller.play();
+  assert.equal(controller.currentIndex, 0);
+  controller.setGuideEnabled(false);
+  assert.equal(controller.isPlaying, false);
+  assert.equal(document.getElementById('event-guide').hidden, true);
+  controller.destroy();
+  assert.equal(clock.callbacks.size, 0);
+});
+
+test('guide position claims require current event evidence, not inherited positions', () => {
+  const battle = { actors: [{id:'parent'}, {id:'child',parent_id:'parent'}, {id:'unknown'}] };
+  const event = {id:'event',actor_ids:['parent','child','unknown']};
+  const compiled = {tracks:[{actorId:'child',eventId:'event',startMs:0,endMs:10}]};
+  assert.deepEqual(eventRoster(battle,event,{historicalMs:5},compiled).map(r=>r.mapped),[false,true,false]);
+  assert.ok(eventRoster(battle,event,{historicalMs:11},compiled).every(r=>!r.mapped));
+  assert.deepEqual(guideFrame(0),{phase:'Context',progress:0});
+  assert.deepEqual(guideFrame(8000),{phase:'Action',progress:0.5});
+  assert.deepEqual(guideFrame(14000),{phase:'Result',progress:1});
+});
 
 test("renderBattle samples immediately and separates position, heading, and symbol transforms", () => {
   const { controller, unit } = setup();
@@ -3132,7 +3182,7 @@ test("near-zoom clustered units suppress secondary labels and restore them when 
 
 test("zoom 8 shows source confidence labels but rejects ambiguous Bulge derived midpoints", () => {
   const battle = JSON.parse(readFileSync(new URL(
-    "../examples/battle-of-the-bulge-frontlines.json",
+    "../examples/v0.4.0/battle-of-the-bulge-frontlines.json",
     import.meta.url,
   ), "utf8"));
   const clock = new FrameClock();
@@ -3145,7 +3195,8 @@ test("zoom 8 shows source confidence labels but rejects ambiguous Bulge derived 
   const overlaps = () => {
     const labels = descendants(svg).filter((element) =>
       (element.classList.contains("unit-label") && !element.parentNode.classList.contains("is-hidden"))
-      || element.classList.contains("frontline-confidence-label"));
+      || element.classList.contains("frontline-confidence-label")).filter(element =>
+        !element.classList.contains('is-collision-hidden') && !element.parentNode.classList.contains('is-cluster-hidden'));
     const collisions = [];
     for (let left = 0; left < labels.length; left += 1) {
       const a = labels[left].getBoundingClientRect();
@@ -3182,15 +3233,36 @@ test("zoom 8 shows source confidence labels but rejects ambiguous Bulge derived 
   controller.destroy();
 });
 
-test("primary label staggering cannot loop forever when SVG bounds stay unchanged", () => {
+test("primary labels stay anchored and collisions are hidden without a displacement loop", () => {
   const source = readFileSync(new URL("../app/animate.js", import.meta.url), "utf8");
   const implementation = source.match(
     /function staggerPrimaryAndFrontlineLabels\(\) \{(?<body>[\s\S]*?)\n  \}\n\n  function redrawEngagementEndpoints/,
   )?.groups?.body || "";
 
-  assert.match(implementation, /step <= maxAttempts/);
-  assert.match(implementation, /sameBounds\(box, movedBox\)/);
-  assert.doesNotMatch(implementation, /for \(let step = 1; occupied\.some/);
+  assert.match(implementation, /classList.toggle\("is-collision-hidden", collides\)/);
+  assert.doesNotMatch(implementation, /label.setAttribute\("transform"/);
+  assert.doesNotMatch(implementation, /for \(let step/);
+});
+
+test('Busan co-located units have one inspectable marker with all member names and sides', () => {
+  const battle = JSON.parse(readFileSync(new URL('../examples/v0.4.0/busan.json', import.meta.url)));
+  const clock = new FrameClock();
+  const document = new FakeDocument(clock.window);
+  document.elements.set('unit-details', new FakeElement('section'));
+  installLeaflet();
+  const controller = renderBattle(battle, document);
+  const all = descendants(document.getElementById('battle-map'));
+  const group = all.find(el => el.classList.contains('is-cluster'));
+  assert.ok(group._memberIds.length > 1);
+  const count = group.children.find(el => el.classList.contains('unit-count'));
+  assert.equal(Number(count.children[1].textContent), group._memberIds.length);
+  group.dispatch('keydown', {key:'Enter',preventDefault(){},stopPropagation(){}});
+  const text = descendants(document.getElementById('unit-details')).map(el=>el.textContent).join(' ');
+  for (const id of group._memberIds) assert.ok(text.includes(battle.actors.find(a=>a.id===id).name));
+  assert.match(text, /does not establish an encounter/);
+  assert.equal(controller.isPlaying, false);
+  assert.ok(all.filter(el=>el.classList.contains('unit-label')).every(el=>el.getAttribute('transform')===null));
+  controller.destroy();
 });
 
 test("rapid render replacement cancels stale invalidateSize timeouts", () => {

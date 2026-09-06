@@ -3,6 +3,7 @@ import { compileTimeline, parseBattleTime, sampleTimeline, trackProgressAt } fro
 import { ACTOR_ICON_TOKENS, resolveSymbol } from "./symbols.js";
 import { BEACON_EXIT_MS, TRAIL_FADE_MS, clusterProjectedEvents } from "./overlay-effects.js";
 import { buildFocusPlan } from "./map-view.js";
+import { eventRoster, guideFrame, GUIDE_DURATION_MS } from "./event-guide.js";
 import {
   deriveFrontlineFallback,
   interpolateFrontlineSnapshots,
@@ -125,6 +126,7 @@ export function wirePlaybackControls(controller, documentRef = document) {
     own(button, "onclick", () => controller.setSpeed(Number(button.dataset.speed)));
   }
   const follow = $("follow-button");
+  own($("guide-button"), "onclick", () => controller.setGuideEnabled(!controller.guideEnabled));
   own(follow, "onclick", () => controller.setFollowEnabled(!controller.followEnabled));
   const trails = $("trails-button");
   own(trails, "onclick", () => controller.setTrailsEnabled(!controller.trailsEnabled));
@@ -1176,8 +1178,40 @@ export function renderBattle(battle, documentRef = document) {
     const label = svgEl(documentRef, "text", { class: "unit-label", x: 20, y: 1 }, actor.name);
     const subLabel = svgEl(documentRef, "text", { class: "unit-sub-label", x: 20, y: 14 }, symbol.token.replaceAll("_", " "));
     unit.append(label, subLabel);
+    const count = svgEl(documentRef, 'g', { class: 'unit-count' });
+    count.append(svgEl(documentRef, 'circle', {r: 13}), svgEl(documentRef, 'text', {'text-anchor':'middle',y:4}, ''));
+    unit.append(count);
+    unit.setAttribute('role', 'button');
+    unit.setAttribute('tabindex', '0');
+    const inspect = () => {
+      controller.pause();
+      const panel = $('unit-details');
+      if (!panel) return;
+      panel.replaceChildren();
+      appendTextElement(panel, 'h3', '', 'Units at this display position');
+      appendTextElement(panel, 'p', '', 'Nearby markers are grouped for readability. A shared display position does not establish an encounter or an exact deployment.');
+      const members = (unit._memberIds || [actor.id]).map(id => actors.get(id));
+      for (const side of battle.sides) {
+        const sideMembers = members.filter(member => member.side_id === side.id);
+        if (!sideMembers.length) continue;
+        appendTextElement(panel, 'h4', '', side.name);
+        const list = documentRef.createElement('ul');
+        for (const member of sideMembers) appendTextElement(list, 'li', '', `${member.name} · ${member.kind}`);
+        panel.append(list);
+      }
+      panel.hidden = false;
+      panel.scrollIntoView({block:'nearest', behavior:'auto'});
+    };
+    unit.addEventListener('click', inspect);
+    unit.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); }
+      if (e.key === 'Enter') inspect();
+    });
+    unit.addEventListener('keyup', e => {
+      if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); inspect(); }
+    });
     svg.append(unit);
-    unitEls.set(actor.id, { g: unit, heading, symbol, label, subLabel });
+    unitEls.set(actor.id, { g: unit, heading, symbol, label, subLabel, count });
   }
 
   const beaconLayer = svgEl(documentRef, "g", { class: "event-beacon-layer" });
@@ -1569,7 +1603,96 @@ export function renderBattle(battle, documentRef = document) {
       g.setAttribute("transform", `translate(${point.x} ${point.y})`);
     }
     suppressSecondaryLabelCollisions();
+    clusterUnits();
     staggerPrimaryAndFrontlineLabels();
+  }
+
+  function clusterUnits() {
+    const groups = [];
+    for (const [id, item] of unitEls) {
+      item.g.classList.remove('is-cluster-hidden', 'is-cluster');
+      item.label.textContent = actors.get(id).name;
+      item.g._memberIds = [id];
+      item.g.setAttribute('aria-label', `Inspect ${actors.get(id).name}`);
+      const coord = actorPositions.get(id);
+      if (!coord || item.g.classList.contains('is-guide-hidden')) continue;
+      const point = project(coord);
+      const group = groups.find(g => Math.hypot(g.point.x-point.x, g.point.y-point.y) < 24);
+      if (group) { group.ids.push(id); item.g.classList.add('is-cluster-hidden'); }
+      else groups.push({point, ids:[id], item});
+    }
+    for (const {ids, item} of groups) {
+      item.g._memberIds = ids;
+      if (ids.length < 2) continue;
+      item.g.classList.add('is-cluster');
+      item.count.children[1].textContent = String(ids.length);
+      item.label.textContent = `${ids.length} units`;
+      item.g.setAttribute('aria-label', `Inspect ${ids.length} units at this display position`);
+    }
+  }
+
+  function updateGuide(selected) {
+    const panel = $("event-guide");
+    if (!panel) return;
+    panel.hidden = !controller.guideEnabled;
+    const rows = eventRoster(battle, selected?.event, controller.sampledState, compiled);
+    for (const { actor, mapped, involved } of rows) {
+      unitEls.get(actor.id)?.g.classList.toggle("is-guide-hidden",
+        controller.guideEnabled && (!mapped || !involved));
+    }
+    for (const { eng, line } of engagementEls.values()) {
+      line.classList.toggle("is-guide-hidden", controller.guideEnabled &&
+        (eng.event_id !== selected?.id || !rows.find(r => r.actor.id === eng.attacker_actor_id)?.mapped
+          || !rows.find(r => r.actor.id === eng.target_actor_id)?.mapped));
+    }
+    for (const { track, path } of movementEls.values()) {
+      path.classList.toggle("is-guide-hidden", controller.guideEnabled && track?.eventId !== selected?.id);
+    }
+    clusterUnits();
+    staggerPrimaryAndFrontlineLabels();
+    if (!controller.guideEnabled || !selected) return;
+    const phase = guideFrame(controller._guideElapsed).phase;
+    const key = JSON.stringify([selected.id, phase, rows.map(r => r.status), !!controller.sampledState.frontline]);
+    if (key === controller._guidePanelKey) return;
+    controller._guidePanelKey = key;
+    panel.replaceChildren();
+    appendTextElement(panel, "p", "eyebrow", `${phase} · ${selected.event.time.label}`);
+    appendTextElement(panel, "h2", "event-card-title", selected.event.title);
+    appendTextElement(panel, "p", "", `Precision: ${selected.event.precision} · Confidence: ${Math.round(selected.event.confidence * 100)}%`);
+    appendTextElement(panel, "p", "", `Event area: ${(selected.event.place_ids || []).map(id => places.get(id)?.name || id).join('、') || 'Location evidence unavailable'}`);
+    appendTextElement(panel, "p", "", "Parallel events are presented separately, so dates may move backward. Only units with active paths in this chapter appear on the map; other participants are listed below.");
+    for (const side of battle.sides) {
+      const names = rows.filter(r => r.involved && r.actor.side_id === side.id).map(r => r.actor.name);
+      if (names.length) appendTextElement(panel, "p", "", `${side.name}：${names.join('、')}`);
+    }
+    appendTextElement(panel, "p", "", selected.event.description || "No event description provided.");
+    const related = engagements.filter(e => e.event_id === selected.id);
+    for (const e of related) appendTextElement(panel, "p", "", `${actors.get(e.attacker_actor_id)?.name} → ${actors.get(e.target_actor_id)?.name}${phase === 'Result' ? `：${({repelled:'Attack repelled', captured:'Captured', damaged:'Damaged', sunk:'Sunk'})[e.result] || e.result || 'No engagement result provided'}` : ''}`);
+    if (phase === 'Result' && !related.some(e => e.result)) appendTextElement(panel, "p", "", "No structured engagement result is provided. Refer to the event description and sources.");
+    appendTextElement(panel, "p", "", controller.sampledState.frontline
+      ? "Frontlines follow source anchors; intermediate shapes are animation interpolation."
+      : "No reliable frontline data for this period. Derived lines are optional estimates.");
+    const list = documentRef.createElement("ul");
+    for (const row of rows.filter(r => r.involved)) {
+      appendTextElement(list, "li", "", `${row.actor.name} · ${row.status}`);
+    }
+    panel.append(list);
+    const parents = rows.filter(r => !r.involved && r.status === 'Parent formation');
+    if (parents.length) {
+      const details = documentRef.createElement('details');
+      appendTextElement(details, 'summary', '', 'Other parent formations (not mapped)');
+      const parentList = documentRef.createElement('ul');
+      for (const row of parents) appendTextElement(parentList, 'li', '', row.actor.name);
+      details.append(parentList); panel.append(details);
+    }
+    for (const id of selected.event.source_ids || []) {
+      const source = sources.get(id);
+      if (!source) continue;
+      const link = documentRef.createElement(/^https?:\/\//.test(source.url) ? 'a' : 'span');
+      link.textContent = source.title;
+      if (link.tagName.toLowerCase() === 'a') { link.setAttribute('href', source.url); link.setAttribute('target', '_blank'); link.setAttribute('rel', 'noopener noreferrer'); }
+      const p = documentRef.createElement('p'); p.append(link); panel.append(p);
+    }
   }
 
   function suppressSecondaryLabelCollisions() {
@@ -1591,42 +1714,26 @@ export function renderBattle(battle, documentRef = document) {
 
   function staggerPrimaryAndFrontlineLabels() {
     const labels = [];
-    if (map.getZoom() >= 8) {
-      for (const [actorId, { label }] of unitEls) {
-        if (actorPositions.has(actorId)) labels.push(label);
-      }
+    for (const [id, {g, label}] of unitEls) {
+      label.removeAttribute("transform");
+      label.classList.remove("is-collision-hidden");
+      if (map.getZoom() >= 8 && actorPositions.has(id)
+          && !g.classList.contains("is-guide-hidden") && !g.classList.contains("is-cluster-hidden")) labels.push(label);
     }
     if (controller.frontsEnabled) {
-      labels.push(...[...frontlineEls.entries()]
-        .filter(([, element]) => element.parentNode
-          && element.classList.contains("frontline-confidence-label"))
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([, element]) => element));
+      labels.push(...[...frontlineEls.values()].filter(el => el.parentNode && el.classList.contains("frontline-confidence-label")));
     }
-
+    labels.push(...placeEls.filter(p => p.kind === "point").map(p => p.label));
     const occupied = [];
-    const overlaps = (left, right) => left.left < right.right + 4
-      && left.right + 4 > right.left
-      && left.top < right.bottom + 4
-      && left.bottom + 4 > right.top;
-    const sameBounds = (left, right) => left.left === right.left
-      && left.right === right.right
-      && left.top === right.top
-      && left.bottom === right.bottom;
-    const maxAttempts = labels.length * 2 + 2;
     for (const label of labels) {
       label.removeAttribute("transform");
-      let box = label.getBoundingClientRect();
-      for (let step = 1;
-        step <= maxAttempts && occupied.some((other) => overlaps(box, other));
-        step += 1) {
-        const offset = Math.ceil(step / 2) * 18 * (step % 2 ? -1 : 1);
-        label.setAttribute("transform", `translate(0 ${offset})`);
-        const movedBox = label.getBoundingClientRect();
-        if (sameBounds(box, movedBox)) break;
-        box = movedBox;
-      }
-      occupied.push(box);
+      label.classList.remove("is-collision-hidden");
+      const box = label.getBoundingClientRect();
+      if (!box.width || !box.height) continue;
+      const collides = occupied.some(other => box.left < other.right + 6 && box.right + 6 > other.left
+        && box.top < other.bottom + 6 && box.bottom + 6 > other.top);
+      label.classList.toggle("is-collision-hidden", collides);
+      if (!collides) occupied.push(box);
     }
   }
 
@@ -1744,6 +1851,7 @@ export function renderBattle(battle, documentRef = document) {
   }
 
   function selectedEventWindow(sampled) {
+    if (controller.guideEnabled && controller._guideEventId) return compiled.eventWindows.find(w => w.id === controller._guideEventId) || null;
     const active = compiled.eventWindows
       .filter(({ id }) => sampled.activeEventIds.has(id))
       .reduce((latest, window) => {
@@ -1794,14 +1902,14 @@ export function renderBattle(battle, documentRef = document) {
       ? compiled.eventWindows[owner.currentIndex]
       : null;
     return buildFocusPlan({
-      activeEventIds: sampled.activeEventIds,
+      activeEventIds: owner.guideEnabled ? new Set([owner._guideEventId]) : sampled.activeEventIds,
       selectedEventId: selected?.id,
       eventWindows: compiled.eventWindows,
       places,
       actorPositions: sampled.actorPositions,
       cameras: battle.animation_hints?.camera || [],
-      extraActorIds: focusExtraActorIds(sampled),
-      extraPoints: focusExtraPoints(sampled),
+      extraActorIds: owner.guideEnabled ? [] : focusExtraActorIds(sampled),
+      extraPoints: owner.guideEnabled ? [] : focusExtraPoints(sampled),
     });
   }
 
@@ -1810,7 +1918,7 @@ export function renderBattle(battle, documentRef = document) {
     const selectedIndex = orderIndex.get(selected.id) ?? 0;
     owner.currentIndex = selectedIndex;
     if (selectedIndex === renderedEventIndex) return;
-    updateTimeline(documentRef, selectedIndex, reducedMotion);
+    updateTimeline(documentRef, selectedIndex, reducedMotion, !owner.guideEnabled);
     const progress = $("event-progress");
     if (progress) progress.textContent = `${selectedIndex + 1} / ${orderedEvents.length}`;
     renderedEventIndex = selectedIndex;
@@ -1988,6 +2096,7 @@ export function renderBattle(battle, documentRef = document) {
 
   function renderBeacons(sampled, mode) {
     const points = compiled.eventWindows.flatMap(({ id, event }) => {
+      if (controller.guideEnabled && id !== controller._guideEventId) return [];
       if (!sampled.activeEventIds.has(id)) return [];
       const coord = eventCoord(event, places);
       if (!Array.isArray(coord)) return [];
@@ -2062,6 +2171,10 @@ export function renderBattle(battle, documentRef = document) {
     frontlineMode: "hybrid",
     frontsEnabled: frontlinesAvailable,
     isPlaying: false,
+    guideEnabled: false,
+    _guideElapsed: 0,
+    _guideEventId: null,
+    _guidePanelKey: null,
     _frame: null,
     _lastFrameTime: null,
     _lastFollowCheck: -Infinity,
@@ -2125,15 +2238,41 @@ export function renderBattle(battle, documentRef = document) {
       appendNewActiveEventCards(sampled);
       displaySelectedEvent(this, selected);
       pruneEventCards(selected?.id);
+      updateGuide(selected);
       const focusButton = $("focus-event-button");
       if (focusButton) focusButton.disabled = currentFocusPlan(this).kind === "none";
-      maybeFollow(this, sampled);
+      if (!this.guideEnabled) maybeFollow(this, sampled);
       return sampled;
     },
 
     seek(presentationMs) {
       if (this._destroyed) return this.sampledState;
-      return this.renderAt(presentationMs);
+      if ($('unit-details')) { $('unit-details').hidden = true; $('unit-details').replaceChildren(); }
+      this._guideEventId = null;
+      this._guideElapsed = 0;
+      const sampled = this.renderAt(presentationMs);
+      if (this.guideEnabled) {
+        const selected = selectedEventWindow(sampled);
+        this._guideEventId = selected?.id;
+        if (selected && sampled.historicalMs > selected.startMs) {
+          const progress = Math.min(1, (sampled.historicalMs - selected.startMs) / (selected.endMs - selected.startMs));
+          this._guideElapsed = 3000 + progress * 10000;
+        }
+        updateGuide(selected);
+      }
+      return sampled;
+    },
+
+    setGuideEnabled(enabled) {
+      if (this._destroyed) return;
+      this.pause();
+      this.guideEnabled = Boolean(enabled);
+      const button = $("guide-button");
+      if (button) { button.textContent = this.guideEnabled ? 'Guided tour: on' : 'Guided tour: off'; button.setAttribute('aria-pressed', String(this.guideEnabled)); }
+      cardStack?.classList.toggle('is-guide-hidden', this.guideEnabled);
+      this._guidePanelKey = null;
+      if (this.guideEnabled) { this.setFrontlineMode('source'); this.showEvent(this.currentIndex); }
+      else { this._guideEventId = null; this.renderAt(this.currentPresentationMs); }
     },
 
     setSpeed(rate) {
@@ -2293,6 +2432,12 @@ export function renderBattle(battle, documentRef = document) {
       if (!window) return this.seek(0);
       const sampled = this.seek(compiled.toPresentationTime(window.startMs));
       displaySelectedEvent(this, window);
+      if (this.guideEnabled) {
+        this._guideEventId = window.id;
+        this._guideElapsed = 0;
+        this.renderAt(compiled.toPresentationTime(window.startMs));
+        this.focusActiveEvents();
+      }
       return sampled;
     },
 
@@ -2308,7 +2453,10 @@ export function renderBattle(battle, documentRef = document) {
     play() {
       if (this._destroyed) return;
       if (this.isPlaying) return;
-      if (this.currentPresentationMs >= duration) this.seek(0);
+      if ($('unit-details')) $('unit-details').hidden = true;
+      if (this.guideEnabled) {
+        if (this._guideElapsed >= GUIDE_DURATION_MS) this.showEvent(0);
+      } else if (this.currentPresentationMs >= duration) this.seek(0);
       this._setPlaying(true);
       this._lastFrameTime = null;
       this._frame = requestFrame((timestamp) => this._tick(timestamp));
@@ -2332,6 +2480,19 @@ export function renderBattle(battle, documentRef = document) {
       if (this._lastFrameTime === null) this._lastFrameTime = timestamp;
       const elapsed = Math.max(0, timestamp - this._lastFrameTime);
       this._lastFrameTime = timestamp;
+      if (this.guideEnabled) {
+        this._guideElapsed += elapsed * this.playbackRate;
+        if (this._guideElapsed >= GUIDE_DURATION_MS) {
+          if (this.currentIndex >= orderedEvents.length - 1) { this.pause(); return; }
+          this.showEvent(this.currentIndex + 1);
+        }
+        const window = compiled.eventWindows.find(w => w.id === this._guideEventId);
+        if (!window) { this.pause(); return; }
+        const { progress } = guideFrame(this._guideElapsed);
+        this.renderAt(compiled.toPresentationTime(window.startMs + (window.endMs - window.startMs) * progress), { mode: 'playback' });
+        this._frame = requestFrame(t => this._tick(t));
+        return;
+      }
       const nextTime = Math.min(duration, this.currentPresentationMs + elapsed * this.playbackRate);
       this.renderAt(nextTime, { mode: "playback" });
       if (nextTime >= duration) {
@@ -2385,7 +2546,9 @@ export function renderBattle(battle, documentRef = document) {
       map.remove();
       svg.remove();
       for (const card of visibleCards.splice(0)) card.dispose();
-      if (cardStack) cardStack.replaceChildren();
+      $("event-guide")?.replaceChildren();
+      if ($('unit-details')) { $('unit-details').hidden = true; $('unit-details').replaceChildren(); }
+      if (cardStack) { cardStack.replaceChildren(); cardStack.classList.remove('is-guide-hidden'); }
       if (mapEl._battleController === this) delete mapEl._battleController;
     },
   };
@@ -2441,6 +2604,7 @@ export function renderBattle(battle, documentRef = document) {
   redrawStaticGeometry();
   applyZoomLabelClass();
   controller.seek(0);
+  if ($("guide-button")) controller.setGuideEnabled(true);
   return controller;
 }
 
@@ -2600,12 +2764,12 @@ function buildTimeline(events, documentRef, onSelect) {
   };
 }
 
-function updateTimeline(documentRef, index, reducedMotion = false) {
+function updateTimeline(documentRef, index, reducedMotion = false, scroll = true) {
   const buttons = [...documentRef.querySelectorAll("#timeline button")];
   buttons.forEach((button, buttonIndex) => {
     button.setAttribute("aria-current", buttonIndex === index ? "true" : "false");
   });
-  buttons[index]?.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
+  if (scroll) buttons[index]?.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" });
 }
 
 function setText(documentRef, id, text) {
