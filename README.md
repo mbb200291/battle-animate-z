@@ -58,12 +58,12 @@ The schema separates source-backed historical claims from presentation hints. Un
 
 See [`schemas/battle-animation-schema.json`](schemas/battle-animation-schema.json) for the complete format and [`examples/`](examples/) for full documents.
 
-## 播放與地圖顯示
+## Playback and map display
 
-- 「逐段導覽」預設開啟，依事件逐段播放；關閉後可回到連續時間軸播放。
-- 地圖只呈現目前事件中具有足夠位置或移動資料的單位；單位未顯示不代表沒有參戰，而是表示當期位置資料不足。
-- 事件聚焦會將地圖移到目前事件；若 JSON 提供 `camera` 提示，播放器會優先採用指定視角。
-- 航跡預設關閉；開啟後只顯示目前事件的移動路徑。來源戰線錨點之間的插值只屬於視覺化效果，不代表史料提供了中間狀態。
+- **Guided playback** is enabled by default and presents the battle event by event. Disable it to return to continuous timeline playback.
+- The map shows units only when the current event contains sufficient position or movement data. A unit not shown on the map does not imply that it did not participate; its location data may simply be insufficient for that period.
+- **Focus event** centers the map on the current event. If the JSON provides a `camera` hint, the player gives that view priority.
+- Movement trails are disabled by default. When enabled, only the current event's movement path is shown. Interpolation between source-backed frontline anchors is a visualization effect and does not imply that historical sources provide those intermediate states.
 
 ## Repository layout
 
