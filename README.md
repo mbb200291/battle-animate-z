@@ -1,12 +1,18 @@
 # Battle Animation Platform
 
-A web-based platform for loading and playing structured historical battle presentations as timeline-based map animations.
+This project defines a structured JSON format for describing an entire historical battle and provides a web-based player for visualizing battle documents in that format.
 
-A battle is described by a single structured JSON document that captures the battle as a whole — including opposing sides, commanders, units, places, chronology, movements, engagements, outcomes, sources, and, where evidence allows, dated frontline snapshots. The platform itself does not generate this JSON. Instead, the repository provides the schema, examples, validation tools, and an AI-oriented generation prompt that can be used with an external AI system to create compatible battle documents.
+A single battle JSON document can capture the battle as a whole — including opposing sides, commanders, units, places, chronology, movements, engagements, outcomes, sources, and, where evidence allows, dated frontline snapshots. The format is designed to preserve source attribution and uncertainty so that a battle can be represented in a detailed, machine-readable form without presenting unsupported reconstruction as fact.
 
-Once a battle JSON document is prepared, the platform can load it and replay the battle as an interactive timeline on a map. The format keeps uncertainty and source attribution explicit so reconstructed battle data remains traceable and unsupported detail is not presented as fact.
+The repository also provides a browser-based interface that can load one of these JSON documents and play it back as a timeline-based map animation.
 
-In this project, the JSON schema is the interchange format between **battle-data preparation** — whether manual or AI-assisted — and the **battle player**.
+Battle documents do not need to be hand-authored or implemented as custom animations. The repository includes a maintained AI generation prompt that can be used in general-purpose chat interfaces such as ChatGPT, Claude, or Gemini to generate a compatible JSON document from historical source material. This makes it possible to create a new battle presentation without building a dedicated animation or using a coding agent for each battle, substantially reducing the cost of producing individual battle visualizations.
+
+In short, the project consists of three parts:
+
+1. a JSON format capable of describing the details of an entire battle;
+2. a web player that can render and play battle JSON documents;
+3. a low-cost content-generation workflow that uses the provided prompt with general-purpose AI chat interfaces to produce new battle documents.
 
 ## Versions
 
@@ -193,9 +199,9 @@ See [`examples/`](examples/) for complete documents that can be validated and re
 
 ## Generate battle JSON with AI
 
-Use the [Battle JSON generation prompt](docs/battle-json-prompt.md) to ask an AI model to generate a new battle document.
+Use the [Battle JSON generation prompt](docs/battle-json-prompt.md) with a general-purpose AI chat interface such as ChatGPT, Claude, or Gemini to generate a new battle document from historical source material.
 
-The prompt is maintained separately from this README so the repository landing page can stay focused on the project itself. It emphasizes schema correctness, source traceability, conservative inference, and the distinction between source-backed frontline snapshots and runtime-derived visualization.
+The player itself does not generate battle JSON. The prompt is provided as a separate content-production path so that new battles can be represented without implementing a custom animation or relying on a coding agent for each battle. It emphasizes schema correctness, source traceability, conservative inference, and the distinction between source-backed frontline snapshots and runtime-derived visualization.
 
 After generation, validate the result:
 
