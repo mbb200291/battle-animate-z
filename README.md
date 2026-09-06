@@ -1,8 +1,12 @@
-# Battle Animation Schema
+# Battle Animation Platform
 
-A small, source-oriented JSON format for turning historical battle data into timeline-based map animations.
+A web-based platform for turning historical battle information into structured, playable battle presentations.
 
-The project focuses on **structured historical facts with explicit uncertainty**. It records what sources say about actors, places, events, movements, engagements, outcomes, and dated frontline snapshots without modeling command logic, firepower, logistics, or tactical rules.
+The core workflow is designed to be simple: use the web interface and AI to generate a single structured JSON document that describes an entire battle, then load that document into the platform and play it back as a timeline-based map animation.
+
+The battle JSON is intended to capture the battle as a whole — including the opposing sides, commanders, units, places, chronology, movements, engagements, outcomes, sources, and, where evidence allows, dated frontline snapshots. The format keeps uncertainty and source attribution explicit so AI-generated battle data can remain traceable instead of presenting unsupported detail as fact.
+
+In this project, the JSON schema is the interchange format between **AI-assisted battle reconstruction** and the **battle player**. The goal is not merely to define a schema, but to provide an end-to-end way to describe, generate, validate, and replay a battle.
 
 ## Versions
 
