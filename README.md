@@ -1,12 +1,12 @@
 # Battle Animation Platform
 
-A web-based platform for turning historical battle information into structured, playable battle presentations.
+A web-based platform for loading and playing structured historical battle presentations as timeline-based map animations.
 
-The core workflow is designed to be simple: use the web interface and AI to generate a single structured JSON document that describes an entire battle, then load that document into the platform and play it back as a timeline-based map animation.
+A battle is described by a single structured JSON document that captures the battle as a whole — including opposing sides, commanders, units, places, chronology, movements, engagements, outcomes, sources, and, where evidence allows, dated frontline snapshots. The platform itself does not generate this JSON. Instead, the repository provides the schema, examples, validation tools, and an AI-oriented generation prompt that can be used with an external AI system to create compatible battle documents.
 
-The battle JSON is intended to capture the battle as a whole — including the opposing sides, commanders, units, places, chronology, movements, engagements, outcomes, sources, and, where evidence allows, dated frontline snapshots. The format keeps uncertainty and source attribution explicit so AI-generated battle data can remain traceable instead of presenting unsupported detail as fact.
+Once a battle JSON document is prepared, the platform can load it and replay the battle as an interactive timeline on a map. The format keeps uncertainty and source attribution explicit so reconstructed battle data remains traceable and unsupported detail is not presented as fact.
 
-In this project, the JSON schema is the interchange format between **AI-assisted battle reconstruction** and the **battle player**. The goal is not merely to define a schema, but to provide an end-to-end way to describe, generate, validate, and replay a battle.
+In this project, the JSON schema is the interchange format between **battle-data preparation** — whether manual or AI-assisted — and the **battle player**.
 
 ## Versions
 
